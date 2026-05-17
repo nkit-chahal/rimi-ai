@@ -239,10 +239,16 @@ export default function Studio({ onBack }) {
             if (controls.repeatType === 'half_drop') {
               for (let col = -expand; col <= controls.gridSize + expand; col += 1) {
                 const offset = Math.abs(col) % 2 ? Math.floor(th / 2) : 0;
-                ctx.fillRect(col * tw, r * th + offset - displayHBrush / 2, tw, displayHBrush);
+                const y = r * th + offset;
+                if (y > 0 && y < c.height) {
+                  ctx.fillRect(col * tw, y - displayHBrush / 2, tw, displayHBrush);
+                }
               }
             } else {
-              ctx.fillRect(-expand * tw, r * th - displayHBrush / 2, (controls.gridSize + expand * 2) * tw, displayHBrush);
+              const y = r * th;
+              if (y > 0 && y < c.height) {
+                ctx.fillRect(-expand * tw, y - displayHBrush / 2, (controls.gridSize + expand * 2) * tw, displayHBrush);
+              }
             }
           }
         }
@@ -252,10 +258,16 @@ export default function Studio({ onBack }) {
             if (controls.repeatType === 'half_brick') {
               for (let r = -expand; r <= controls.gridSize + expand; r += 1) {
                 const offset = Math.abs(r) % 2 ? Math.floor(tw / 2) : 0;
-                ctx.fillRect(col * tw + offset - displayVBrush / 2, r * th, displayVBrush, th);
+                const x = col * tw + offset;
+                if (x > 0 && x < c.width) {
+                  ctx.fillRect(x - displayVBrush / 2, r * th, displayVBrush, th);
+                }
               }
             } else {
-              ctx.fillRect(col * tw - displayVBrush / 2, -expand * th, displayVBrush, (controls.gridSize + expand * 2) * th);
+              const x = col * tw;
+              if (x > 0 && x < c.width) {
+                ctx.fillRect(x - displayVBrush / 2, -expand * th, displayVBrush, (controls.gridSize + expand * 2) * th);
+              }
             }
           }
         }

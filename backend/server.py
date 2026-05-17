@@ -838,11 +838,11 @@ def create_repeat_set():
                         for col in range(-expand, grid_size + expand):
                             offset = (height // 2) if abs(col) % 2 else 0
                             y = row * height + offset
-                            if 0 <= y <= tiled.size[1]:
+                            if 0 < y < tiled.size[1]:
                                 draw.rectangle([col * width, y - h_brush // 2, (col + 1) * width, y + h_brush // 2], fill=255)
                     else:
                         y = row * height
-                        if 0 <= y <= tiled.size[1]:
+                        if 0 < y < tiled.size[1]:
                             draw.rectangle([0, y - h_brush // 2, tiled.size[0], y + h_brush // 2], fill=255)
             
             # Draw vertical seam masks (white)
@@ -852,11 +852,11 @@ def create_repeat_set():
                         for row in range(-expand, grid_size + expand):
                             offset = (width // 2) if abs(row) % 2 else 0
                             x = col * width + offset
-                            if 0 <= x <= tiled.size[0]:
+                            if 0 < x < tiled.size[0]:
                                 draw.rectangle([x - v_brush // 2, row * height, x + v_brush // 2, (row + 1) * height], fill=255)
                     else:
                         x = col * width
-                        if 0 <= x <= tiled.size[0]:
+                        if 0 < x < tiled.size[0]:
                             draw.rectangle([x - v_brush // 2, 0, x + v_brush // 2, tiled.size[1]], fill=255)
 
             # Save mask for debug/UI feedback
