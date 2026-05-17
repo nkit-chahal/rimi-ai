@@ -1162,8 +1162,9 @@ def health():
 
 
 if __name__ == '__main__':
+    port = int(os.getenv('PORT', 3001))
     print("=" * 50)
     print("  RIM AI Backend — Flask + Replicate")
-    print("  http://localhost:3001")
+    print(f"  http://localhost:{port}")
     print("=" * 50)
-    app.run(host='0.0.0.0', port=3001, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=(os.getenv('FLASK_ENV') != 'production'))

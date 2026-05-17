@@ -1,7 +1,10 @@
 flask
 flask-cors
 groq
+gunicorn
 numpy
 pillow
+python-dotenv
 replicate
 requests
+vtracer
