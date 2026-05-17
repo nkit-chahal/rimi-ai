@@ -226,31 +226,36 @@ export default function Studio({ onBack }) {
       if (controlTab === 'advanced' && controls.edgeMatch && (controls.hBrush > 0 || controls.vBrush > 0)) {
         ctx.fillStyle = 'rgba(99, 102, 241, 0.35)'; // Purple/Indigo overlay
         
+        // Scale the brush size to match the canvas scaling
+        const scaleRatio = tw / img.width;
+        const displayHBrush = controls.hBrush * scaleRatio;
+        const displayVBrush = controls.vBrush * scaleRatio;
+        
         // Ensure we draw the grid seams over the entire expanded area
         for (let r = -expand; r <= controls.gridSize + expand; r += 1) {
-          if (controls.hBrush > 0) {
+          if (displayHBrush > 0) {
             // Horizontal seams (between rows)
             // Adjust for staggered layouts
             if (controls.repeatType === 'half_drop') {
               for (let col = -expand; col <= controls.gridSize + expand; col += 1) {
                 const offset = Math.abs(col) % 2 ? Math.floor(th / 2) : 0;
-                ctx.fillRect(col * tw, r * th + offset - controls.hBrush / 2, tw, controls.hBrush);
+                ctx.fillRect(col * tw, r * th + offset - displayHBrush / 2, tw, displayHBrush);
               }
             } else {
-              ctx.fillRect(-expand * tw, r * th - controls.hBrush / 2, (controls.gridSize + expand * 2) * tw, controls.hBrush);
+              ctx.fillRect(-expand * tw, r * th - displayHBrush / 2, (controls.gridSize + expand * 2) * tw, displayHBrush);
             }
           }
         }
         for (let col = -expand; col <= controls.gridSize + expand; col += 1) {
-          if (controls.vBrush > 0) {
+          if (displayVBrush > 0) {
             // Vertical seams (between cols)
             if (controls.repeatType === 'half_brick') {
               for (let r = -expand; r <= controls.gridSize + expand; r += 1) {
                 const offset = Math.abs(r) % 2 ? Math.floor(tw / 2) : 0;
-                ctx.fillRect(col * tw + offset - controls.vBrush / 2, r * th, controls.vBrush, th);
+                ctx.fillRect(col * tw + offset - displayVBrush / 2, r * th, displayVBrush, th);
               }
             } else {
-              ctx.fillRect(col * tw - controls.vBrush / 2, -expand * th, controls.vBrush, (controls.gridSize + expand * 2) * th);
+              ctx.fillRect(col * tw - displayVBrush / 2, -expand * th, displayVBrush, (controls.gridSize + expand * 2) * th);
             }
           }
         }
