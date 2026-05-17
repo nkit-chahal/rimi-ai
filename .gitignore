@@ -1,0 +1,41 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Large model / vectorization directories (removed from project)
+OmniSVG/
+LIVE-Layerwise-Image-Vectorization/
+
+# Backend runtime files
+backend/uploads/
+backend/results/
+backend/*.sqlite3
+backend/*.sqlite3-journal
+backend/__pycache__/
+backend/test_*.py
+backend/.env
+backend/_test_temp*/
+backend/bin/test.*
+backend/download*
+scratch/
