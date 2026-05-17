@@ -532,10 +532,10 @@ export default function Studio({ onBack }) {
           ) : (
             <>
               <label className="st-label">Horizontal Seam Brush</label>
-              <input type="range" min="0" max="64" value={controls.hBrush} onChange={(e) => updateControls({ hBrush: +e.target.value })} className="st-range" />
+              <input type="range" min="0" max="256" value={controls.hBrush} onChange={(e) => updateControls({ hBrush: +e.target.value })} className="st-range" />
               <div className="st-range-labels"><span>0 px</span><span>{controls.hBrush} px</span></div>
               <label className="st-label">Vertical Seam Brush</label>
-              <input type="range" min="0" max="64" value={controls.vBrush} onChange={(e) => updateControls({ vBrush: +e.target.value })} className="st-range" />
+              <input type="range" min="0" max="256" value={controls.vBrush} onChange={(e) => updateControls({ vBrush: +e.target.value })} className="st-range" />
               <div className="st-range-labels"><span>0 px</span><span>{controls.vBrush} px</span></div>
               <label className="st-label">Print Width</label>
               <div className="st-scale-row"><button onClick={() => updateControls({ printWidth: Math.max(4, controls.printWidth - 1) })}>-</button><span>{controls.printWidth} in</span><button onClick={() => updateControls({ printWidth: Math.min(60, controls.printWidth + 1) })}>+</button></div>
