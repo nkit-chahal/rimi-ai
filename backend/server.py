@@ -770,6 +770,8 @@ def create_repeat_set():
     h_brush = int(data.get('hBrush', 0))
     v_brush = int(data.get('vBrush', 0))
 
+    repeat_type = data.get('repeatType', 'block')
+    
     # Clamp grid size
     grid_size = max(2, min(grid_size, 6))
 
@@ -791,12 +793,34 @@ def create_repeat_set():
             img = img.convert('RGB')
 
         width, height = img.size
-        print(f"  [Repeat Set] Creating {grid_size}x{grid_size} tile from {width}x{height} image...")
+        print(f"  [Repeat Set] Creating {grid_size}x{grid_size} tile ({repeat_type}) from {width}x{height} image...")
 
         tiled = Image.new('RGB', (width * grid_size, height * grid_size))
-        for row in range(grid_size):
-            for col in range(grid_size):
-                tiled.paste(img, (col * width, row * height))
+        
+        # Paste the tiled image according to repeatType
+        expand = 2
+        for row in range(-expand, grid_size + expand):
+            for col in range(-expand, grid_size + expand):
+                if repeat_type == 'half_brick':
+                    offset = (width // 2) if abs(row) % 2 else 0
+                    tiled.paste(img, (col * width + offset, row * height))
+                elif repeat_type == 'half_drop':
+                    offset = (height // 2) if abs(col) % 2 else 0
+                    tiled.paste(img, (col * width, row * height + offset))
+                elif repeat_type == 'mirror':
+                    # Flip image based on col/row parity
+                    flip_x = abs(col) % 2
+                    flip_y = abs(row) % 2
+                    mirrored = img
+                    if flip_x:
+                        from PIL import ImageOps
+                        mirrored = ImageOps.mirror(mirrored)
+                    if flip_y:
+                        from PIL import ImageOps
+                        mirrored = ImageOps.flip(mirrored)
+                    tiled.paste(mirrored, (col * width, row * height))
+                else:
+                    tiled.paste(img, (col * width, row * height))
 
         mask_url = None
 
@@ -808,14 +832,32 @@ def create_repeat_set():
             draw = ImageDraw.Draw(mask)
 
             # Draw horizontal seam masks (white)
-            for row in range(1, grid_size):
-                y = row * height
-                draw.rectangle([0, y - h_brush // 2, tiled.size[0], y + h_brush // 2], fill=255)
+            for row in range(-expand, grid_size + expand):
+                if h_brush > 0:
+                    if repeat_type == 'half_drop':
+                        for col in range(-expand, grid_size + expand):
+                            offset = (height // 2) if abs(col) % 2 else 0
+                            y = row * height + offset
+                            if 0 <= y <= tiled.size[1]:
+                                draw.rectangle([col * width, y - h_brush // 2, (col + 1) * width, y + h_brush // 2], fill=255)
+                    else:
+                        y = row * height
+                        if 0 <= y <= tiled.size[1]:
+                            draw.rectangle([0, y - h_brush // 2, tiled.size[0], y + h_brush // 2], fill=255)
             
             # Draw vertical seam masks (white)
-            for col in range(1, grid_size):
-                x = col * width
-                draw.rectangle([x - v_brush // 2, 0, x + v_brush // 2, tiled.size[1]], fill=255)
+            for col in range(-expand, grid_size + expand):
+                if v_brush > 0:
+                    if repeat_type == 'half_brick':
+                        for row in range(-expand, grid_size + expand):
+                            offset = (width // 2) if abs(row) % 2 else 0
+                            x = col * width + offset
+                            if 0 <= x <= tiled.size[0]:
+                                draw.rectangle([x - v_brush // 2, row * height, x + v_brush // 2, (row + 1) * height], fill=255)
+                    else:
+                        x = col * width
+                        if 0 <= x <= tiled.size[0]:
+                            draw.rectangle([x - v_brush // 2, 0, x + v_brush // 2, tiled.size[1]], fill=255)
 
             # Save mask for debug/UI feedback
             mask_name = f"mask_{uuid.uuid4().hex[:8]}.png"
