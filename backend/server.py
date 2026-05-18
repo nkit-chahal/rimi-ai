@@ -122,6 +122,24 @@ def init_db():
             created_at TEXT NOT NULL,
             FOREIGN KEY(project_id) REFERENCES projects(id)
         );
+        CREATE TABLE IF NOT EXISTS pipeline_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER,
+            name TEXT NOT NULL DEFAULT 'Custom Pipeline',
+            steps_json TEXT NOT NULL,
+            settings_json TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            results_json TEXT DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            completed_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS saved_workflows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            steps_json TEXT NOT NULL,
+            settings_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
     """)
     project_count = conn.execute("SELECT COUNT(*) AS c FROM projects").fetchone()["c"]
     if project_count == 0:
@@ -140,18 +158,7 @@ def init_db():
             "INSERT INTO projects (id, name, status, thumbnail_url, hero_image_url, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
             [(pid, name, status, thumb, hero, ts.isoformat()) for pid, name, status, thumb, hero, ts in project_rows],
         )
-        variations = [
-            ("Original", "/demo_floral.png", 1),
-            ("Dusty Blue", "/demo_botanical.png", 0),
-            ("Sage Green", "/demo_geometric.png", 0),
-            ("Blush Pink", "/demo_floral.png", 0),
-            ("Midnight", "/demo_botanical.png", 0),
-            ("Warm Neutral", "/demo_geometric.png", 0),
-        ]
-        conn.executemany(
-            "INSERT INTO pattern_variations (project_id, name, image_url, is_selected, created_at) VALUES (1, ?, ?, ?, ?)",
-            [(name, url, selected, now.isoformat()) for name, url, selected in variations],
-        )
+        # Variations insert removed to clean hardcoded data
         conn.execute(
             "INSERT INTO project_metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (1, 24, 12, 18, 8, 52, 24, 1250, 15),
@@ -674,76 +681,129 @@ def generate_inspirations():
 @app.route('/api/make-seamless', methods=['POST'])
 def make_seamless():
     """
-    Uses black-forest-labs/flux-2-flex via Replicate to redesign the uploaded image
-    as a perfectly seamless repeating pattern tile.
-    Expects JSON: { filename, description, count }
-    - filename: the uploaded file name
-    - description: user's text description of the image content/style
-    - count: how many seamless variants to generate (default 3)
+    Uses black-forest-labs/flux-fill-pro via Replicate with the 'Offset & Inpaint' 
+    technique to convert a 1x1 image into a perfectly seamless repeating tile.
+    Expects JSON: { filename, imageUrl, hBrushPct, vBrushPct }
     """
+    import base64
+    from io import BytesIO
+    from PIL import Image, ImageDraw, ImageChops
+    import requests as http_requests
+
     data = request.get_json()
     filename = data.get('filename', '')
-    description = data.get('description', '')
-    count = int(data.get('count', 3))
-    creativity = int(data.get('creativity', 3))
+    image_url = data.get('imageUrl', '')
+    h_brush_pct = int(data.get('hBrushPct', 15))
+    v_brush_pct = int(data.get('vBrushPct', 15))
 
-    if not filename:
-        return jsonify({'error': 'Filename is required'}), 400
+    if not filename and not image_url:
+        return jsonify({'error': 'Filename or imageUrl is required'}), 400
 
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
-        return jsonify({'error': 'File not found'}), 404
+    try:
+        # Load the source image
+        if image_url and image_url.startswith('http'):
+            print(f"  [Make Seamless] Downloading image from URL...")
+            resp = http_requests.get(image_url, timeout=30)
+            img = Image.open(BytesIO(resp.content))
+        elif filename:
+            filepath = os.path.join(UPLOAD_DIR, filename)
+            if not os.path.exists(filepath):
+                return jsonify({'error': 'File not found'}), 404
+            img = Image.open(filepath)
+        else:
+            return jsonify({'error': 'Provide either filename or imageUrl'}), 400
 
-    if not description:
-        return jsonify({'error': 'Please provide a description of the image so the AI can recreate it as seamless'}), 400
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
 
-    # Map creativity level to how much freedom the AI takes
-    creativity_styles = {
-        1: "Recreate this EXACTLY as-is but make it perfectly seamless. Do NOT change anything creatively.",
-        2: "Recreate this very closely with only minor adjustments needed for seamless tiling.",
-        3: "Recreate this faithfully but feel free to make balanced adjustments for perfect seamless tiling.",
-        4: "Creatively reinterpret this design while keeping the same theme, make it a beautiful seamless tile.",
-        5: "Boldly reimagine this design with maximum artistic freedom, creating a stunning seamless repeating pattern.",
-    }
+        width, height = img.size
+        print(f"  [Make Seamless] Making {width}x{height} base tile seamless with flux-fill-pro...")
+        
+        def img_to_data_uri(pil_img):
+            buf = BytesIO()
+            pil_img.save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+            return f"data:image/png;base64,{b64}"
 
-    style_instruction = creativity_styles.get(creativity, creativity_styles[3])
+        # 1. Get LLM description of the single tile
+        print("  [Make Seamless] Describing base tile with Groq LLM...")
+        tile_uri = img_to_data_uri(img)
+        completion = groq_client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": tile_uri}},
+                        {"type": "text", "text": "Describe this fabric pattern in detail (colors, shapes, style). Keep it under 2 sentences."}
+                    ]
+                }
+            ],
+            temperature=0.3,
+            max_completion_tokens=256,
+        )
+        description = completion.choices[0].message.content.strip()
+        print(f"  [Make Seamless] Description: {description}")
 
-    # Build the seamless prompt using the user's image description + creativity
-    seamless_prompt = (
-        f"{style_instruction} "
-        f"The image contains: {description}. "
-        f"Blend all four edges naturally so it tiles without any visible seams or lines. "
-        f"Keep it high quality and print-ready."
-    )
+        # 2. Offset by 50%
+        x_offset, y_offset = width // 2, height // 2
+        offset_img = ImageChops.offset(img, x_offset, y_offset)
 
-    results = []
-    errors = []
+        # 3. Create Center Cross Mask
+        mask = Image.new('L', (width, height), 0)
+        draw = ImageDraw.Draw(mask)
+        
+        # If brush percentages are 0, default to 15% for the standalone tool
+        h_brush = int(height * (h_brush_pct / 100.0)) if h_brush_pct > 0 else int(height * 0.15)
+        v_brush = int(width * (v_brush_pct / 100.0)) if v_brush_pct > 0 else int(width * 0.15)
+        
+        # Horizontal seam (in the middle now)
+        draw.rectangle([0, y_offset - h_brush // 2, width, y_offset + h_brush // 2], fill=255)
+        # Vertical seam (in the middle now)
+        draw.rectangle([x_offset - v_brush // 2, 0, x_offset + v_brush // 2, height], fill=255)
 
-    for i in range(count):
-        try:
-            print(f"  [Make Seamless] Generating seamless variant {i+1}/{count}...")
-            output = replicate.run(
-                "black-forest-labs/flux-2-flex",
-                input={"prompt": seamless_prompt, "output_format": "png"}
-            )
+        offset_uri = img_to_data_uri(offset_img)
+        mask_uri = img_to_data_uri(mask)
 
-            image_url = str(output.url) if hasattr(output, 'url') else str(output)
-            results.append(image_url)
-            print(f"  [Make Seamless] Variant {i+1} done: {image_url[:80]}...")
+        # 4. Inpaint using flux-fill-pro
+        print("  [Make Seamless] Running flux-fill-pro via Replicate...")
+        output = replicate.run(
+            "black-forest-labs/flux-fill-pro",
+            input={
+                "image": offset_uri,
+                "mask": mask_uri,
+                "prompt": f"A perfectly seamless repeating pattern of {description}. Redraw and complete the motifs in the masked overlapping regions to connect them seamlessly. High quality texture.",
+                "output_format": "png",
+                "steps": 40,
+                "guidance": 60
+            }
+        )
+        
+        filled_url = str(output)
+        print(f"  [Make Seamless] Downloading filled image from {filled_url[:50]}...")
+        filled_resp = http_requests.get(filled_url)
+        inpainted_offset = Image.open(BytesIO(filled_resp.content))
 
-        except Exception as e:
-            print(f"  [Make Seamless] Error on variant {i+1}: {e}")
-            errors.append(str(e))
+        # 5. Offset back by -50% to restore layout
+        fixed_tile = ImageChops.offset(inpainted_offset, -x_offset, -y_offset)
+        print("  [Make Seamless] Base tile is now perfectly seamless!")
 
-    project_id = data.get('projectId', 1)
-    if results:
-        record_activity(project_id, 'generation', len(results), len(results) * 20)
+        # Save result
+        result_name = f"seamless_tile_{uuid.uuid4().hex[:8]}.png"
+        result_path = os.path.join(RESULTS_DIR, result_name)
+        fixed_tile.save(result_path, 'PNG', quality=95)
 
-    return jsonify({
-        'success': True,
-        'seamlessVariants': results,
-        'errors': errors
-    })
+        project_id = data.get('projectId', 1)
+        record_activity(project_id, 'generation', 1, 20)
+
+        return jsonify({
+            'success': True,
+            'resultUrl': f'/results/{result_name}'
+        })
+
+    except Exception as e:
+        print(f"  [Make Seamless] Error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 # --------------- Create Repeat Set (PIL tiling — server-side) ---------------
@@ -756,22 +816,22 @@ def create_repeat_set():
     - filename: local uploaded file name (used if imageUrl not provided)
     - imageUrl: URL of a remote image (e.g. from seamless result)
     - gridSize: e.g. 3 for 3x3 tiling
+    - dpi: output DPI (default 300)
+    - format: output format — PNG, JPG, or TIFF (default PNG)
     """
     import requests as http_requests
-    from PIL import Image, ImageDraw
+    from PIL import Image
     from io import BytesIO
-    import base64
 
     data = request.get_json()
     filename = data.get('filename', '')
     image_url = data.get('imageUrl', '')
     grid_size = int(data.get('gridSize', 3))
-    inpaint = data.get('inpaint', False)
-    h_brush = int(data.get('hBrush', 0))
-    v_brush = int(data.get('vBrush', 0))
-
+    scale = float(data.get('scale', 100)) / 100.0
     repeat_type = data.get('repeatType', 'block')
-    
+    dpi = int(data.get('dpi', 300))
+    out_format = data.get('format', 'PNG').upper()
+
     # Clamp grid size
     grid_size = max(2, min(grid_size, 6))
 
@@ -793,9 +853,16 @@ def create_repeat_set():
             img = img.convert('RGB')
 
         width, height = img.size
-        print(f"  [Repeat Set] Creating {grid_size}x{grid_size} tile ({repeat_type}) from {width}x{height} image...")
+        print(f"  [Repeat Set] Creating {grid_size}x{grid_size} tile ({repeat_type}) from {width}x{height} image (scaled to {scale})...")
 
-        tiled = Image.new('RGB', (width * grid_size, height * grid_size))
+        if scale != 1.0:
+            draw_w = int(width * scale)
+            draw_h = int(height * scale)
+            img = img.resize((draw_w, draw_h), Image.Resampling.LANCZOS)
+            print(f"  [Repeat Set] Scaled image to {draw_w}x{draw_h}")
+            width, height = img.size
+
+        tiled = Image.new('RGB', (width * grid_size, height * grid_size), color='#fbfaf7')
         
         # Paste the tiled image according to repeatType
         expand = 2
@@ -808,132 +875,46 @@ def create_repeat_set():
                     offset = (height // 2) if abs(col) % 2 else 0
                     tiled.paste(img, (col * width, row * height + offset))
                 elif repeat_type == 'mirror':
-                    # Flip image based on col/row parity
+                    from PIL import ImageOps
                     flip_x = abs(col) % 2
                     flip_y = abs(row) % 2
                     mirrored = img
                     if flip_x:
-                        from PIL import ImageOps
                         mirrored = ImageOps.mirror(mirrored)
                     if flip_y:
-                        from PIL import ImageOps
                         mirrored = ImageOps.flip(mirrored)
                     tiled.paste(mirrored, (col * width, row * height))
                 else:
                     tiled.paste(img, (col * width, row * height))
 
-        mask_url = None
+        # Save result in the requested format with DPI metadata
+        if out_format == 'JPG' or out_format == 'JPEG':
+            ext = 'jpg'
+            save_format = 'JPEG'
+        elif out_format == 'TIFF':
+            ext = 'tiff'
+            save_format = 'TIFF'
+        else:
+            ext = 'png'
+            save_format = 'PNG'
 
-        if inpaint and (h_brush > 0 or v_brush > 0):
-            print(f"  [Repeat Set] Inpainting seams with flux-fill-pro...")
-            
-            # 1. Generate Mask
-            mask = Image.new('L', tiled.size, 0) # Black mask (preserve)
-            draw = ImageDraw.Draw(mask)
-
-            # Draw horizontal seam masks (white)
-            for row in range(-expand, grid_size + expand):
-                if h_brush > 0:
-                    if repeat_type == 'half_drop':
-                        for col in range(-expand, grid_size + expand):
-                            offset = (height // 2) if abs(col) % 2 else 0
-                            y = row * height + offset
-                            if 0 < y < tiled.size[1]:
-                                draw.rectangle([col * width, y - h_brush // 2, (col + 1) * width, y + h_brush // 2], fill=255)
-                    else:
-                        y = row * height
-                        if 0 < y < tiled.size[1]:
-                            draw.rectangle([0, y - h_brush // 2, tiled.size[0], y + h_brush // 2], fill=255)
-            
-            # Draw vertical seam masks (white)
-            for col in range(-expand, grid_size + expand):
-                if v_brush > 0:
-                    if repeat_type == 'half_brick':
-                        for row in range(-expand, grid_size + expand):
-                            offset = (width // 2) if abs(row) % 2 else 0
-                            x = col * width + offset
-                            if 0 < x < tiled.size[0]:
-                                draw.rectangle([x - v_brush // 2, row * height, x + v_brush // 2, (row + 1) * height], fill=255)
-                    else:
-                        x = col * width
-                        if 0 < x < tiled.size[0]:
-                            draw.rectangle([x - v_brush // 2, 0, x + v_brush // 2, tiled.size[1]], fill=255)
-
-            # Save mask for debug/UI feedback
-            mask_name = f"mask_{uuid.uuid4().hex[:8]}.png"
-            mask_path = os.path.join(RESULTS_DIR, mask_name)
-            mask.save(mask_path, 'PNG')
-            mask_url = f'/results/{mask_name}'
-
-            # 2. Convert tiled and mask to base64 Data URIs
-            def img_to_data_uri(pil_img):
-                buf = BytesIO()
-                pil_img.save(buf, format="PNG")
-                b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
-                return f"data:image/png;base64,{b64}"
-
-            tiled_uri = img_to_data_uri(tiled)
-            mask_uri = img_to_data_uri(mask)
-
-            # 3. Get LLM description of the single tile
-            print("  [Repeat Set] Describing base tile with Groq LLM...")
-            tile_uri = img_to_data_uri(img)
-            completion = groq_client.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "image_url", "image_url": {"url": tile_uri}},
-                            {"type": "text", "text": "Describe this fabric pattern in detail (colors, shapes, style). Keep it under 2 sentences."}
-                        ]
-                    }
-                ],
-                temperature=0.3,
-                max_completion_tokens=256,
-            )
-            description = completion.choices[0].message.content.strip()
-            print(f"  [Repeat Set] Description: {description}")
-
-            # 4. Inpaint using flux-fill-pro
-            print("  [Repeat Set] Running flux-fill-pro via Replicate...")
-            output = replicate.run(
-                "black-forest-labs/flux-fill-pro",
-                input={
-                    "image": tiled_uri,
-                    "mask": mask_uri,
-                    "prompt": f"A perfectly seamless repeating pattern of {description}. Seamlessly blend the seams.",
-                    "output_format": "png",
-                    "steps": 50,
-                    "guidance": 60
-                }
-            )
-            
-            filled_url = str(output)
-            print(f"  [Repeat Set] Downloading filled image from {filled_url[:50]}...")
-            filled_resp = http_requests.get(filled_url)
-            tiled = Image.open(BytesIO(filled_resp.content))
-
-        # Save result
-        result_name = f"repeat_{grid_size}x{grid_size}_{uuid.uuid4().hex[:8]}.png"
+        result_name = f"repeat_{grid_size}x{grid_size}_{uuid.uuid4().hex[:8]}.{ext}"
         result_path = os.path.join(RESULTS_DIR, result_name)
-        tiled.save(result_path, 'PNG', quality=95)
+        tiled.save(result_path, save_format, quality=95, dpi=(dpi, dpi))
 
-        print(f"  [Repeat Set] Saved: {result_name} ({tiled.size[0]}x{tiled.size[1]})")
+        print(f"  [Repeat Set] Saved: {result_name} ({tiled.size[0]}x{tiled.size[1]}) @ {dpi} DPI as {save_format}")
 
         project_id = data.get('projectId', 1)
         record_activity(project_id, 'export', 1, 50)
 
-        response_data = {
+        return jsonify({
             'success': True,
             'resultUrl': f'/results/{result_name}',
             'gridSize': grid_size,
-            'dimensions': f'{tiled.size[0]}x{tiled.size[1]}'
-        }
-        if mask_url:
-            response_data['maskUrl'] = mask_url
-
-        return jsonify(response_data)
+            'dimensions': f'{tiled.size[0]}x{tiled.size[1]}',
+            'dpi': dpi,
+            'format': save_format,
+        })
 
     except Exception as e:
         print(f"  [Repeat Set] Error: {e}")
@@ -1190,11 +1171,343 @@ def download():
 def serve_upload(filename):
     return send_from_directory(UPLOAD_DIR, filename)
 
-
 @app.route('/results/<filename>')
 def serve_result(filename):
     mimetype = 'image/svg+xml' if filename.endswith('.svg') else None
     return send_from_directory(RESULTS_DIR, filename, mimetype=mimetype)
+
+@app.route('/results/previews/<filename>')
+def serve_preview(filename):
+    previews_dir = os.path.join(RESULTS_DIR, 'previews')
+    return send_from_directory(previews_dir, filename)
+
+
+# --------------- Exports ---------------
+PREVIEWS_DIR = os.path.join(RESULTS_DIR, 'previews')
+
+def get_preview(filename):
+    """
+    Generate a compressed mid-res preview (400px max) for the exports grid.
+    Cached in results/previews/. ~30-50 KB per image instead of multi-MB originals.
+    """
+    from PIL import Image
+    os.makedirs(PREVIEWS_DIR, exist_ok=True)
+    
+    preview_name = f"prev_{filename.rsplit('.', 1)[0]}.jpg"
+    preview_path = os.path.join(PREVIEWS_DIR, preview_name)
+    
+    src_path = os.path.join(RESULTS_DIR, filename)
+    # Return cached preview if it exists and is newer than source
+    if os.path.exists(preview_path) and os.path.getmtime(preview_path) >= os.path.getmtime(src_path):
+        return f'/results/previews/{preview_name}'
+    
+    try:
+        img = Image.open(src_path)
+        img.thumbnail((400, 400), Image.Resampling.LANCZOS)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        img.save(preview_path, 'JPEG', quality=65, optimize=True)
+        return f'/results/previews/{preview_name}'
+    except Exception:
+        return f'/results/{filename}'
+
+def format_file_size(size_bytes):
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+@app.route('/api/exports')
+def list_exports():
+    """
+    Returns a list of all exported files in the results directory,
+    sorted by newest first. Includes thumbnails, file size, and type.
+    """
+    try:
+        if not os.path.exists(RESULTS_DIR):
+            return jsonify({'success': True, 'exports': []})
+
+        files = []
+        skip_prefixes = ('mask_', 'test_', 'omnisvg_', 'thumb_', 'prev_')
+        for filename in os.listdir(RESULTS_DIR):
+            filepath = os.path.join(RESULTS_DIR, filename)
+            if os.path.isfile(filepath):
+                if filename.lower().startswith(skip_prefixes):
+                    continue
+                
+                ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+                if ext not in ('png', 'jpg', 'jpeg', 'svg', 'tiff'):
+                    continue
+
+                is_vector = ext == 'svg'
+                file_size = os.path.getsize(filepath)
+                mtime = os.path.getmtime(filepath)
+                
+                # Generate compressed preview for raster images
+                if is_vector:
+                    preview_url = f'/results/{filename}'
+                else:
+                    preview_url = get_preview(filename)
+
+                files.append({
+                    'id': filename,
+                    'imageUrl': f'/results/{filename}',
+                    'previewUrl': preview_url,
+                    'type': 'vector' if is_vector else 'image',
+                    'format': ext.upper(),
+                    'size': format_file_size(file_size),
+                    'sizeBytes': file_size,
+                    'timestamp': mtime
+                })
+        
+        files.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        return jsonify({'success': True, 'exports': files})
+    except Exception as e:
+        print(f"  [Exports] Error reading results directory: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/exports', methods=['DELETE'])
+def delete_exports():
+    """
+    Deletes one or more export files from the results directory.
+    Expects JSON: { filenames: ['file1.png', 'file2.png'] }
+    """
+    data = request.get_json()
+    filenames = data.get('filenames', [])
+    
+    if not filenames:
+        return jsonify({'error': 'No filenames provided'}), 400
+
+    deleted = []
+    errors = []
+    for filename in filenames:
+        # Sanitize: prevent path traversal
+        safe_name = os.path.basename(filename)
+        filepath = os.path.join(RESULTS_DIR, safe_name)
+        if os.path.isfile(filepath):
+            try:
+                os.remove(filepath)
+                deleted.append(safe_name)
+                print(f"  [Exports] Deleted: {safe_name}")
+            except Exception as e:
+                errors.append(f"{safe_name}: {str(e)}")
+        else:
+            errors.append(f"{safe_name}: not found")
+
+    return jsonify({
+        'success': True,
+        'deleted': deleted,
+        'errors': errors
+    })
+
+# --------------- Projects CRUD ---------------
+@app.route('/api/projects', methods=['POST'])
+def create_project():
+    data = request.get_json() or {}
+    name = data.get('name', 'New Project')
+    conn = db()
+    now = datetime.utcnow().isoformat()
+    cur = conn.execute(
+        "INSERT INTO projects (name, status, thumbnail_url, hero_image_url, updated_at) VALUES (?, ?, ?, ?, ?)",
+        (name, "Draft", "/demo_geometric.png", "/demo_geometric.png", now)
+    )
+    project_id = cur.lastrowid
+    conn.execute("INSERT INTO project_metrics (project_id) VALUES (?)", (project_id,))
+    conn.execute("INSERT INTO pattern_health (project_id, score, label, tile_seamless, color_balance, print_readiness, resolution, note) VALUES (?, 0, 'No Data', 0, 0, 0, 0, '')", (project_id,))
+    conn.execute("INSERT INTO project_controls (project_id, updated_at) VALUES (?, ?)", (project_id, now))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'projectId': project_id})
+
+@app.route('/api/projects/<int:project_id>', methods=['PUT'])
+def update_project(project_id):
+    data = request.get_json() or {}
+    conn = db()
+    sets = []
+    vals = []
+    if 'name' in data and data['name']:
+        sets.append('name = ?')
+        vals.append(data['name'])
+    if 'thumbnail_url' in data:
+        sets.append('thumbnail_url = ?')
+        vals.append(data['thumbnail_url'])
+        sets.append('hero_image_url = ?')
+        vals.append(data['thumbnail_url'])
+        
+    if sets:
+        sets.append('updated_at = ?')
+        vals.append(datetime.utcnow().isoformat())
+        vals.append(project_id)
+        conn.execute(f"UPDATE projects SET {', '.join(sets)} WHERE id = ?", vals)
+        conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/projects/<int:project_id>', methods=['DELETE'])
+def delete_project(project_id):
+    conn = db()
+    
+    # 1. Collect all associated file URLs
+    files_to_delete = set()
+    
+    proj = conn.execute("SELECT thumbnail_url, hero_image_url FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if proj:
+        files_to_delete.add(proj['thumbnail_url'])
+        files_to_delete.add(proj['hero_image_url'])
+        
+    vars_rows = conn.execute("SELECT image_url FROM pattern_variations WHERE project_id = ?", (project_id,)).fetchall()
+    for v in vars_rows: files_to_delete.add(v['image_url'])
+        
+    runs_rows = conn.execute("SELECT results_json FROM pipeline_runs WHERE project_id = ?", (project_id,)).fetchall()
+    for r in runs_rows:
+        if r['results_json']:
+            try:
+                results = json.loads(r['results_json'])
+                for url in results: files_to_delete.add(url)
+            except: pass
+
+    # 2. Delete physical files from disk
+    for url in files_to_delete:
+        if not url: continue
+        if url.startswith('/uploads/'):
+            path = os.path.join(UPLOAD_DIR, url.split('/')[-1])
+            if os.path.exists(path): os.remove(path)
+        elif url.startswith('/results/'):
+            path = os.path.join(RESULTS_DIR, url.split('/')[-1])
+            if os.path.exists(path): os.remove(path)
+
+    # 3. Database Cascade Delete
+    conn.execute("DELETE FROM pattern_variations WHERE project_id = ?", (project_id,))
+    conn.execute("DELETE FROM project_metrics WHERE project_id = ?", (project_id,))
+    conn.execute("DELETE FROM pattern_health WHERE project_id = ?", (project_id,))
+    conn.execute("DELETE FROM project_controls WHERE project_id = ?", (project_id,))
+    conn.execute("DELETE FROM suggestions WHERE project_id = ?", (project_id,))
+    conn.execute("DELETE FROM pipeline_runs WHERE project_id = ?", (project_id,))
+    conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+# --------------- Pipeline Runs ---------------
+@app.route('/api/pipeline-runs', methods=['POST'])
+def create_pipeline_run():
+    """Create a new pipeline run record (status=running)."""
+    data = request.get_json()
+    now = datetime.utcnow().isoformat()
+    conn = db()
+    cur = conn.execute(
+        "INSERT INTO pipeline_runs (project_id, name, steps_json, settings_json, status, created_at) VALUES (?, ?, ?, ?, 'running', ?)",
+        (data.get('projectId', 1), data.get('name', 'Custom Pipeline'),
+         json.dumps(data.get('steps', [])), json.dumps(data.get('settings', {})), now)
+    )
+    run_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'runId': run_id})
+
+
+@app.route('/api/pipeline-runs/<int:run_id>', methods=['PATCH'])
+def update_pipeline_run(run_id):
+    """Update a pipeline run's status and results."""
+    data = request.get_json()
+    conn = db()
+    sets = []
+    vals = []
+    if 'status' in data:
+        sets.append('status = ?')
+        vals.append(data['status'])
+    if 'results' in data:
+        sets.append('results_json = ?')
+        vals.append(json.dumps(data['results']))
+    if data.get('status') in ('completed', 'failed'):
+        sets.append('completed_at = ?')
+        vals.append(datetime.utcnow().isoformat())
+    if sets:
+        vals.append(run_id)
+        conn.execute(f"UPDATE pipeline_runs SET {', '.join(sets)} WHERE id = ?", vals)
+        conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/api/pipeline-runs')
+def list_pipeline_runs():
+    """List recent pipeline runs (newest first, max 20). Optionally filter by project_id."""
+    project_id = request.args.get('project_id')
+    conn = db()
+    if project_id:
+        rows = conn.execute(
+            "SELECT * FROM pipeline_runs WHERE project_id = ? ORDER BY created_at DESC LIMIT 20",
+            (project_id,)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM pipeline_runs ORDER BY created_at DESC LIMIT 20"
+        ).fetchall()
+    conn.close()
+    runs = []
+    for r in rows_to_dicts(rows):
+        runs.append({
+            'id': r['id'],
+            'name': r['name'],
+            'status': r['status'],
+            'steps': json.loads(r['steps_json']),
+            'results': json.loads(r['results_json']) if r['results_json'] else [],
+            'createdAt': r['created_at'],
+            'completedAt': r.get('completed_at'),
+        })
+    return jsonify({'success': True, 'runs': runs})
+
+
+# --------------- Saved Workflows ---------------
+@app.route('/api/workflows', methods=['POST'])
+def save_workflow():
+    """Save a workflow configuration."""
+    data = request.get_json()
+    now = datetime.utcnow().isoformat()
+    conn = db()
+    cur = conn.execute(
+        "INSERT INTO saved_workflows (name, steps_json, settings_json, created_at) VALUES (?, ?, ?, ?)",
+        (data.get('name', 'My Workflow'), json.dumps(data.get('steps', [])),
+         json.dumps(data.get('settings', {})), now)
+    )
+    wf_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'workflowId': wf_id})
+
+
+@app.route('/api/workflows')
+def list_workflows():
+    """List all saved workflows."""
+    conn = db()
+    rows = conn.execute("SELECT * FROM saved_workflows ORDER BY created_at DESC").fetchall()
+    conn.close()
+    workflows = []
+    for r in rows_to_dicts(rows):
+        workflows.append({
+            'id': r['id'],
+            'name': r['name'],
+            'steps': json.loads(r['steps_json']),
+            'settings': json.loads(r['settings_json']),
+            'createdAt': r['created_at'],
+        })
+    return jsonify({'success': True, 'workflows': workflows})
+
+
+@app.route('/api/workflows/<int:wf_id>', methods=['DELETE'])
+def delete_workflow(wf_id):
+    """Delete a saved workflow."""
+    conn = db()
+    conn.execute("DELETE FROM saved_workflows WHERE id = ?", (wf_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
 
 
 # --------------- Health check ---------------

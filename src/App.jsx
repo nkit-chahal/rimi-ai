@@ -4,7 +4,7 @@ import Landing from './pages/Landing';
 import Studio from './pages/Studio';
 
 function App() {
-  const [view, setView] = useState('landing');
+  const [view, setView] = useState('studio');
   
   if (view === 'studio') {
     return <Studio onBack={() => setView('landing')} />;
