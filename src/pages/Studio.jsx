@@ -125,7 +125,7 @@ export default function Studio({ onBack }) {
   const [isEnh, setIsEnh] = useState(false);
   const [enhUrl, setEnhUrl] = useState(null);
 
-  const [vecEngine, setVecEngine] = useState('local');
+  const [vecEngine, setVecEngine] = useState('api');
   const [vecColors, setVecColors] = useState(32);
   const [vecIsolate, setVecIsolate] = useState(false);
   const [isVec, setIsVec] = useState(false);
@@ -1170,9 +1170,9 @@ export default function Studio({ onBack }) {
     );
     if (tool === 'vectorize') return (
       <div className="st-ctrl">
-        <label className="st-label">Engine</label>
-        <div className="st-btn-row"><button className={`st-grid-btn ${vecEngine === 'local' ? 'active' : ''}`} onClick={() => setVecEngine('local')}>Local</button><button className={`st-grid-btn ${vecEngine === 'api' ? 'active' : ''}`} onClick={() => setVecEngine('api')}>API</button></div>
-        {vecEngine === 'local' && <><label className="st-label">Colors: {vecColors}</label><input type="range" min="2" max="256" value={vecColors} onChange={(e) => setVecColors(+e.target.value)} className="st-range" /></>}
+        <label className="st-label" style={{ color: '#6b7280', fontSize: '0.8rem', marginBottom: '1rem', display: 'block' }}>
+          Using High-Fidelity Cloud Vectorization (API)
+        </label>
         <div className="st-toggle-row"><span>Isolate Motif</span><label className="st-toggle"><input type="checkbox" checked={vecIsolate} onChange={(e) => setVecIsolate(e.target.checked)} /><span className="st-toggle-slider" /></label></div>
         <button className="st-export-btn" onClick={vectorize} disabled={isVec || !uploaded}>{isVec ? 'Vectorizing...' : 'Vectorize Image'}</button>
       </div>
@@ -1766,15 +1766,23 @@ export default function Studio({ onBack }) {
       <div className="st-inspire-main">
         {/* Upload Box */}
         <div 
-          className="st-inspire-upload-box"
+          className={`st-inspire-upload-box ${preview ? 'has-image' : ''}`}
           onClick={() => fileRef.current?.click()}
           onDrop={(e) => { e.preventDefault(); handleUpload(e.dataTransfer.files[0]); }}
           onDragOver={(e) => e.preventDefault()}
         >
-          <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={24} />
-          <h3>Upload reference image (optional)</h3>
-          <p>{preview ? (uploaded?.originalName || 'Image Uploaded') : 'PNG, JPG up to 10MB'}</p>
-          <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handleUpload(e.target.files[0])} />
+          {preview ? (
+            <div className="st-upload-preview" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+              <img src={preview} alt="Uploaded reference" style={{ maxHeight: '160px', borderRadius: '8px', objectFit: 'contain' }} />
+              <div><span className="st-upload-name">{uploaded?.originalName || 'Image Uploaded'}</span><span className="st-upload-hint">Click to replace</span></div>
+            </div>
+          ) : (
+            <>
+              <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={24} />
+              <h3>Upload reference image (optional)</h3>
+              <p>PNG, JPG up to 10MB</p>
+            </>
+          )}
         </div>
 
         {/* Prompt Box */}
