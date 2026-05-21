@@ -1002,7 +1002,7 @@ export default function Studio({ onBack }) {
       const d = await r.json();
       if (d.success) {
         setSeamlessUrl(`${API}${d.resultUrl}`);
-        // Optionally update the active project image or trigger reload
+        await loadStudioState(activeProject.id);
       } else setError(d.error);
     } catch {
       setError('Backend is not reachable. Start Flask on port 3001.');

@@ -681,20 +681,22 @@ def generate_inspirations():
 @app.route('/api/make-seamless', methods=['POST'])
 def make_seamless():
     """
-    Uses black-forest-labs/flux-fill-pro via Replicate with the 'Offset & Inpaint' 
-    technique to convert a 1x1 image into a perfectly seamless repeating tile.
-    Expects JSON: { filename, imageUrl, hBrushPct, vBrushPct }
+    Uses replicate/seamless-texture via Replicate with the 'Offset & Inpaint' 
+    technique to convert an image into a perfectly seamless repeating tile.
+    Expects JSON: { filename, imageUrl, hBrushPct, vBrushPct, projectId }
     """
     import base64
     from io import BytesIO
-    from PIL import Image, ImageDraw, ImageChops
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageChops, ImageFilter
     import requests as http_requests
 
     data = request.get_json()
     filename = data.get('filename', '')
     image_url = data.get('imageUrl', '')
-    h_brush_pct = int(data.get('hBrushPct', 15))
-    v_brush_pct = int(data.get('vBrushPct', 15))
+    h_brush_pct = int(data.get('hBrushPct', 16))
+    v_brush_pct = int(data.get('vBrushPct', 16))
+    project_id = int(data.get('projectId', 1))
 
     if not filename and not image_url:
         return jsonify({'error': 'Filename or imageUrl is required'}), 400
@@ -716,17 +718,17 @@ def make_seamless():
         if img.mode != 'RGB':
             img = img.convert('RGB')
 
-        width, height = img.size
-        print(f"  [Make Seamless] Making {width}x{height} base tile seamless with flux-fill-pro...")
-        
+        orig_w, orig_h = img.size
+        print(f"  [Make Seamless] Making {orig_w}x{orig_h} base tile seamless...")
+
         def img_to_data_uri(pil_img):
             buf = BytesIO()
             pil_img.save(buf, format="PNG")
             b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
             return f"data:image/png;base64,{b64}"
 
-        # 1. Get LLM description of the single tile
-        print("  [Make Seamless] Describing base tile with Groq LLM...")
+        # 1. Get Style-Aware LLM description of the single tile
+        print("  [Make Seamless] Describing base tile with Groq LLM (style-aware)...")
         tile_uri = img_to_data_uri(img)
         completion = groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
@@ -735,70 +737,172 @@ def make_seamless():
                     "role": "user",
                     "content": [
                         {"type": "image_url", "image_url": {"url": tile_uri}},
-                        {"type": "text", "text": "Describe this fabric pattern in detail (colors, shapes, style). Keep it under 2 sentences."}
+                        {"type": "text", "text": (
+                            "Describe this fabric pattern in detail. "
+                            "Specify the motifs, colors, background, and crucially, the artistic style "
+                            "(e.g. flat 2D vector graphic, minimalist digital illustration, watercolor painting, "
+                            "hand-drawn sketch, photographic pattern). Keep it under 2 sentences."
+                        )}
                     ]
                 }
             ],
-            temperature=0.3,
-            max_completion_tokens=256,
+            temperature=0.2,
+            max_completion_tokens=150,
         )
         description = completion.choices[0].message.content.strip()
         print(f"  [Make Seamless] Description: {description}")
 
-        # 2. Offset by 50%
-        x_offset, y_offset = width // 2, height // 2
-        offset_img = ImageChops.offset(img, x_offset, y_offset)
+        # 2. Resize to aspect-ratio preserving dimensions (multiples of 64)
+        max_dim = 1024
+        if orig_w > orig_h:
+            new_w = max_dim
+            new_h = int(max_dim * (orig_h / orig_w))
+        else:
+            new_h = max_dim
+            new_w = int(max_dim * (orig_w / orig_h))
+            
+        new_w = max(64, (new_w // 64) * 64)
+        new_h = max(64, (new_h // 64) * 64)
 
-        # 3. Create Center Cross Mask
-        mask = Image.new('L', (width, height), 0)
+        img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        x_offset, y_offset = new_w // 2, new_h // 2
+
+        # 3. Offset by 50%
+        offset_img = ImageChops.offset(img_resized, x_offset, y_offset)
+
+        # 4. Create feathered Center Cross Mask
+        mask = Image.new('L', (new_w, new_h), 0)
         draw = ImageDraw.Draw(mask)
         
-        # If brush percentages are 0, default to 15% for the standalone tool
-        h_brush = int(height * (h_brush_pct / 100.0)) if h_brush_pct > 0 else int(height * 0.15)
-        v_brush = int(width * (v_brush_pct / 100.0)) if v_brush_pct > 0 else int(width * 0.15)
+        h_brush = max(4, int(new_w * (h_brush_pct / 100.0)))
+        v_brush = max(4, int(new_h * (v_brush_pct / 100.0)))
         
         # Horizontal seam (in the middle now)
-        draw.rectangle([0, y_offset - h_brush // 2, width, y_offset + h_brush // 2], fill=255)
+        draw.rectangle([0, y_offset - v_brush // 2, new_w, y_offset + v_brush // 2], fill=255)
         # Vertical seam (in the middle now)
-        draw.rectangle([x_offset - v_brush // 2, 0, x_offset + v_brush // 2, height], fill=255)
+        draw.rectangle([x_offset - h_brush // 2, 0, x_offset + h_brush // 2, new_h], fill=255)
+
+        # Blur and threshold for feathered edge transition
+        mask = mask.filter(ImageFilter.GaussianBlur(radius=max(3, min(h_brush, v_brush) // 6)))
+        mask_arr = np.array(mask, dtype=np.float32)
+        mask_arr = np.clip(mask_arr * 1.5, 0, 255).astype(np.uint8)
+        mask = Image.fromarray(mask_arr)
 
         offset_uri = img_to_data_uri(offset_img)
         mask_uri = img_to_data_uri(mask)
 
-        # 4. Inpaint using flux-fill-pro
-        print("  [Make Seamless] Running flux-fill-pro via Replicate...")
+        # 5. Inpaint using replicate/seamless-texture
+        print("  [Make Seamless] Running replicate/seamless-texture via Replicate...")
         output = replicate.run(
-            "black-forest-labs/flux-fill-pro",
+            "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
             input={
+                "model": "dev",
                 "image": offset_uri,
                 "mask": mask_uri,
-                "prompt": f"A perfectly seamless repeating pattern of {description}. Redraw and complete the motifs in the masked overlapping regions to connect them seamlessly. High quality texture.",
+                "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
+                "prompt_strength": 0.80,
+                "guidance_scale": 3.0,
+                "num_outputs": 1,
+                "num_inference_steps": 30,
                 "output_format": "png",
-                "steps": 40,
-                "guidance": 60
             }
         )
         
-        filled_url = str(output)
+        filled_url = str(output[0]) if isinstance(output, list) else str(output)
         print(f"  [Make Seamless] Downloading filled image from {filled_url[:50]}...")
-        filled_resp = http_requests.get(filled_url)
-        inpainted_offset = Image.open(BytesIO(filled_resp.content))
+        filled_resp = http_requests.get(filled_url, timeout=60)
+        inpainted_offset = Image.open(BytesIO(filled_resp.content)).convert('RGB')
 
-        # 5. Offset back by -50% to restore layout
-        fixed_tile = ImageChops.offset(inpainted_offset, -x_offset, -y_offset)
-        print("  [Make Seamless] Base tile is now perfectly seamless!")
+        # 6. Offset back by -50% and resize to original aspect ratio
+        fixed_resized = ImageChops.offset(inpainted_offset, -x_offset, -y_offset)
+        fixed_tile = fixed_resized.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+        print("  [Make Seamless] Base tile completed!")
 
-        # Save result
+        # 7. Save result
         result_name = f"seamless_tile_{uuid.uuid4().hex[:8]}.png"
         result_path = os.path.join(RESULTS_DIR, result_name)
         fixed_tile.save(result_path, 'PNG', quality=95)
 
-        project_id = data.get('projectId', 1)
+        # 8. Compute mathematical seam quality metrics
+        arr = np.array(fixed_tile.convert("RGB"), dtype=np.float32)
+        diff_x_internal = np.mean(np.abs(arr[:, 1:, :] - arr[:, :-1, :]))
+        diff_y_internal = np.mean(np.abs(arr[1:, :, :] - arr[:-1, :, :]))
+        seam_x = np.mean(np.abs(arr[:, 0, :] - arr[:, -1, :]))
+        seam_y = np.mean(np.abs(arr[0, :, :] - arr[-1, :, :]))
+        
+        ratio_x = seam_x / max(1e-5, diff_x_internal)
+        ratio_y = seam_y / max(1e-5, diff_y_internal)
+        
+        score_x = max(0.0, 1.0 - (ratio_x - 1.0) / 2.0) if ratio_x > 1.0 else 1.0
+        score_y = max(0.0, 1.0 - (ratio_y - 1.0) / 2.0) if ratio_y > 1.0 else 1.0
+        overall_score = (score_x + score_y) / 2.0
+        
+        score_pct = int(overall_score * 100)
+        tile_seamless = 1 if overall_score >= 0.70 else 0
+        resolution = 1 if (orig_w >= 1024 and orig_h >= 1024) else 0
+        print_readiness = 1 if (tile_seamless and resolution) else 0
+        color_balance = 1
+
+        if overall_score >= 0.90:
+            label = "A - Excellent"
+            note = f"Perfect seamless tiling ({score_pct}% match)."
+        elif overall_score >= 0.75:
+            label = "B - Good"
+            note = f"High-quality seamless tiling ({score_pct}% match)."
+        elif overall_score >= 0.60:
+            label = "C - Fair"
+            note = f"Seamless tiling with minor edge variations ({score_pct}% match)."
+        else:
+            label = "D - Poor"
+            note = f"Significant seam mismatch detected ({score_pct}% match)."
+
+        # 9. Update SQLite Database
+        conn = db()
+        new_url = f'/results/{result_name}'
+        now = datetime.utcnow().isoformat()
+        
+        # Update project hero and thumbnail
+        conn.execute(
+            "UPDATE projects SET hero_image_url = ?, thumbnail_url = ?, updated_at = ? WHERE id = ?",
+            (new_url, new_url, now, project_id)
+        )
+        
+        # Update/insert pattern health
+        conn.execute(
+            "INSERT INTO pattern_health (project_id, score, label, tile_seamless, color_balance, print_readiness, resolution, note) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(project_id) DO UPDATE SET "
+            "score=excluded.score, label=excluded.label, tile_seamless=excluded.tile_seamless, "
+            "color_balance=excluded.color_balance, print_readiness=excluded.print_readiness, "
+            "resolution=excluded.resolution, note=excluded.note",
+            (project_id, score_pct, label, tile_seamless, color_balance, print_readiness, resolution, note)
+        )
+        
+        # Increment metrics
+        metrics = conn.execute("SELECT versions, ai_generations FROM project_metrics WHERE project_id = ?", (project_id,)).fetchone()
+        if metrics:
+            conn.execute(
+                "UPDATE project_metrics SET versions = versions + 1, ai_generations = ai_generations + 1 WHERE project_id = ?",
+                (project_id,)
+            )
+            
+        conn.commit()
+        conn.close()
+
         record_activity(project_id, 'generation', 1, 20)
 
         return jsonify({
             'success': True,
-            'resultUrl': f'/results/{result_name}'
+            'resultUrl': new_url,
+            'health': {
+                'score': score_pct,
+                'label': label,
+                'tileSeamless': bool(tile_seamless),
+                'colorBalance': bool(color_balance),
+                'printReadiness': bool(print_readiness),
+                'resolution': bool(resolution),
+                'note': note
+            }
         })
 
     except Exception as e:
