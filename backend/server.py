@@ -767,38 +767,25 @@ def make_seamless():
         img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         x_offset, y_offset = new_w // 2, new_h // 2
 
-        # 3. Offset by 50%
-        offset_img = ImageChops.offset(img_resized, x_offset, y_offset)
-
-        # 4. Create feathered Center Cross Mask
-        mask = Image.new('L', (new_w, new_h), 0)
-        draw = ImageDraw.Draw(mask)
+        # PASS 1: Horizontal Seam Fix (Offset Y, mask horizontal)
+        img_pass1_offset = ImageChops.offset(img_resized, 0, y_offset)
         
-        h_brush = max(4, int(new_w * (h_brush_pct / 100.0)))
+        mask_h = Image.new('L', (new_w, new_h), 0)
+        draw_h = ImageDraw.Draw(mask_h)
         v_brush = max(4, int(new_h * (v_brush_pct / 100.0)))
-        
-        # Horizontal seam (in the middle now)
-        draw.rectangle([0, y_offset - v_brush // 2, new_w, y_offset + v_brush // 2], fill=255)
-        # Vertical seam (in the middle now)
-        draw.rectangle([x_offset - h_brush // 2, 0, x_offset + h_brush // 2, new_h], fill=255)
+        draw_h.rectangle([0, y_offset - v_brush // 2, new_w, y_offset + v_brush // 2], fill=255)
+        mask_h = mask_h.filter(ImageFilter.GaussianBlur(radius=max(3, v_brush // 6)))
+        arr_h = np.array(mask_h, dtype=np.float32)
+        arr_h = np.clip(arr_h * 1.5, 0, 255).astype(np.uint8)
+        mask_h = Image.fromarray(arr_h)
 
-        # Blur and threshold for feathered edge transition
-        mask = mask.filter(ImageFilter.GaussianBlur(radius=max(3, min(h_brush, v_brush) // 6)))
-        mask_arr = np.array(mask, dtype=np.float32)
-        mask_arr = np.clip(mask_arr * 1.5, 0, 255).astype(np.uint8)
-        mask = Image.fromarray(mask_arr)
-
-        offset_uri = img_to_data_uri(offset_img)
-        mask_uri = img_to_data_uri(mask)
-
-        # 5. Inpaint using replicate/seamless-texture
-        print("  [Make Seamless] Running replicate/seamless-texture via Replicate...")
-        output = replicate.run(
+        print("  [Make Seamless] Pass 1: Horizontal seam fix...")
+        output_h = replicate.run(
             "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
             input={
                 "model": "dev",
-                "image": offset_uri,
-                "mask": mask_uri,
+                "image": img_to_data_uri(img_pass1_offset),
+                "mask": img_to_data_uri(mask_h),
                 "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
                 "prompt_strength": 0.80,
                 "guidance_scale": 3.0,
@@ -807,14 +794,43 @@ def make_seamless():
                 "output_format": "png",
             }
         )
-        
-        filled_url = str(output[0]) if isinstance(output, list) else str(output)
-        print(f"  [Make Seamless] Downloading filled image from {filled_url[:50]}...")
-        filled_resp = http_requests.get(filled_url, timeout=60)
-        inpainted_offset = Image.open(BytesIO(filled_resp.content)).convert('RGB')
+        filled_url_h = str(output_h[0]) if isinstance(output_h, list) else str(output_h)
+        filled_resp_h = http_requests.get(filled_url_h, timeout=60)
+        img_pass1_fixed = Image.open(BytesIO(filled_resp_h.content)).convert('RGB')
+
+        # PASS 2: Vertical Seam Fix (Offset X on the Pass 1 result, mask vertical)
+        img_pass2_offset = ImageChops.offset(img_pass1_fixed, x_offset, 0)
+
+        mask_v = Image.new('L', (new_w, new_h), 0)
+        draw_v = ImageDraw.Draw(mask_v)
+        h_brush = max(4, int(new_w * (h_brush_pct / 100.0)))
+        draw_v.rectangle([x_offset - h_brush // 2, 0, x_offset + h_brush // 2, new_h], fill=255)
+        mask_v = mask_v.filter(ImageFilter.GaussianBlur(radius=max(3, h_brush // 6)))
+        arr_v = np.array(mask_v, dtype=np.float32)
+        arr_v = np.clip(arr_v * 1.5, 0, 255).astype(np.uint8)
+        mask_v = Image.fromarray(arr_v)
+
+        print("  [Make Seamless] Pass 2: Vertical seam fix...")
+        output_v = replicate.run(
+            "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
+            input={
+                "model": "dev",
+                "image": img_to_data_uri(img_pass2_offset),
+                "mask": img_to_data_uri(mask_v),
+                "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
+                "prompt_strength": 0.80,
+                "guidance_scale": 3.0,
+                "num_outputs": 1,
+                "num_inference_steps": 30,
+                "output_format": "png",
+            }
+        )
+        filled_url_v = str(output_v[0]) if isinstance(output_v, list) else str(output_v)
+        filled_resp_v = http_requests.get(filled_url_v, timeout=60)
+        inpainted_final = Image.open(BytesIO(filled_resp_v.content)).convert('RGB')
 
         # 6. Offset back by -50% and resize to original aspect ratio
-        fixed_resized = ImageChops.offset(inpainted_offset, -x_offset, -y_offset)
+        fixed_resized = ImageChops.offset(inpainted_final, -x_offset, -y_offset)
         fixed_tile = fixed_resized.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
         print("  [Make Seamless] Base tile completed!")
 
