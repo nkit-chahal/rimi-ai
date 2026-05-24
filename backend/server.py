@@ -809,7 +809,7 @@ def make_seamless():
         # Phase 1 settings
         num_candidates = 4
         prompt_strength = 0.35
-        brush_pct = 8
+        brush_pct = 15
 
         # --- PRE-CHECK: Log scores for debugging ---
         h_score_orig, v_score_orig = compute_directional_scores(img_resized)
