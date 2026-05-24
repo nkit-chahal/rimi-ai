@@ -752,7 +752,75 @@ def make_seamless():
         description = completion.choices[0].message.content.strip()
         print(f"  [Make Seamless] Description: {description}")
 
-        # 2. Resize to aspect-ratio preserving dimensions (multiples of 64)
+        # 2. Classify pattern type using Groq
+        print("  [Make Seamless] Classifying pattern type...")
+        classify_resp = groq_client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": tile_uri}},
+                        {"type": "text", "text": (
+                            "Classify this fabric/textile pattern into ONE of these categories:\n"
+                            "- organic (watercolor, loose floral, botanical, tossed motifs, painterly)\n"
+                            "- structured (line-art floral, damask, block print, toile, chinoiserie, vine trails)\n"
+                            "- geometric (stripes, checks, grids, lattice, regular shapes, polka dots)\n"
+                            "Respond with ONLY the single word: organic, structured, or geometric."
+                        )}
+                    ]
+                }
+            ],
+            temperature=0.1,
+            max_completion_tokens=10,
+        )
+        pattern_type = classify_resp.choices[0].message.content.strip().lower()
+        # Normalize: if response contains the keyword, extract it
+        if "organic" in pattern_type:
+            pattern_type = "organic"
+        elif "structured" in pattern_type:
+            pattern_type = "structured"
+        elif "geometric" in pattern_type:
+            pattern_type = "geometric"
+        else:
+            pattern_type = "organic"  # Default fallback
+        print(f"  [Make Seamless] Pattern type: {pattern_type}")
+
+        # 3. Per-type settings
+        PATTERN_SETTINGS = {
+            "organic": {
+                "brush_pct": 8,
+                "denoise": 0.40,
+                "candidates": 4,
+                "outside_change_max": 14.0,
+                "min_quality": 0.80,
+            },
+            "structured": {
+                "brush_pct": 4,
+                "denoise": 0.25,
+                "candidates": 4,
+                "outside_change_max": 7.0,
+                "min_quality": 0.82,
+            },
+            "geometric": {
+                "brush_pct": 2,
+                "denoise": 0.10,
+                "candidates": 4,
+                "outside_change_max": 3.0,
+                "min_quality": 0.85,
+            },
+        }
+        settings = PATTERN_SETTINGS[pattern_type]
+        brush_pct = settings["brush_pct"]
+        prompt_strength = settings["denoise"]
+        num_candidates = settings["candidates"]
+        outside_change_max = settings["outside_change_max"]
+        min_quality = settings["min_quality"]
+
+        print(f"  [Make Seamless] Settings: brush={brush_pct}% denoise={prompt_strength} "
+              f"candidates={num_candidates} outside_max={outside_change_max} min_quality={min_quality}")
+
+        # 4. Resize to aspect-ratio preserving dimensions (multiples of 64)
         max_dim = 1024
         if orig_w > orig_h:
             new_w = max_dim
@@ -799,135 +867,146 @@ def make_seamless():
             o = np.array(original, dtype=np.float32)
             c = np.array(candidate, dtype=np.float32)
             m = np.array(mask_img, dtype=np.float32) / 255.0
-            # Where mask is 0 (outside), pixels should be unchanged
             outside = (1.0 - m)
             if outside.ndim == 2:
                 outside = outside[:, :, np.newaxis]
             diff = np.abs(o - c) * outside
             return np.mean(diff)
 
-        # Phase 1 settings
-        num_candidates = 4
-        prompt_strength = 0.35
-        brush_pct = 15
+        def qa_accept(score, outside_change, overall_orig):
+            """Strict QA: absolute threshold + relative improvement + outside-mask check."""
+            min_score = max(overall_orig + 0.05, min_quality)
+            if score < min_score:
+                return False, f"score {score:.3f} < min {min_score:.3f}"
+            if outside_change > outside_change_max:
+                return False, f"outside-mask {outside_change:.1f} > {outside_change_max}"
+            return True, "passed"
 
-        # --- PRE-CHECK: Log scores for debugging ---
+        # 5. PRE-CHECK: Skip AI if already seamless
         h_score_orig, v_score_orig = compute_directional_scores(img_resized)
         overall_orig = (h_score_orig + v_score_orig) / 2.0
         print(f"  [Make Seamless] Pre-check: H={h_score_orig:.3f} V={v_score_orig:.3f} Overall={overall_orig:.3f}")
 
-        current_img = img_resized
+        SKIP_THRESHOLD = 0.92
+        need_h_fix = h_score_orig < SKIP_THRESHOLD
+        need_v_fix = v_score_orig < SKIP_THRESHOLD
+        ai_used = need_h_fix or need_v_fix
 
-        # --- PASS 1: Horizontal Seam Fix ---
-        print(f"  [Make Seamless] Pass 1: Horizontal seam fix...")
-        img_pass1_offset = ImageChops.offset(current_img, 0, y_offset)
-
-        mask_h = Image.new('L', (new_w, new_h), 0)
-        draw_h = ImageDraw.Draw(mask_h)
-        v_brush = max(4, int(new_h * (brush_pct / 100.0)))
-        draw_h.rectangle([0, y_offset - v_brush // 2, new_w, y_offset + v_brush // 2], fill=255)
-        mask_h = mask_h.filter(ImageFilter.GaussianBlur(radius=max(3, v_brush // 6)))
-        arr_h = np.array(mask_h, dtype=np.float32)
-        arr_h = np.clip(arr_h * 1.5, 0, 255).astype(np.uint8)
-        mask_h = Image.fromarray(arr_h)
-
-        print(f"    Generating {num_candidates} candidates (brush={brush_pct}%, denoise={prompt_strength})...")
-        output_h = replicate.run(
-            "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
-            input={
-                "model": "dev",
-                "image": img_to_data_uri(img_pass1_offset),
-                "mask": img_to_data_uri(mask_h),
-                "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
-                "prompt_strength": prompt_strength,
-                "guidance_scale": 3.0,
-                "num_outputs": num_candidates,
-                "num_inference_steps": 30,
-                "output_format": "png",
-            }
-        )
-
-        # QA: Score candidates, reject bad ones
-        best_p1_img = None
-        best_p1_score = -1.0
-        for idx, out_url in enumerate(output_h if isinstance(output_h, list) else [output_h]):
-            resp_h = http_requests.get(str(out_url), timeout=60)
-            candidate = Image.open(BytesIO(resp_h.content)).convert('RGB')
-            score = compute_seam_score(candidate)
-            outside_change = compute_outside_mask_change(img_pass1_offset, candidate, mask_h)
-            rejected = ""
-            if score < overall_orig * 0.9:
-                rejected = " [REJECTED: worse than original]"
-            elif outside_change > 5.0:
-                rejected = f" [REJECTED: outside-mask change={outside_change:.1f}]"
-            else:
-                if score > best_p1_score:
-                    best_p1_score = score
-                    best_p1_img = candidate
-            print(f"    P1 Candidate {idx+1}: score={score:.3f} outside_change={outside_change:.1f}{rejected}")
-
-        if best_p1_img is not None:
-            print(f"  [Make Seamless] Pass 1 Best: {best_p1_score:.3f}")
-            current_img = ImageChops.offset(best_p1_img, 0, -y_offset)
+        if not ai_used:
+            print("  [Make Seamless] Image is already seamless (both >= 0.92)! Skipping AI.")
+            fixed_tile = img_resized.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
         else:
-            print("  [Make Seamless] Pass 1: All candidates rejected, keeping original")
+            current_img = img_resized
 
-        # --- PASS 2: Vertical Seam Fix ---
-        print(f"  [Make Seamless] Pass 2: Vertical seam fix...")
-        img_pass2_offset = ImageChops.offset(current_img, x_offset, 0)
+            # --- PASS 1: Horizontal Seam Fix (only if H seam failed) ---
+            if need_h_fix:
+                print(f"  [Make Seamless] Pass 1: Horizontal seam fix (H={h_score_orig:.3f} < {SKIP_THRESHOLD})...")
+                img_pass1_offset = ImageChops.offset(current_img, 0, y_offset)
 
-        mask_v = Image.new('L', (new_w, new_h), 0)
-        draw_v = ImageDraw.Draw(mask_v)
-        h_brush = max(4, int(new_w * (brush_pct / 100.0)))
-        draw_v.rectangle([x_offset - h_brush // 2, 0, x_offset + h_brush // 2, new_h], fill=255)
-        mask_v = mask_v.filter(ImageFilter.GaussianBlur(radius=max(3, h_brush // 6)))
-        arr_v = np.array(mask_v, dtype=np.float32)
-        arr_v = np.clip(arr_v * 1.5, 0, 255).astype(np.uint8)
-        mask_v = Image.fromarray(arr_v)
+                mask_h = Image.new('L', (new_w, new_h), 0)
+                draw_h = ImageDraw.Draw(mask_h)
+                v_brush = max(4, int(new_h * (brush_pct / 100.0)))
+                draw_h.rectangle([0, y_offset - v_brush // 2, new_w, y_offset + v_brush // 2], fill=255)
+                mask_h = mask_h.filter(ImageFilter.GaussianBlur(radius=max(3, v_brush // 6)))
+                arr_h = np.array(mask_h, dtype=np.float32)
+                arr_h = np.clip(arr_h * 1.5, 0, 255).astype(np.uint8)
+                mask_h = Image.fromarray(arr_h)
 
-        print(f"    Generating {num_candidates} candidates (brush={brush_pct}%, denoise={prompt_strength})...")
-        output_v = replicate.run(
-            "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
-            input={
-                "model": "dev",
-                "image": img_to_data_uri(img_pass2_offset),
-                "mask": img_to_data_uri(mask_v),
-                "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
-                "prompt_strength": prompt_strength,
-                "guidance_scale": 3.0,
-                "num_outputs": num_candidates,
-                "num_inference_steps": 30,
-                "output_format": "png",
-            }
-        )
+                print(f"    [{pattern_type}] Generating {num_candidates} candidates (brush={brush_pct}%, denoise={prompt_strength})...")
+                output_h = replicate.run(
+                    "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
+                    input={
+                        "model": "dev",
+                        "image": img_to_data_uri(img_pass1_offset),
+                        "mask": img_to_data_uri(mask_h),
+                        "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
+                        "prompt_strength": prompt_strength,
+                        "guidance_scale": 3.0,
+                        "num_outputs": num_candidates,
+                        "num_inference_steps": 30,
+                        "output_format": "png",
+                    }
+                )
 
-        # QA: Score candidates, reject bad ones
-        best_p2_img = None
-        best_p2_score = -1.0
-        for idx, out_url in enumerate(output_v if isinstance(output_v, list) else [output_v]):
-            resp_v = http_requests.get(str(out_url), timeout=60)
-            candidate = Image.open(BytesIO(resp_v.content)).convert('RGB')
-            score = compute_seam_score(candidate)
-            outside_change = compute_outside_mask_change(img_pass2_offset, candidate, mask_v)
-            rejected = ""
-            if score < overall_orig * 0.9:
-                rejected = " [REJECTED: worse than original]"
-            elif outside_change > 5.0:
-                rejected = f" [REJECTED: outside-mask change={outside_change:.1f}]"
+                # QA: Score candidates with strict thresholds
+                best_p1_img = None
+                best_p1_score = -1.0
+                for idx, out_url in enumerate(output_h if isinstance(output_h, list) else [output_h]):
+                    resp_h = http_requests.get(str(out_url), timeout=60)
+                    candidate = Image.open(BytesIO(resp_h.content)).convert('RGB')
+                    score = compute_seam_score(candidate)
+                    outside_change = compute_outside_mask_change(img_pass1_offset, candidate, mask_h)
+                    accepted, reason = qa_accept(score, outside_change, overall_orig)
+                    status = "" if accepted else f" [REJECTED: {reason}]"
+                    if accepted and score > best_p1_score:
+                        best_p1_score = score
+                        best_p1_img = candidate
+                    print(f"    P1 Candidate {idx+1}: score={score:.3f} outside={outside_change:.1f}{status}")
+
+                if best_p1_img is not None:
+                    print(f"  [Make Seamless] Pass 1 Best: {best_p1_score:.3f}")
+                    current_img = ImageChops.offset(best_p1_img, 0, -y_offset)
+                else:
+                    print("  [Make Seamless] Pass 1: All candidates rejected, keeping original")
             else:
-                if score > best_p2_score:
-                    best_p2_score = score
-                    best_p2_img = candidate
-            print(f"    P2 Candidate {idx+1}: score={score:.3f} outside_change={outside_change:.1f}{rejected}")
+                print(f"  [Make Seamless] Pass 1: SKIPPED (H={h_score_orig:.3f} >= {SKIP_THRESHOLD})")
 
-        if best_p2_img is not None:
-            print(f"  [Make Seamless] Pass 2 Best: {best_p2_score:.3f}")
-            current_img = ImageChops.offset(best_p2_img, -x_offset, 0)
-        else:
-            print("  [Make Seamless] Pass 2: All candidates rejected, keeping original")
+            # --- PASS 2: Vertical Seam Fix (only if V seam failed) ---
+            if need_v_fix:
+                print(f"  [Make Seamless] Pass 2: Vertical seam fix (V={v_score_orig:.3f} < {SKIP_THRESHOLD})...")
+                img_pass2_offset = ImageChops.offset(current_img, x_offset, 0)
 
-        # Resize back to original dimensions
-        fixed_tile = current_img.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+                mask_v = Image.new('L', (new_w, new_h), 0)
+                draw_v = ImageDraw.Draw(mask_v)
+                h_brush = max(4, int(new_w * (brush_pct / 100.0)))
+                draw_v.rectangle([x_offset - h_brush // 2, 0, x_offset + h_brush // 2, new_h], fill=255)
+                mask_v = mask_v.filter(ImageFilter.GaussianBlur(radius=max(3, h_brush // 6)))
+                arr_v = np.array(mask_v, dtype=np.float32)
+                arr_v = np.clip(arr_v * 1.5, 0, 255).astype(np.uint8)
+                mask_v = Image.fromarray(arr_v)
+
+                print(f"    [{pattern_type}] Generating {num_candidates} candidates (brush={brush_pct}%, denoise={prompt_strength})...")
+                output_v = replicate.run(
+                    "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
+                    input={
+                        "model": "dev",
+                        "image": img_to_data_uri(img_pass2_offset),
+                        "mask": img_to_data_uri(mask_v),
+                        "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
+                        "prompt_strength": prompt_strength,
+                        "guidance_scale": 3.0,
+                        "num_outputs": num_candidates,
+                        "num_inference_steps": 30,
+                        "output_format": "png",
+                    }
+                )
+
+                # QA: Score candidates with strict thresholds
+                best_p2_img = None
+                best_p2_score = -1.0
+                for idx, out_url in enumerate(output_v if isinstance(output_v, list) else [output_v]):
+                    resp_v = http_requests.get(str(out_url), timeout=60)
+                    candidate = Image.open(BytesIO(resp_v.content)).convert('RGB')
+                    score = compute_seam_score(candidate)
+                    outside_change = compute_outside_mask_change(img_pass2_offset, candidate, mask_v)
+                    accepted, reason = qa_accept(score, outside_change, overall_orig)
+                    status = "" if accepted else f" [REJECTED: {reason}]"
+                    if accepted and score > best_p2_score:
+                        best_p2_score = score
+                        best_p2_img = candidate
+                    print(f"    P2 Candidate {idx+1}: score={score:.3f} outside={outside_change:.1f}{status}")
+
+                if best_p2_img is not None:
+                    print(f"  [Make Seamless] Pass 2 Best: {best_p2_score:.3f}")
+                    current_img = ImageChops.offset(best_p2_img, -x_offset, 0)
+                else:
+                    print("  [Make Seamless] Pass 2: All candidates rejected, keeping original")
+            else:
+                print(f"  [Make Seamless] Pass 2: SKIPPED (V={v_score_orig:.3f} >= {SKIP_THRESHOLD})")
+
+            # Resize back to original dimensions
+            fixed_tile = current_img.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+
         print("  [Make Seamless] Base tile completed!")
 
         # 7. Save result
