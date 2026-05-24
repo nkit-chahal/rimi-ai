@@ -867,10 +867,9 @@ def make_seamless():
             return np.mean(diff)
 
         def qa_accept(score, outside_change, overall_orig):
-            """Strict QA: absolute threshold + relative improvement + outside-mask check."""
-            min_score = max(overall_orig + 0.05, min_quality)
-            if score < min_score:
-                return False, f"score {score:.3f} < min {min_score:.3f}"
+            """QA: accept candidates better than original + within outside-mask limit."""
+            if score <= overall_orig:
+                return False, f"score {score:.3f} <= original {overall_orig:.3f}"
             if outside_change > outside_change_max:
                 return False, f"outside-mask {outside_change:.1f} > {outside_change_max}"
             return True, "passed"
