@@ -727,8 +727,8 @@ def make_seamless():
             b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
             return f"data:image/png;base64,{b64}"
 
-        # 1. Get Style-Aware LLM description of the single tile
-        print("  [Make Seamless] Describing base tile with Groq LLM (style-aware)...")
+        # 1. Get Style-Aware LLM description + pattern classification in one call
+        print("  [Make Seamless] Describing & classifying pattern with Groq LLM...")
         tile_uri = img_to_data_uri(img)
         completion = groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
@@ -738,52 +738,45 @@ def make_seamless():
                     "content": [
                         {"type": "image_url", "image_url": {"url": tile_uri}},
                         {"type": "text", "text": (
-                            "Describe this fabric pattern in detail. "
-                            "Specify the motifs, colors, background, and crucially, the artistic style "
-                            "(e.g. flat 2D vector graphic, minimalist digital illustration, watercolor painting, "
-                            "hand-drawn sketch, photographic pattern). Keep it under 2 sentences."
+                            "Analyze this fabric/textile pattern. Provide TWO things:\n\n"
+                            "1. DESCRIPTION: Describe the pattern in detail (motifs, colors, background, "
+                            "artistic style like flat 2D vector, watercolor, hand-drawn, etc). Keep it under 2 sentences.\n\n"
+                            "2. TYPE: Classify into exactly ONE category:\n"
+                            "- organic (watercolor, loose floral, botanical, tossed motifs, painterly)\n"
+                            "- structured (line-art floral, damask, block print, toile, chinoiserie, vine trails)\n"
+                            "- geometric (stripes, checks, grids, lattice, regular shapes, polka dots)\n\n"
+                            "Format your response exactly as:\n"
+                            "DESCRIPTION: [your description]\n"
+                            "TYPE: [organic/structured/geometric]"
                         )}
                     ]
                 }
             ],
             temperature=0.2,
-            max_completion_tokens=150,
+            max_completion_tokens=200,
         )
-        description = completion.choices[0].message.content.strip()
-        print(f"  [Make Seamless] Description: {description}")
+        llm_response = completion.choices[0].message.content.strip()
+        print(f"  [Make Seamless] LLM Response: {llm_response}")
 
-        # 2. Classify pattern type using Groq
-        print("  [Make Seamless] Classifying pattern type...")
-        classify_resp = groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": tile_uri}},
-                        {"type": "text", "text": (
-                            "Classify this fabric/textile pattern into ONE of these categories:\n"
-                            "- organic (watercolor, loose floral, botanical, tossed motifs, painterly)\n"
-                            "- structured (line-art floral, damask, block print, toile, chinoiserie, vine trails)\n"
-                            "- geometric (stripes, checks, grids, lattice, regular shapes, polka dots)\n"
-                            "Respond with ONLY the single word: organic, structured, or geometric."
-                        )}
-                    ]
-                }
-            ],
-            temperature=0.1,
-            max_completion_tokens=10,
-        )
-        pattern_type = classify_resp.choices[0].message.content.strip().lower()
-        # Normalize: if response contains the keyword, extract it
-        if "organic" in pattern_type:
-            pattern_type = "organic"
-        elif "structured" in pattern_type:
+        # Parse description and type from response
+        description = llm_response
+        pattern_type = "organic"  # Default fallback
+        if "DESCRIPTION:" in llm_response and "TYPE:" in llm_response:
+            parts = llm_response.split("TYPE:")
+            description = parts[0].replace("DESCRIPTION:", "").strip()
+            type_str = parts[1].strip().lower()
+            if "structured" in type_str:
+                pattern_type = "structured"
+            elif "geometric" in type_str:
+                pattern_type = "geometric"
+            else:
+                pattern_type = "organic"
+        elif "structured" in llm_response.lower():
             pattern_type = "structured"
-        elif "geometric" in pattern_type:
+        elif "geometric" in llm_response.lower():
             pattern_type = "geometric"
-        else:
-            pattern_type = "organic"  # Default fallback
+
+        print(f"  [Make Seamless] Description: {description}")
         print(f"  [Make Seamless] Pattern type: {pattern_type}")
 
         # 3. Per-type settings
