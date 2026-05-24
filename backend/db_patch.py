@@ -95,7 +95,7 @@ def init_db():
         reset_at = now + timedelta(days=12)
         conn.execute(
             "INSERT INTO users (id, name, initials, plan, credits_used, credits_limit, reset_at) VALUES (1, ?, ?, ?, ?, ?, ?)",
-            ("Olivia Carter", "OC", "Pro Plan", 8450, 20000, reset_at.isoformat()),
+            ("Ankit Chahal", "AC", "Pro Plan", 8450, 20000, reset_at.isoformat()),
         )
         project_rows = [
             (1, "Spring Bloom Collection", "In Progress", "/demo_floral.png", "/demo_floral.png", now - timedelta(hours=2)),

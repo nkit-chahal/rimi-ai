@@ -147,7 +147,7 @@ def init_db():
         reset_at = now + timedelta(days=12)
         conn.execute(
             "INSERT INTO users (id, name, initials, plan, credits_used, credits_limit, reset_at) VALUES (1, ?, ?, ?, ?, ?, ?)",
-            ("Olivia Carter", "OC", "Pro Plan", 8450, 20000, reset_at.isoformat()),
+            ("Ankit Chahal", "AC", "Pro Plan", 8450, 20000, reset_at.isoformat()),
         )
         project_rows = [
             (1, "Spring Bloom Collection", "In Progress", "/demo_floral.png", "/demo_floral.png", now - timedelta(hours=2)),
@@ -694,8 +694,8 @@ def make_seamless():
     data = request.get_json()
     filename = data.get('filename', '')
     image_url = data.get('imageUrl', '')
-    h_brush_pct = int(data.get('hBrushPct', 16))
-    v_brush_pct = int(data.get('vBrushPct', 16))
+    h_brush_pct = int(data.get('hBrushPct', 25))
+    v_brush_pct = int(data.get('vBrushPct', 25))
     project_id = int(data.get('projectId', 1))
 
     if not filename and not image_url:
@@ -767,6 +767,22 @@ def make_seamless():
         img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         x_offset, y_offset = new_w // 2, new_h // 2
 
+        # --- Seam scoring helper ---
+        def compute_seam_score(tile_img):
+            a = np.array(tile_img.convert("RGB"), dtype=np.float32)
+            dx = np.mean(np.abs(a[:, 1:, :] - a[:, :-1, :]))
+            dy = np.mean(np.abs(a[1:, :, :] - a[:-1, :, :]))
+            sx = np.mean(np.abs(a[:, 0, :] - a[:, -1, :]))
+            sy = np.mean(np.abs(a[0, :, :] - a[-1, :, :]))
+            rx = sx / max(1e-5, dx)
+            ry = sy / max(1e-5, dy)
+            cx = max(0.0, 1.0 - (rx - 1.0) / 2.0) if rx > 1.0 else 1.0
+            cy = max(0.0, 1.0 - (ry - 1.0) / 2.0) if ry > 1.0 else 1.0
+            return (cx + cy) / 2.0
+
+        num_candidates = 4
+        prompt_strength = 0.75
+
         # PASS 1: Horizontal Seam Fix (Offset Y, mask horizontal)
         img_pass1_offset = ImageChops.offset(img_resized, 0, y_offset)
         
@@ -779,7 +795,7 @@ def make_seamless():
         arr_h = np.clip(arr_h * 1.5, 0, 255).astype(np.uint8)
         mask_h = Image.fromarray(arr_h)
 
-        print("  [Make Seamless] Pass 1: Horizontal seam fix...")
+        print(f"  [Make Seamless] Pass 1: Horizontal seam fix ({num_candidates} candidates)...")
         output_h = replicate.run(
             "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
             input={
@@ -787,16 +803,27 @@ def make_seamless():
                 "image": img_to_data_uri(img_pass1_offset),
                 "mask": img_to_data_uri(mask_h),
                 "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
-                "prompt_strength": 0.80,
+                "prompt_strength": prompt_strength,
                 "guidance_scale": 3.0,
-                "num_outputs": 1,
+                "num_outputs": num_candidates,
                 "num_inference_steps": 30,
                 "output_format": "png",
             }
         )
-        filled_url_h = str(output_h[0]) if isinstance(output_h, list) else str(output_h)
-        filled_resp_h = http_requests.get(filled_url_h, timeout=60)
-        img_pass1_fixed = Image.open(BytesIO(filled_resp_h.content)).convert('RGB')
+
+        # Score all Pass 1 candidates and pick best
+        best_p1_img = None
+        best_p1_score = -1.0
+        for idx, out_url in enumerate(output_h if isinstance(output_h, list) else [output_h]):
+            resp_h = http_requests.get(str(out_url), timeout=60)
+            candidate = Image.open(BytesIO(resp_h.content)).convert('RGB')
+            score = compute_seam_score(candidate)
+            print(f"    P1 Candidate {idx+1} Score: {score:.3f}")
+            if score > best_p1_score:
+                best_p1_score = score
+                best_p1_img = candidate
+        print(f"  [Make Seamless] Pass 1 Best: {best_p1_score:.3f}")
+        img_pass1_fixed = best_p1_img
 
         # PASS 2: Vertical Seam Fix (Offset X on the Pass 1 result, mask vertical)
         img_pass2_offset = ImageChops.offset(img_pass1_fixed, x_offset, 0)
@@ -810,7 +837,7 @@ def make_seamless():
         arr_v = np.clip(arr_v * 1.5, 0, 255).astype(np.uint8)
         mask_v = Image.fromarray(arr_v)
 
-        print("  [Make Seamless] Pass 2: Vertical seam fix...")
+        print(f"  [Make Seamless] Pass 2: Vertical seam fix ({num_candidates} candidates)...")
         output_v = replicate.run(
             "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
             input={
@@ -818,16 +845,27 @@ def make_seamless():
                 "image": img_to_data_uri(img_pass2_offset),
                 "mask": img_to_data_uri(mask_v),
                 "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
-                "prompt_strength": 0.80,
+                "prompt_strength": prompt_strength,
                 "guidance_scale": 3.0,
-                "num_outputs": 1,
+                "num_outputs": num_candidates,
                 "num_inference_steps": 30,
                 "output_format": "png",
             }
         )
-        filled_url_v = str(output_v[0]) if isinstance(output_v, list) else str(output_v)
-        filled_resp_v = http_requests.get(filled_url_v, timeout=60)
-        inpainted_final = Image.open(BytesIO(filled_resp_v.content)).convert('RGB')
+
+        # Score all Pass 2 candidates and pick best
+        best_p2_img = None
+        best_p2_score = -1.0
+        for idx, out_url in enumerate(output_v if isinstance(output_v, list) else [output_v]):
+            resp_v = http_requests.get(str(out_url), timeout=60)
+            candidate = Image.open(BytesIO(resp_v.content)).convert('RGB')
+            score = compute_seam_score(candidate)
+            print(f"    P2 Candidate {idx+1} Score: {score:.3f}")
+            if score > best_p2_score:
+                best_p2_score = score
+                best_p2_img = candidate
+        print(f"  [Make Seamless] Pass 2 Best: {best_p2_score:.3f}")
+        inpainted_final = best_p2_img
 
         # 6. Offset back by -50% and resize to original aspect ratio
         fixed_resized = ImageChops.offset(inpainted_final, -x_offset, -y_offset)
