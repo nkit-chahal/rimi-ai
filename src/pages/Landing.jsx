@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const SIcon = ({d, size=20}) => (
+
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d={d}/>
   </svg>
@@ -17,8 +18,10 @@ const SERVICES = [
 const BRANDS = ['Studio Asta','WILD & KIND','THREADORY','PRINTWORKS','PATTERN HOUSE','MAISON ÉTOILE'];
 
 export default function Landing({ onEnterApp }) {
+  const [activeTab, setActiveTab] = useState('repeat');
   return (
     <div className="premium-landing">
+
       {/* Dynamic Animated Mesh Blobs */}
       <div className="bg-blobs">
         <div className="bg-blob bg-blob-1" />
@@ -1094,7 +1097,13 @@ export default function Landing({ onEnterApp }) {
                   <div className="ln-chrome-dot" style={{background:'#ffbd2e'}} />
                   <div className="ln-chrome-dot" style={{background:'#27c93f'}} />
                 </div>
-                <div className="ln-chrome-title">RIM AI Workspace — Repeating Pattern Generator</div>
+                <div className="ln-chrome-title">
+                  {activeTab === 'clean' && 'RIM AI Workspace — Clean & Enhance Engine'}
+                  {activeTab === 'inspire' && 'RIM AI Workspace — AI inspirations moodboard'}
+                  {activeTab === 'repeat' && 'RIM AI Workspace — Repeating Pattern Generator'}
+                  {activeTab === 'mappings' && 'RIM AI Workspace — Dress to Design 3D Draping'}
+                  {activeTab === 'vectorize' && 'RIM AI Workspace — Spline Vectorization curves'}
+                </div>
                 <div style={{width: 32}} /> {/* spacer for center alignment */}
               </div>
 
@@ -1107,54 +1116,319 @@ export default function Landing({ onEnterApp }) {
                   </div>
                   <div style={{fontSize:'0.55rem',color:'#94a3b8',fontWeight:700,margin:'0.35rem 0',textTransform:'uppercase',letterSpacing:'0.05em'}}>AI Tools</div>
                   {[
-                    {name: 'Clean & Enhance', active: false},
-                    {name: 'Generate Inspirations', active: false},
-                    {name: 'Create Repeat Set', active: true},
-                    {name: 'Dress to Design', active: false},
-                    {name: 'Vectorize', active: false}
-                  ].map((item, idx) => (
-                    <div 
-                      key={item.name} 
-                      className={`ln-mockup-item ${item.active ? 'active' : ''}`} 
-                      style={{
-                        fontSize:'0.58rem',
-                        padding:'0.35rem 0.5rem',
-                        borderRadius: 6,
-                        color: item.active ? '#6366f1' : '#64748b',
-                        fontWeight: item.active ? 700 : 500,
-                        background: item.active ? 'rgba(99, 102, 241, 0.08)' : 'transparent'
-                      }}
-                    >
-                      <span style={{fontSize:'0.65rem'}}>{['✨','🎨','🔁','👕','📐'][idx]}</span>
-                      {item.name}
-                    </div>
-                  ))}
+                    {name: 'Clean & Enhance', id: 'clean', icon: '✨'},
+                    {name: 'Generate Inspirations', id: 'inspire', icon: '🎨'},
+                    {name: 'Create Repeat Set', id: 'repeat', icon: '🔁'},
+                    {name: 'Dress to Design', id: 'mappings', icon: '👕'},
+                    {name: 'Vectorize', id: 'vectorize', icon: '📐'}
+                  ].map((item) => {
+                    const isTabActive = activeTab === item.id;
+                    return (
+                      <div 
+                        key={item.name} 
+                        onClick={() => setActiveTab(item.id)}
+                        className={`ln-mockup-item ${isTabActive ? 'active' : ''}`} 
+                        style={{
+                          fontSize:'0.58rem',
+                          padding:'0.35rem 0.5rem',
+                          borderRadius: 6,
+                          color: isTabActive ? '#6366f1' : '#64748b',
+                          fontWeight: isTabActive ? 700 : 500,
+                          background: isTabActive ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <span style={{fontSize:'0.65rem'}}>{item.icon}</span>
+                        {item.name}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Main panel */}
                 <div className="ln-mockup-main">
-                  {/* Pattern panning box */}
-                  <div className="ln-mockup-grid-wrapper">
-                    <div className="ln-mockup-pattern-pan" />
-                    <div className="ln-mockup-pattern-overlay" />
-                    <div className="ln-mockup-indicator">
-                      <div className="ln-indicator-pulse" />
-                      Seamless Match: 100%
+                  {/* Preview container */}
+                  {activeTab === 'clean' && (
+                    <div style={{position: 'relative', width: '100%', height: '180px', overflow: 'hidden', borderRadius: 8, background: '#f8fafc', border: '1px solid rgba(0,0,0,0.04)'}}>
+                      <div style={{
+                        position: 'absolute',
+                        inset: '0 50% 0 0',
+                        background: '#f1f5f9',
+                        backgroundImage: `radial-gradient(#94a3b8 1.2px, transparent 1.2px)`,
+                        backgroundSize: '12px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{opacity: 0.55, filter: 'contrast(0.7) blur(0.3px)', textAlign: 'center'}}>
+                          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5">
+                            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8z" />
+                            <path d="M12 6c-3.3 0-6 2.7-6 6s2.7 6 6 6 6-2.7 6-6-2.7-6-6-6zm0 10c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4z" />
+                          </svg>
+                          <div style={{fontSize: '6px', fontWeight: 700, color: '#64748b', marginTop: 4, letterSpacing: '0.05em'}}>SKETCH (NOISY)</div>
+                        </div>
+                      </div>
+                      <div style={{
+                        position: 'absolute',
+                        inset: '0 0 0 50%',
+                        background: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        borderLeft: '1.5px solid #6366f1'
+                      }}>
+                        <div style={{textAlign: 'center'}}>
+                          <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" fill="url(#enhanced-grad)" />
+                            <circle cx="12" cy="12" r="6" fill="#fff" opacity="0.35" />
+                            <circle cx="12" cy="12" r="3" fill="#6366f1" />
+                            <defs>
+                              <linearGradient id="enhanced-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                                <stop offset="0%" stopColor="#6366f1" />
+                                <stop offset="100%" stopColor="#ec4899" />
+                              </linearGradient>
+                            </defs>
+                          </svg>
+                          <div style={{fontSize: '6px', fontWeight: 800, color: '#6366f1', marginTop: 4, letterSpacing: '0.05em'}}>ENHANCED</div>
+                        </div>
+                      </div>
+                      <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        background: '#6366f1',
+                        color: '#fff',
+                        padding: '2px 5px',
+                        borderRadius: '4px',
+                        fontSize: '6px',
+                        fontWeight: '800',
+                        boxShadow: '0 3px 8px rgba(99,102,241,0.3)',
+                        letterSpacing: '0.05em'
+                      }}>
+                        VS
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {activeTab === 'inspire' && (
+                    <div style={{width: '100%', height: '180px', display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: '6px'}}>
+                      {[
+                        {name: 'Vintage Flora', grad: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)'},
+                        {name: 'Cyber Grid', grad: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)'},
+                        {name: 'Acid Marble', grad: 'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)'},
+                        {name: 'Neo Deco Gold', grad: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)'}
+                      ].map((insp, index) => (
+                        <div 
+                          key={insp.name}
+                          style={{
+                            borderRadius: 6,
+                            background: insp.grad,
+                            position: 'relative',
+                            overflow: 'hidden',
+                            display: 'flex',
+                            alignItems: 'flex-end',
+                            padding: '5px',
+                            border: '1px solid rgba(255, 255, 255, 0.45)',
+                          }}
+                        >
+                          <div style={{
+                            fontSize: '5.5px', 
+                            fontWeight: '800', 
+                            color: '#fff', 
+                            background: 'rgba(15, 23, 42, 0.7)', 
+                            backdropFilter: 'blur(2px)',
+                            padding: '1.5px 3.5px', 
+                            borderRadius: 3,
+                            letterSpacing: '0.01em',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                          }}>
+                            {insp.name}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeTab === 'repeat' && (
+                    <div className="ln-mockup-grid-wrapper">
+                      <div className="ln-mockup-pattern-pan" />
+                      <div className="ln-mockup-pattern-overlay" />
+                      <div className="ln-mockup-indicator">
+                        <div className="ln-indicator-pulse" />
+                        Seamless Match: 100%
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'mappings' && (
+                    <div style={{position: 'relative', width: '100%', height: '180px', overflow: 'hidden', borderRadius: 8, background: '#f8fafc', border: '1px solid rgba(0,0,0,0.04)'}}>
+                      {/* Panning Pattern behind the cutout dress mask */}
+                      <div className="ln-mockup-pattern-pan" style={{
+                        position: 'absolute', 
+                        inset: 0,
+                        animationDuration: '16s'
+                      }} />
+                      
+                      {/* Cutout Frame and Shadows Overlay */}
+                      <svg viewBox="0 0 200 180" style={{position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none'}}>
+                        {/* Cutout Mask (subtracts dress silhouette from white background) */}
+                        <path 
+                          d="M 0 0 L 200 0 L 200 180 L 0 180 Z M 65 15 C 80 25, 120 25, 135 15 L 165 42 C 153 50, 147 62, 149 75 L 138 80 L 152 170 L 48 170 L 62 80 L 51 75 C 53 62, 47 50, 35 42 Z" 
+                          fill="#ffffff" 
+                          fillRule="evenodd" 
+                        />
+                        {/* 3D Shadows & Structure Lines */}
+                        <path d="M 65 15 C 80 25, 120 25, 135 15" fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth="1.2" />
+                        <path d="M 100 23 L 100 170" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="1" strokeDasharray="3,3" />
+                        {/* Folds */}
+                        <path d="M 52 75 C 75 80, 125 80, 148 75" fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="1.2" />
+                        <path d="M 49 110 C 70 115, 130 115, 151 110" fill="none" stroke="rgba(0,0,0,0.05)" strokeWidth="1" />
+                        <path d="M 48 140 C 70 145, 130 145, 152 140" fill="none" stroke="rgba(0,0,0,0.04)" strokeWidth="1" />
+                        {/* Dynamic edge highlight */}
+                        <path 
+                          d="M 65 15 C 80 25, 120 25, 135 15 L 165 42 C 153 50, 147 62, 149 75 L 138 80 L 152 170 L 48 170 L 62 80 L 51 75 C 53 62, 47 50, 35 42 Z" 
+                          fill="none" 
+                          stroke="rgba(99, 102, 241, 0.16)" 
+                          strokeWidth="1.2" 
+                        />
+                      </svg>
+                      
+                      <div className="ln-mockup-indicator" style={{borderColor: 'rgba(236, 72, 153, 0.3)', color: '#ec4899'}}>
+                        <div className="ln-indicator-pulse" style={{background: '#ec4899'}} />
+                        Apparel Map: Active
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'vectorize' && (
+                    <div style={{position: 'relative', width: '100%', height: '180px', overflow: 'hidden', borderRadius: 8, background: '#0f172a', border: '1px solid rgba(255,255,255,0.08)'}}>
+                      {/* Grid background */}
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        backgroundImage: `
+                          linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                          linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px)
+                        `,
+                        backgroundSize: '10px 10px'
+                      }} />
+                      
+                      {/* Vector Nodes Splines */}
+                      <svg viewBox="0 0 200 180" style={{position: 'absolute', inset: 0, width: '100%', height: '100%'}}>
+                        {/* Leaf outline */}
+                        <path 
+                          d="M 100 20 C 135 25, 170 65, 100 150 C 30 65, 65 25, 100 20 Z" 
+                          fill="rgba(16, 185, 129, 0.06)" 
+                          stroke="#10b981" 
+                          strokeWidth="1.5" 
+                        />
+                        {/* Leaf center veins */}
+                        <path d="M 100 20 L 100 150" fill="none" stroke="#10b981" strokeWidth="1" strokeDasharray="3,2" opacity="0.6" />
+                        <path d="M 100 60 C 115 55, 130 50, 145 45" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.4" />
+                        <path d="M 100 90 C 120 85, 135 75, 155 70" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.4" />
+                        <path d="M 100 60 C 85 55, 70 50, 55 45" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.4" />
+                        <path d="M 100 90 C 80 85, 65 75, 45 70" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.4" />
+
+                        {/* Top Node handles */}
+                        <line x1="100" y1="20" x2="135" y2="20" stroke="#38bdf8" strokeWidth="0.8" />
+                        <line x1="100" y1="20" x2="65" y2="20" stroke="#38bdf8" strokeWidth="0.8" />
+                        <circle cx="135" cy="20" r="2" fill="#38bdf8" />
+                        <circle cx="65" cy="20" r="2" fill="#38bdf8" />
+                        <rect x="97" y="17" width="6" height="6" fill="#10b981" stroke="#fff" strokeWidth="0.8" />
+
+                        {/* Center/End Node handles */}
+                        <line x1="100" y1="150" x2="120" y2="160" stroke="#38bdf8" strokeWidth="0.8" />
+                        <line x1="100" y1="150" x2="80" y2="160" stroke="#38bdf8" strokeWidth="0.8" />
+                        <circle cx="120" cy="160" r="2" fill="#38bdf8" />
+                        <circle cx="80" cy="160" r="2" fill="#38bdf8" />
+                        <rect x="97" y="147" width="6" height="6" fill="#10b981" stroke="#fff" strokeWidth="0.8" />
+
+                        <text x="10" y="20" fill="#10b981" fontSize="7" fontWeight="700" fontFamily="monospace">CURVES: scale-free</text>
+                        <text x="10" y="30" fill="#64748b" fontSize="6.5" fontFamily="monospace">Nodes: 36 / Bezier: 2nd-Order</text>
+                      </svg>
+                      
+                      <div className="ln-mockup-indicator" style={{borderColor: 'rgba(16, 185, 129, 0.3)', color: '#10b981', background: 'rgba(15, 23, 42, 0.95)'}}>
+                        <div className="ln-indicator-pulse" style={{background: '#10b981'}} />
+                        Vector Nodes: Active
+                      </div>
+                    </div>
+                  )}
 
                   {/* Mockup controls */}
                   <div className="ln-mockup-controls">
-                    <div className="ln-mockup-title">Repeat Set Mode</div>
-                    <div className="ln-mockup-desc">Generating seamless repeating pattern in perfect standard grid.</div>
-                    <div className="ln-mockup-vars">
-                      <div className="ln-mockup-palette">
-                        {['#e0e7ff', '#c7d2fe', '#a5b4fc', '#818cf8', '#6366f1'].map((c, i) => (
-                          <div key={i} className="ln-mockup-color" style={{background: c}} />
-                        ))}
-                      </div>
-                      <div className="ln-mockup-scale">Tiling Scale: 2x</div>
-                    </div>
+                    {activeTab === 'clean' && (
+                      <>
+                        <div className="ln-mockup-title">Clean & Enhance Mode</div>
+                        <div className="ln-mockup-desc">Automatic paper noise removal, bleed corrections, & 8x upscale.</div>
+                        <div className="ln-mockup-vars">
+                          <div className="ln-mockup-palette">
+                            {['#6366f1', '#818cf8', '#a5b4fc', '#ec4899', '#f472b6'].map((c, i) => (
+                              <div key={i} className="ln-mockup-color" style={{background: c}} />
+                            ))}
+                          </div>
+                          <div className="ln-mockup-scale" style={{color: '#6366f1', background: 'rgba(99,102,241,0.08)'}}>Denoise: High</div>
+                        </div>
+                      </>
+                    )}
+                    {activeTab === 'inspire' && (
+                      <>
+                        <div className="ln-mockup-title">Generate Inspirations</div>
+                        <div className="ln-mockup-desc">AI-generated high-fidelity silk texture & color palettes.</div>
+                        <div className="ln-mockup-vars">
+                          <div className="ln-mockup-palette">
+                            {['#ff9a9e', '#fecfef', '#a18cd1', '#fbc2eb', '#84fab0'].map((c, i) => (
+                              <div key={i} className="ln-mockup-color" style={{background: c}} />
+                            ))}
+                          </div>
+                          <div className="ln-mockup-scale" style={{color: '#ec4899', background: 'rgba(236,72,153,0.08)'}}>Vibe: Luxury Scarf</div>
+                        </div>
+                      </>
+                    )}
+                    {activeTab === 'repeat' && (
+                      <>
+                        <div className="ln-mockup-title">Repeat Set Mode</div>
+                        <div className="ln-mockup-desc">Generating seamless repeating pattern in perfect standard grid.</div>
+                        <div className="ln-mockup-vars">
+                          <div className="ln-mockup-palette">
+                            {['#e0e7ff', '#c7d2fe', '#a5b4fc', '#818cf8', '#6366f1'].map((c, i) => (
+                              <div key={i} className="ln-mockup-color" style={{background: c}} />
+                            ))}
+                          </div>
+                          <div className="ln-mockup-scale">Tiling Scale: 2x</div>
+                        </div>
+                      </>
+                    )}
+                    {activeTab === 'mappings' && (
+                      <>
+                        <div className="ln-mockup-title">Dress to Design (Mannequin Fit)</div>
+                        <div className="ln-mockup-desc">Real-time fabric draping onto 3D fashion mannequin simulation.</div>
+                        <div className="ln-mockup-vars">
+                          <div className="ln-mockup-palette">
+                            {['#e0f2fe', '#bae6fd', '#7dd3fc', '#38bdf8', '#0284c7'].map((c, i) => (
+                              <div key={i} className="ln-mockup-color" style={{background: c}} />
+                            ))}
+                          </div>
+                          <div className="ln-mockup-scale" style={{color: '#0284c7', background: 'rgba(2,132,199,0.08)'}}>Fit: Mannequin</div>
+                        </div>
+                      </>
+                    )}
+                    {activeTab === 'vectorize' && (
+                      <>
+                        <div className="ln-mockup-title">Lossless Bezier Vectorize</div>
+                        <div className="ln-mockup-desc">Calculated high-precision mathematical paths with control anchors.</div>
+                        <div className="ln-mockup-vars">
+                          <div className="ln-mockup-palette">
+                            {['#d1fae5', '#a7f3d0', '#6ee7b7', '#34d399', '#10b981'].map((c, i) => (
+                              <div key={i} className="ln-mockup-color" style={{background: c}} />
+                            ))}
+                          </div>
+                          <div className="ln-mockup-scale" style={{color: '#10b981', background: 'rgba(16,185,129,0.08)'}}>Format: SVG (EPS)</div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
