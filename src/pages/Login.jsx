@@ -53,41 +53,9 @@ export default function Login({ onLogin, onGoToLanding }) {
     if (type === 'admin') {
       setEmail('admin@rimi.ai');
       setPassword('admin123');
-      // Auto-submit simulation
-      setTimeout(() => {
-        setIsLoading(true);
-        setTimeout(() => {
-          onLogin({
-            email: 'admin@rimi.ai',
-            role: 'admin',
-            name: 'System Administrator',
-            initials: 'SA',
-            plan: 'Admin Workspace',
-            creditsUsed: 12050,
-            creditsLimit: 25000,
-            resetDays: 14
-          });
-        }, 500);
-      }, 100);
     } else {
       setEmail('business@rimi.ai');
       setPassword('password123');
-      // Auto-submit simulation
-      setTimeout(() => {
-        setIsLoading(true);
-        setTimeout(() => {
-          onLogin({
-            email: 'business@rimi.ai',
-            role: 'user',
-            name: 'Business Designer',
-            initials: 'BD',
-            plan: 'Business Studio',
-            creditsUsed: 4200,
-            creditsLimit: 10000,
-            resetDays: 18
-          });
-        }, 500);
-      }, 100);
     }
   };
 
@@ -171,7 +139,7 @@ export default function Login({ onLogin, onGoToLanding }) {
           {/* Quick-auth selectors */}
           <div className="login-quick-auth">
             <div className="login-quick-divider">
-              <span>Or Instantly Test Demo Roles</span>
+              <span>Or Select a Demo Role to Autofill</span>
             </div>
             <div className="login-quick-buttons">
               <button

@@ -5,7 +5,7 @@ import Studio from './pages/Studio';
 import Login from './pages/Login';
 
 function App() {
-  const [view, setView] = useState('login');
+  const [view, setView] = useState('landing');
   const [currentUser, setCurrentUser] = useState(null);
 
   const handleLogin = (user) => {
