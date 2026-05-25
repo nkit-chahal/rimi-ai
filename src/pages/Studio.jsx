@@ -1,4 +1,31 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import ReactCrop from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
+
+async function getCroppedImg(imageElement, crop, fileName) {
+  const canvas = document.createElement('canvas');
+  const scaleX = imageElement.naturalWidth / imageElement.width;
+  const scaleY = imageElement.naturalHeight / imageElement.height;
+  canvas.width = crop.width * scaleX;
+  canvas.height = crop.height * scaleY;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(
+    imageElement,
+    crop.x * scaleX,
+    crop.y * scaleY,
+    crop.width * scaleX,
+    crop.height * scaleY,
+    0, 0,
+    crop.width * scaleX,
+    crop.height * scaleY
+  );
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      if (!blob) { resolve(null); return; }
+      resolve(new File([blob], fileName, { type: 'image/png' }));
+    }, 'image/png');
+  });
+}
 
 const API = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : '');
 
@@ -59,6 +86,7 @@ const NAV = [
       { id: 'pattern', label: 'Pattern Extraction', icon: 'M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z' },
       { id: 'seamless', label: 'Make Seamless', icon: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z' },
       { id: 'repeat', label: 'Repeat Set', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
+      { id: 'mappings', label: 'Mappings', icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z' },
       { id: 'inspire', label: 'Inspirations', icon: 'M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7h2c3.1 0 5.5-2.5 5.5-5.5C22 6 17.5 2 12 2z' },
       { id: 'vectorize', label: 'Vectorize', icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z' },
       { id: 'upscale', label: 'Super Resolution', icon: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7' },
@@ -84,8 +112,8 @@ const emptyState = {
   suggestion: '',
 };
 
-export default function Studio({ onBack }) {
-  const validTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'inspire', 'vectorize', 'upscale', 'library', 'exports'];
+export default function Studio({ onBack, currentUser, onLogout }) {
+  const validTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'library', 'exports', 'admin'];
   const [tool, _setTool] = useState(() => {
     const hash = window.location.hash.replace('#', '');
     return validTools.includes(hash) ? hash : 'pattern';
@@ -105,6 +133,18 @@ export default function Studio({ onBack }) {
   const fileRef = useRef(null);
   const canvasRef = useRef(null);
   const hasLoadedControls = useRef(false);
+
+  const user = currentUser || state.user;
+
+  // ===== ADMIN WORKSPACE STATE =====
+  const [adminSelectedUser, setAdminSelectedUser] = useState('business');
+  const [adminUsers, setAdminUsers] = useState({
+    business: { name: 'Business Team (business@rimi.ai)', creditsUsed: 4200, creditsLimit: 10000, plan: 'Business Studio' },
+    studioa: { name: 'Design Studio A (studio-a@rimi.ai)', creditsUsed: 8900, creditsLimit: 15000, plan: 'Pro Designer' },
+    creative: { name: 'Creative Agency (agency@rimi.ai)', creditsUsed: 14500, creditsLimit: 20000, plan: 'Enterprise Team' }
+  });
+  const [creditAdjustmentAmount, setCreditAdjustmentAmount] = useState(5000);
+  const [creditFeedback, setCreditFeedback] = useState('');
 
   const uploaded = useMemo(() => uploads[tool]?.file || null, [uploads, tool]);
   const preview = useMemo(() => uploads[tool]?.url || null, [uploads, tool]);
@@ -140,13 +180,190 @@ export default function Studio({ onBack }) {
   const [upscaleUrl, setUpscaleUrl] = useState(null);
 
   const [isSeamless, setIsSeamless] = useState(false);
+  const [seamlessProgress, setSeamlessProgress] = useState(0);
+  const [seamlessStatus, setSeamlessStatus] = useState('');
+
+  useEffect(() => {
+    if (isSeamless) {
+      setSeamlessProgress(0);
+      setSeamlessStatus('Assessing seams...');
+      const startTime = Date.now();
+      const interval = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        let progress = 0;
+        let status = '';
+        if (elapsed < 2) {
+          progress = (elapsed / 2) * 5;
+          status = 'Assessing seams...';
+        } else if (elapsed < 5) {
+          progress = 5 + ((elapsed - 2) / 3) * 10;
+          status = 'Applying geometric fixes...';
+        } else if (elapsed < 35) {
+          progress = 15 + ((elapsed - 5) / 30) * 40;
+          status = 'Generating AI patches (Tier 1)...';
+        } else if (elapsed < 65) {
+          progress = 55 + ((elapsed - 35) / 30) * 35;
+          status = 'Refining seams (Tier 2)...';
+        } else {
+          progress = 90 + Math.min(9, (elapsed - 65) / 10);
+          status = 'Finalizing guarantee step...';
+        }
+        setSeamlessProgress(Math.min(99, progress));
+        setSeamlessStatus(status);
+      }, 200);
+      return () => clearInterval(interval);
+    } else {
+      setSeamlessProgress(100);
+      setSeamlessStatus('Complete!');
+      const t = setTimeout(() => {
+        setSeamlessProgress(0);
+        setSeamlessStatus('');
+      }, 2000);
+      return () => clearTimeout(t);
+    }
+  }, [isSeamless]);
   const [seamlessUrl, setSeamlessUrl] = useState(null);
+  const [seamlessMode, setSeamlessMode] = useState('generate'); // 'generate' (FSTL text-to-image) or 'fix' (offset+inpaint)
+  const [seamlessPrompt, setSeamlessPrompt] = useState('');
+  const [seamlessTiles, setSeamlessTiles] = useState([]);
+
+  // ===== MAPPINGS =====
+  const MAPPING_CATEGORIES = [
+    { id: 'home', label: 'Home', desc: 'Bedding, decor, kitchen', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
+    { id: 'apparel', label: 'Apparel', desc: 'Clothing, fashion, wear', icon: 'M20.38 3.46L16 2 12 5.5 8 2 3.62 3.46a2 2 0 00-1.34 2.23l.58 3.47c.06.37.29.7.62.89L8 12.75V21h8v-8.25l4.52-2.7c.33-.19.56-.52.62-.89l.58-3.47a2 2 0 00-1.34-2.23z' },
+    { id: 'accessories', label: 'Accessories', desc: 'Bags, cases, small items', icon: 'M20 7h-4V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v3H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 4h4v3h-4V4z' },
+    { id: 'wall_art', label: 'Wall Art', desc: 'Frames, canvases, decor', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
+    { id: 'other', label: 'Other', desc: 'Custom products', icon: 'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' },
+  ];
+  const MAPPING_PRODUCTS = {
+    home: [
+      { id: 'bed_sheet', name: 'Bed Sheet', image: '/products/bed_sheet.png' },
+      { id: 'pillow_cover', name: 'Pillow Cover', image: '/products/pillow_cover.png' },
+      { id: 'comforter', name: 'Comforter', image: '/products/comforter.png' },
+      { id: 'cushion', name: 'Cushion', image: '/products/cushion.png' },
+    ],
+    apparel: [
+      { id: 'tshirt', name: 'T-Shirt', image: '/products/tshirt.png' },
+    ],
+    accessories: [
+      { id: 'tote_bag', name: 'Tote Bag', image: '/products/tote_bag.png' },
+    ],
+    wall_art: [
+      { id: 'cushion', name: 'Canvas Print', image: '/products/cushion.png' },
+    ],
+    other: [],
+  };
+
+  const [mappingStep, setMappingStep] = useState(1);
+  const [mappingPrint, setMappingPrint] = useState(null); // { file, filename, url }
+  const [mappingPrintPreview, setMappingPrintPreview] = useState(null);
+  const [mappingCategory, setMappingCategory] = useState('home');
+  const [mappingSelectedProducts, setMappingSelectedProducts] = useState(new Set());
+  const [mappingControls, setMappingControls] = useState({ scale: 120, posX: 10, posY: -5, rotate: 0, flipH: false, flipV: false });
+  const [mappingResults, setMappingResults] = useState([]);
+  const [isMappingGenerating, setIsMappingGenerating] = useState(false);
+  const [mappingProductSearch, setMappingProductSearch] = useState('');
+  const mapFileRef = useRef(null);
+
+  const handleMappingUpload = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => setMappingPrintPreview(e.target.result);
+    reader.readAsDataURL(file);
+    const fd = new FormData();
+    fd.append('image', file);
+    fetch(`${API}/api/upload`, { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) setMappingPrint({ file, filename: d.filename, url: d.url });
+      })
+      .catch(() => setError('Upload failed'));
+  };
+
+  const toggleMappingProduct = (productId) => {
+    setMappingSelectedProducts(prev => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId); else next.add(productId);
+      return next;
+    });
+  };
+
+  const generateMockups = async () => {
+    if (!mappingPrint?.filename || mappingSelectedProducts.size === 0) return;
+    setIsMappingGenerating(true);
+    setMappingResults([]);
+    setError('');
+    try {
+      const r = await fetch(`${API}/api/generate-mockups-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patternFilename: mappingPrint.filename,
+          products: Array.from(mappingSelectedProducts),
+          category: mappingCategory,
+          projectId: activeProject.id,
+        }),
+      });
+      const d = await r.json();
+      if (d.success && d.mockups) {
+        setMappingResults(d.mockups);
+        setMappingStep(4);
+      } else {
+        setError(d.error || 'Failed to generate mockups');
+      }
+    } catch (err) {
+      setError('Failed to connect to server: ' + err.message);
+    } finally {
+      setIsMappingGenerating(false);
+    }
+  };
+  // ===== END MAPPINGS =====
 
   const [exportsList, setExportsList] = useState([]);
   const [isLoadingExports, setIsLoadingExports] = useState(false);
   const [selectedExports, setSelectedExports] = useState(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [exportsFilter, setExportsFilter] = useState('all'); // 'all' | 'image' | 'vector'
+  const [exportsPage, setExportsPage] = useState(1);
+
+  // Crop State
+  const [cropFile, setCropFile] = useState(null);
+  const [cropSrc, setCropSrc] = useState(null);
+  const [cropConfig, setCropConfig] = useState();
+  const [cropAction, setCropAction] = useState(null);
+  const cropImageRef = useRef(null);
+
+  const handlePreUpload = (file, actionType) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setCropSrc(e.target.result);
+      setCropFile(file);
+      setCropAction(actionType);
+      setCropConfig(undefined);
+    };
+    reader.readAsDataURL(file);
+    if (fileRef.current) fileRef.current.value = '';
+    if (pipelineFileRef.current) pipelineFileRef.current.value = '';
+  };
+
+  const applyCrop = async () => {
+    if (cropImageRef.current && cropConfig?.width && cropConfig?.height) {
+      const croppedFile = await getCroppedImg(cropImageRef.current, cropConfig, cropFile.name);
+      if (cropAction === 'pipeline') handlePipelineUpload(croppedFile);
+      else handleUpload(croppedFile);
+    } else {
+      if (cropAction === 'pipeline') handlePipelineUpload(cropFile);
+      else handleUpload(cropFile);
+    }
+    cancelCrop();
+  };
+
+  const cancelCrop = () => {
+    setCropSrc(null);
+    setCropFile(null);
+    setCropAction(null);
+  };
 
   const filteredExports = useMemo(() => {
     if (exportsFilter === 'all') return exportsList;
@@ -155,16 +372,34 @@ export default function Studio({ onBack }) {
 
   const loadExports = useCallback(() => {
     setIsLoadingExports(true);
-    fetch(`${API}/api/exports`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setExportsList(data.exports);
-          setSelectedExports(new Set());
-        }
-      })
-      .finally(() => setIsLoadingExports(false));
-  }, []);
+    Promise.all([
+      fetch(`${API}/api/exports`).then(res => res.json()),
+      fetch(`${API}/api/pipeline-runs?project_id=${activeProject?.id || 1}`).then(res => res.json())
+    ])
+    .then(([exportsData, runsData]) => {
+      if (exportsData.success) {
+        setExportsList(exportsData.exports);
+        setSelectedExports(new Set());
+        setExportsPage(1);
+      }
+      if (runsData.success) {
+        setPipelineRuns(runsData.runs);
+      }
+    })
+    .catch(err => {
+      console.error("Error loading exports or runs:", err);
+      fetch(`${API}/api/exports`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setExportsList(data.exports);
+            setSelectedExports(new Set());
+            setExportsPage(1);
+          }
+        });
+    })
+    .finally(() => setIsLoadingExports(false));
+  }, [activeProject?.id]);
 
   useEffect(() => {
     if (tool === 'exports') loadExports();
@@ -512,6 +747,26 @@ export default function Studio({ onBack }) {
     fetch(`${API}/api/pipeline-runs`).then(r => r.json()).then(d => {
       if (d.success) setPipelineRuns(d.runs);
     }).catch(() => {});
+
+    // Auto-download the final result if pipeline completed successfully
+    const finalResult = results[results.length - 1];
+    if (finalStatus === 'completed' && finalResult?.resultUrl) {
+      try {
+        const resp = await fetch(finalResult.resultUrl);
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const ext = outFormat?.toLowerCase() || 'png';
+        a.download = `rimi_pipeline_result_${Date.now()}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error('Auto-download failed:', e);
+      }
+    }
 
     setPipelineRunning(false);
     setPipelineCurrentStep(-1);
@@ -1011,11 +1266,49 @@ export default function Studio({ onBack }) {
     }
   };
 
+  const generateSeamless = async () => {
+    if (!seamlessPrompt.trim()) {
+      setError('Enter a description of the pattern you want to generate');
+      return;
+    }
+    setIsSeamless(true);
+    setError('');
+    setSeamlessUrl(null);
+    setSeamlessTiles([]);
+    try {
+      const r = await fetch(`${API}/api/generate-seamless`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: seamlessPrompt,
+          count: 4,
+          creativity,
+          projectId: activeProject.id,
+          filename: uploaded?.filename || '',
+          imageUrl: ''
+        })
+      });
+      const d = await r.json();
+      if (d.success) {
+        setSeamlessTiles(d.tiles || []);
+        if (d.bestUrl) {
+          setSeamlessUrl(`${API}${d.bestUrl}`);
+        }
+        await loadStudioState(activeProject.id);
+      } else setError(d.error);
+    } catch {
+      setError('Backend is not reachable. Start Flask on port 3001.');
+    } finally {
+      setIsSeamless(false);
+    }
+  };
+
   const toolLabel = {
     dashboard: 'Pipeline Studio',
     pattern: 'Pattern Extraction',
     seamless: 'Make Seamless',
     repeat: 'Repeat Set',
+    mappings: 'Create New Mapping',
     inspire: 'Inspirations',
     vectorize: 'Vectorize',
     upscale: 'Super Resolution',
@@ -1193,15 +1486,72 @@ export default function Studio({ onBack }) {
       <div className="st-pattern-right">
         <div className="st-pattern-right-title">
           <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z" s={20} />
-          Make Seamless
+          Seamless Pattern
         </div>
-        <p className="st-pattern-right-desc">
-          Automatically offset your base tile and let AI inpaint the seams to create a perfectly repeatable pattern.
-        </p>
-        <button className="st-pattern-right-btn" onClick={makeSeamless} disabled={isSeamless || (!uploaded && !preview && !activeProject?.heroImageUrl)}>
-          <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z" s={16} />
-          {isSeamless ? 'Fixing Seams...' : 'Make Seamless Base Tile'}
-        </button>
+        <div className="st-btn-row" style={{ marginBottom: '0.75rem' }}>
+          <button className={`st-grid-btn ${seamlessMode === 'generate' ? 'active' : ''}`} onClick={() => setSeamlessMode('generate')} style={{ flex: 1 }}>✨ Generate New</button>
+          <button className={`st-grid-btn ${seamlessMode === 'fix' ? 'active' : ''}`} onClick={() => setSeamlessMode('fix')} style={{ flex: 1 }}>🔧 Fix Existing</button>
+        </div>
+
+        {seamlessMode === 'generate' ? (
+          <>
+            <p className="st-pattern-right-desc" style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>
+              Generate natively seamless tiles from a text description. Uses AI with circular padding — tiles are seamless by construction.
+            </p>
+            <textarea
+              value={seamlessPrompt}
+              onChange={e => setSeamlessPrompt(e.target.value)}
+              placeholder="Describe the pattern... e.g. 'watercolor roses on cream linen background' or 'geometric art deco gold lines on navy'"
+              style={{ width: '100%', minHeight: '70px', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', resize: 'vertical', fontFamily: 'inherit', background: '#f8fafc' }}
+            />
+            {uploaded?.filename && (
+              <p style={{ fontSize: '0.75rem', color: '#6366f1', margin: '0.3rem 0' }}>📎 Reference image will guide the style</p>
+            )}
+          </>
+        ) : (
+          <p className="st-pattern-right-desc">
+            Upload a tile and let AI fix the edges using offset + inpaint. Best for images that are almost seamless already.
+          </p>
+        )}
+
+        {isSeamless || seamlessProgress > 0 ? (
+          <div style={{ marginTop: '1rem', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#64748b', marginBottom: '0.5rem', fontWeight: 500 }}>
+              <span>{seamlessStatus}</span>
+              <span>{Math.round(seamlessProgress)}%</span>
+            </div>
+            <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ width: `${seamlessProgress}%`, height: '100%', background: '#6366f1', transition: 'width 0.2s linear' }} />
+            </div>
+          </div>
+        ) : seamlessMode === 'generate' ? (
+          <button className="st-pattern-right-btn" onClick={generateSeamless} disabled={!seamlessPrompt.trim()} style={{ marginTop: '0.5rem' }}>
+            <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} />
+            Generate Seamless Tiles
+          </button>
+        ) : (
+          <button className="st-pattern-right-btn" onClick={makeSeamless} disabled={(!uploaded && !preview && !activeProject?.heroImageUrl)}>
+            <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z" s={16} />
+            Fix Uploaded Tile
+          </button>
+        )}
+
+        {seamlessTiles.length > 0 && (
+          <div style={{ marginTop: '1rem' }}>
+            <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem', color: '#334155' }}>Generated Tiles (click to select)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+              {seamlessTiles.map((tile, i) => (
+                <div key={i} onClick={() => { setSeamlessUrl(`${API}${tile.url}`); setUploads(prev => ({ ...prev, [tool]: { ...prev[tool], url: `${API}${tile.url}` } })); }}
+                  style={{ cursor: 'pointer', border: seamlessUrl === `${API}${tile.url}` ? '2px solid #6366f1' : '2px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+                  <img src={`${API}${tile.url}`} alt={`Tile ${i+1}`} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover' }} />
+                  <div style={{ position: 'absolute', bottom: 4, right: 4, background: tile.score >= 0.9 ? '#22c55e' : tile.score >= 0.75 ? '#eab308' : '#ef4444', color: '#fff', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                    {Math.round(tile.score * 100)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
     if (tool === 'pattern') return (
@@ -1247,7 +1597,391 @@ export default function Studio({ onBack }) {
     );
   };
 
+  // ===== MAPPINGS RENDER =====
+  const renderMappings = () => {
+    const STEPS = ['Upload Print', 'Select Category', 'Choose Products', 'Map & Preview'];
+    const currentProducts = MAPPING_PRODUCTS[mappingCategory] || [];
+    const filteredProducts = mappingProductSearch
+      ? currentProducts.filter(p => p.name.toLowerCase().includes(mappingProductSearch.toLowerCase()))
+      : currentProducts;
+
+    return (
+      <div className="st-map-wizard">
+        {/* Step indicator */}
+        <div className="st-map-steps">
+          {STEPS.map((label, i) => (
+            <React.Fragment key={i}>
+              <div
+                className={`st-map-step ${mappingStep === i + 1 ? 'active' : ''} ${mappingStep > i + 1 ? 'completed' : ''}`}
+                onClick={() => { if (i + 1 < mappingStep || (i + 1 === 2 && mappingPrint)) setMappingStep(i + 1); }}
+              >
+                <div className="st-map-step-num">
+                  {mappingStep > i + 1 ? '✓' : i + 1}
+                </div>
+                <span className="st-map-step-label">{label}</span>
+              </div>
+              {i < STEPS.length - 1 && (
+                <div className={`st-map-step-line ${mappingStep > i + 1 ? 'done' : ''}`} />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Step 1: Upload Print */}
+        {mappingStep >= 1 && (
+          <div className="st-map-section">
+            <h2 className="st-map-section-title">Upload Your Print</h2>
+            <p className="st-map-section-desc">Upload a high quality print or pattern</p>
+            <div className="st-map-upload-row">
+              <div
+                className={`st-map-upload-zone ${mappingPrintPreview ? 'has-image' : ''}`}
+                onClick={() => !mappingPrintPreview && mapFileRef.current?.click()}
+                onDrop={(e) => { e.preventDefault(); handleMappingUpload(e.dataTransfer.files[0]); }}
+                onDragOver={(e) => e.preventDefault()}
+              >
+                {mappingPrintPreview ? (
+                  <>
+                    <div className="st-map-upload-icon" style={{ background: '#dcfce7', color: '#16a34a' }}>
+                      <I d="M5 13l4 4L19 7" s={24} />
+                    </div>
+                    <h3>Print uploaded successfully!</h3>
+                    <p>{mappingPrint?.file?.name || 'pattern.png'}</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="st-map-upload-icon">
+                      <I d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" s={24} />
+                    </div>
+                    <h3>Drag & drop your image here</h3>
+                    <p>or</p>
+                    <button className="st-map-upload-btn" type="button">Upload Image</button>
+                    <p className="st-map-upload-formats">Supports: PNG, JPG, SVG (Max 50MB)</p>
+                  </>
+                )}
+              </div>
+              <input ref={mapFileRef} type="file" accept=".jpg,.jpeg,.png,.webp,.svg" hidden onChange={(e) => handleMappingUpload(e.target.files[0])} />
+
+              <div className="st-map-print-preview">
+                <div className="st-map-print-preview-title">Print Preview</div>
+                {mappingPrintPreview ? (
+                  <>
+                    <img className="st-map-print-img" src={mappingPrintPreview} alt="Print Preview" />
+                    <div className="st-map-print-info">
+                      <div className="st-map-print-name">
+                        Print Name
+                        <span>{mappingPrint?.file?.name || 'pattern.png'}</span>
+                      </div>
+                      <button className="st-map-replace-btn" onClick={() => mapFileRef.current?.click()}>Replace</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="st-map-print-empty">
+                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={32} />
+                    <span>Upload a print to preview</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Select Category */}
+        {mappingStep >= 1 && (
+          <div className="st-map-section">
+            <h2 className="st-map-section-title">Select Category</h2>
+            <p className="st-map-section-desc">Choose the category that best fits your print</p>
+            <div className="st-map-categories">
+              {MAPPING_CATEGORIES.map(cat => (
+                <div
+                  key={cat.id}
+                  className={`st-map-category ${mappingCategory === cat.id ? 'active' : ''}`}
+                  onClick={() => { setMappingCategory(cat.id); setMappingSelectedProducts(new Set()); if (mappingStep < 2) setMappingStep(2); }}
+                >
+                  <div className="st-map-category-icon"><I d={cat.icon} s={22} /></div>
+                  <div className="st-map-category-name">{cat.label}</div>
+                  <div className="st-map-category-desc">{cat.desc}</div>
+                  <div className="st-map-category-check">✓</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Choose Products */}
+        {mappingStep >= 1 && (
+          <div className="st-map-section">
+            <h2 className="st-map-section-title">Choose Products</h2>
+            <p className="st-map-section-desc">Select the products you want to map this print on</p>
+
+            <div className="st-map-products-header">
+              <div className="st-map-selected-count">{mappingSelectedProducts.size} product{mappingSelectedProducts.size !== 1 ? 's' : ''} selected</div>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <div className="st-map-products-search">
+                  <I d="M21 21l-4.3-4.3M10 18a8 8 0 100-16 8 8 0 000 16z" s={16} />
+                  <input placeholder="Search products..." value={mappingProductSearch} onChange={e => setMappingProductSearch(e.target.value)} />
+                </div>
+                {mappingSelectedProducts.size > 0 && (
+                  <button className="st-map-clear-btn" onClick={() => setMappingSelectedProducts(new Set())}>Clear All</button>
+                )}
+              </div>
+            </div>
+
+            <div className="st-map-products-grid">
+              {filteredProducts.map(product => (
+                <div
+                  key={product.id}
+                  className={`st-map-product ${mappingSelectedProducts.has(product.id) ? 'selected' : ''}`}
+                  onClick={() => { toggleMappingProduct(product.id); if (mappingStep < 3) setMappingStep(3); }}
+                >
+                  <div className="st-map-product-check">
+                    <I d="M5 13l4 4L19 7" s={14} />
+                  </div>
+                  <img className="st-map-product-img" src={product.image} alt={product.name} />
+                  <div className="st-map-product-name">{product.name}</div>
+                </div>
+              ))}
+              {filteredProducts.length === 0 && (
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                  No products available in this category yet.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Map & Preview (results) */}
+        {mappingStep >= 4 && mappingResults.length > 0 && (
+          <div className="st-map-section">
+            <h2 className="st-map-section-title">Map Your Print</h2>
+            <p className="st-map-section-desc">AI-generated product mockups with your pattern</p>
+            <div className="st-map-results">
+              <div className="st-map-results-grid">
+                {mappingResults.map((result, idx) => (
+                  <div key={idx} className="st-map-result-card">
+                    <img src={`${API}${result.mockupUrl}`} alt={result.productType} />
+                    <div className="st-map-result-info">
+                      <span className="st-map-result-name">{result.productType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                      <a className="st-map-result-dl" href={`${API}${result.mockupUrl}`} download onClick={(e) => forceDownload(e, `${API}${result.mockupUrl}`)}>
+                        <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loading state */}
+        {isMappingGenerating && (
+          <div className="st-map-section" style={{ textAlign: 'center', padding: '3rem' }}>
+            <div className="st-spinner" style={{ margin: '0 auto 1rem' }} />
+            <p style={{ fontWeight: 600, color: '#374151' }}>Generating AI mockups...</p>
+            <p style={{ fontSize: '0.82rem', color: '#6b7280' }}>This may take 30-60 seconds per product</p>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="st-map-footer">
+          <div className="st-map-footer-left">
+            <button onClick={() => {
+              setMappingStep(1);
+              setMappingPrint(null);
+              setMappingPrintPreview(null);
+              setMappingSelectedProducts(new Set());
+              setMappingResults([]);
+              setMappingControls({ scale: 120, posX: 10, posY: -5, rotate: 0, flipH: false, flipV: false });
+            }}>Cancel</button>
+          </div>
+          <div className="st-map-footer-right">
+            <button className="st-map-draft-btn">Save as Draft</button>
+            <button
+              className="st-map-primary-btn"
+              disabled={!mappingPrint || mappingSelectedProducts.size === 0 || isMappingGenerating}
+              onClick={generateMockups}
+            >
+              {isMappingGenerating ? (
+                <><div className="st-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Generating...</>
+              ) : (
+                <>Map & Preview <I d="M5 12h14M12 5l7 7-7 7" s={16} /></>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  // ===== ADMIN WORKSPACE RENDER =====
+  const handleAdjustCredits = (e) => {
+    e.preventDefault();
+    const userKey = adminSelectedUser;
+    const amount = parseInt(creditAdjustmentAmount);
+    if (isNaN(amount)) return;
+
+    setAdminUsers(prev => {
+      const u = prev[userKey];
+      const newLimit = u.creditsLimit + amount;
+      return {
+        ...prev,
+        [userKey]: {
+          ...u,
+          creditsLimit: newLimit
+        }
+      };
+    });
+
+    if (currentUser && currentUser.email === 'business@rimi.ai' && userKey === 'business') {
+      currentUser.creditsLimit += amount;
+    }
+
+    setCreditFeedback(`Successfully added ${amount.toLocaleString()} credits to ${adminUsers[userKey].name}! New limit: ${(adminUsers[userKey].creditsLimit + amount).toLocaleString()}`);
+    setTimeout(() => setCreditFeedback(''), 5000);
+  };
+
+  const replicateLogs = [
+    { model: 'flux-schnell (Seamless Outpaint)', duration: 14.5, credits: 30, timestamp: '2026-05-26 00:52:11' },
+    { model: 'flux-dev-seamless (Seamless Tiling)', duration: 32.2, credits: 45, timestamp: '2026-05-26 00:48:05' },
+    { model: 'real-esrgan-upscale (Super Resolution)', duration: 8.4, credits: 15, timestamp: '2026-05-26 00:41:22' },
+    { model: 'flux-schnell (Pattern Extraction)', duration: 18.1, credits: 25, timestamp: '2026-05-26 00:30:15' },
+    { model: 'vectorize-potrace-ai (Vectorization)', duration: 11.8, credits: 20, timestamp: '2026-05-26 00:22:48' },
+    { model: 'flux-dev-seamless (Seamless Outpaint)', duration: 45.0, credits: 60, timestamp: '2026-05-26 00:15:33' }
+  ];
+
+  const renderAdminWorkspace = () => {
+    return (
+      <div className="admin-workspace-panel animate-fade-in">
+        <div className="admin-grid">
+          {/* Card 1: Credits Adjustment */}
+          <div className="admin-card glassmorphism-card">
+            <div className="admin-card-header">
+              <I d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z" s={20} />
+              <h3>AI Credits Adjustment</h3>
+            </div>
+            <form onSubmit={handleAdjustCredits} className="admin-form">
+              {creditFeedback && (
+                <div className="admin-feedback-badge">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                  </svg>
+                  <span>{creditFeedback}</span>
+                </div>
+              )}
+              <div className="admin-field">
+                <label>Select Organization / User</label>
+                <select 
+                  value={adminSelectedUser} 
+                  onChange={(e) => setAdminSelectedUser(e.target.value)}
+                  className="admin-select"
+                >
+                  <option value="business">Business Team (business@rimi.ai)</option>
+                  <option value="studioa">Design Studio A (studio-a@rimi.ai)</option>
+                  <option value="creative">Creative Agency (agency@rimi.ai)</option>
+                </select>
+              </div>
+
+              <div className="admin-user-info-bar">
+                <div>
+                  <strong>Current Limit:</strong> {adminUsers[adminSelectedUser].creditsLimit.toLocaleString()} credits
+                </div>
+                <div>
+                  <strong>Used:</strong> {adminUsers[adminSelectedUser].creditsUsed.toLocaleString()} credits ({Math.round((adminUsers[adminSelectedUser].creditsUsed/adminUsers[adminSelectedUser].creditsLimit)*100)}%)
+                </div>
+              </div>
+
+              <div className="admin-field">
+                <label>Adjust Credits Limit (Add or subtract)</label>
+                <div className="admin-input-group">
+                  <input 
+                    type="number" 
+                    value={creditAdjustmentAmount}
+                    onChange={(e) => setCreditAdjustmentAmount(e.target.value)}
+                    className="admin-input"
+                    placeholder="e.g. 5000"
+                  />
+                  <button type="submit" className="admin-btn-primary">
+                    Update Limit Instantly
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          {/* Card 2: Quick Metrics Overview */}
+          <div className="admin-card glassmorphism-card">
+            <div className="admin-card-header">
+              <I d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" s={20} />
+              <h3>System Overview</h3>
+            </div>
+            <div className="admin-overview-grid">
+              <div className="admin-overview-stat">
+                <span>Total Active Replicate Runs</span>
+                <strong>4,122 runs</strong>
+              </div>
+              <div className="admin-overview-stat">
+                <span>Average Generation Speed</span>
+                <strong>18.4s</strong>
+              </div>
+              <div className="admin-overview-stat">
+                <span>Replicate Spend (Today)</span>
+                <strong>$128.45</strong>
+              </div>
+              <div className="admin-overview-stat">
+                <span>Active WebSocket Nodes</span>
+                <strong>8 online</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Replicate Logs Table */}
+        <div className="admin-card glassmorphism-card replicate-logs-section">
+          <div className="admin-card-header" style={{ justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <I d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" s={20} />
+              <h3>Replicate API Billing & Cost Analysis</h3>
+            </div>
+            <span className="admin-live-badge"><span className="pulse"></span> LIVE BILLING FEED</span>
+          </div>
+
+          <div className="admin-table-container">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>AI Model Name</th>
+                  <th>Execution Duration</th>
+                  <th>Credits Charged</th>
+                  <th>Replicate API Cost</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {replicateLogs.map((log, index) => {
+                  const replicateCost = 0.00115 * log.duration;
+                  return (
+                    <tr key={index}>
+                      <td>
+                        <span className="model-tag">{log.model}</span>
+                      </td>
+                      <td>{log.duration.toFixed(1)}s</td>
+                      <td className="strong">{log.credits} credits</td>
+                      <td className="cost-tag replicate">${replicateCost.toFixed(5)}</td>
+                      <td className="time-tag">{log.timestamp}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  // ===== END MAPPINGS RENDER =====
+
   const renderCanvas = () => {
+    if (tool === 'admin') return renderAdminWorkspace();
+    if (tool === 'mappings') return renderMappings();
     if (tool === 'dashboard') {
       return (
         <div className="st-pipeline-studio">
@@ -1434,7 +2168,7 @@ export default function Studio({ onBack }) {
               <span>PNG, JPG up to 10MB</span>
             </div>
           )}
-          <input ref={pipelineFileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePipelineUpload(e.target.files[0])} />
+          <input ref={pipelineFileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0], 'pipeline')} />
         </div>
       );
     }
@@ -1487,8 +2221,151 @@ export default function Studio({ onBack }) {
     if (tool === 'exports') {
       const imageCount = exportsList.filter(f => f.type === 'image').length;
       const vectorCount = exportsList.filter(f => f.type === 'vector').length;
+
+      const formatTimestamp = (ts) => {
+        if (!ts) return '';
+        const date = new Date(ts * 1000);
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const hh = String(hours).padStart(2, '0');
+        
+        return `${yyyy}-${mm}-${dd} ${hh}:${minutes} ${ampm}`;
+      };
+
+      const getToolInfo = (filename) => {
+        if (filename.startsWith('repeat_')) {
+          const gridMatch = filename.match(/repeat_(\d+x\d+)_/);
+          const grid = gridMatch ? gridMatch[1] : '3x3';
+          return {
+            label: 'Repeat Set',
+            badgeClass: 'repeat',
+            icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
+            params: [`Grid: ${grid}`, 'DPI: 300', 'Tile Repeat']
+          };
+        }
+        if (filename.startsWith('vec_')) {
+          return {
+            label: 'Vectorize',
+            badgeClass: 'vectorize',
+            icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z',
+            params: ['Colors: 32', 'Engine: AI Local', 'Vector SVG']
+          };
+        }
+        if (filename.startsWith('upscale_')) {
+          return {
+            label: 'Upscale',
+            badgeClass: 'upscale',
+            icon: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7',
+            params: ['Factor: x4', 'DPI: 600', 'AI Upscale']
+          };
+        }
+        if (filename.startsWith('seamless_')) {
+          return {
+            label: 'Seamless Fix',
+            badgeClass: 'seamless',
+            icon: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z',
+            params: ['Seam Assess', 'Geometric Patch', 'Tileable']
+          };
+        }
+        if (filename.startsWith('mockup_')) {
+          return {
+            label: 'Mappings',
+            badgeClass: 'mappings',
+            icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z',
+            params: ['Product Mockup', '3D Map', 'Preview']
+          };
+        }
+        return {
+          label: 'AI Export',
+          badgeClass: 'generic',
+          icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3',
+          params: ['Auto-save', 'History']
+        };
+      };
+
+      const renderOriginalImage = (src) => {
+        if (src) {
+          return <img src={src} alt="Original Input" className="st-export-log-image" loading="lazy" />;
+        }
+        return (
+          <div className="st-export-log-placeholder">
+            <svg className="st-export-placeholder-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="1.5" />
+              <circle cx="8.5" cy="8.5" r="1.5" strokeWidth="1.5" />
+              <path d="M21 15l-5-5L5 21" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>Original Input</span>
+          </div>
+        );
+      };
+
+      const renderPipelineStepper = (run) => {
+        return (
+          <div className="st-export-stepper">
+            <div className="st-stepper-title">Pipeline: {run.name || 'Custom Workflow'}</div>
+            <div className="st-stepper-flow">
+              {run.steps.map((stepType, idx) => {
+                const stepDef = STEP_TYPES.find(s => s.type === stepType);
+                const isLast = idx === run.steps.length - 1;
+                return (
+                  <React.Fragment key={idx}>
+                    <div className="st-stepper-node" title={stepDef?.desc || stepType}>
+                      <div className="st-node-icon">
+                        <I d={stepDef?.icon || "M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"} s={12} />
+                      </div>
+                      <span className="st-node-label">{stepDef?.label || stepType}</span>
+                    </div>
+                    {!isLast && <div className="st-stepper-connector" />}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
+        );
+      };
+
+      const renderSingleToolStepper = (filename) => {
+        const info = getToolInfo(filename);
+        return (
+          <div className="st-export-single-tool">
+            <div className="st-stepper-title">Operation: {info.label}</div>
+            <div className="st-tool-params">
+              <div className={`st-tool-badge-pill ${info.badgeClass}`}>
+                <I d={info.icon} s={12} />
+                <span>{info.label}</span>
+              </div>
+              <div className="st-params-divider" />
+              <div className="st-params-list">
+                {info.params.map((p, idx) => (
+                  <span key={idx} className="st-param-pill">{p}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // Pagination calculation
+      const itemsPerPage = 9;
+      const indexOfLastItem = exportsPage * itemsPerPage;
+      const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+      const currentItems = filteredExports.slice(indexOfFirstItem, indexOfLastItem);
+      const totalPages = Math.ceil(filteredExports.length / itemsPerPage);
+
+      const pageNumbers = [];
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+
       return (
-        <div className="st-inspire-canvas">
+        <div className="st-inspire-canvas full-width">
           {isLoadingExports ? (
             <div className="st-loading"><div className="st-spinner" /><span>Loading exports...</span></div>
           ) : exportsList.length > 0 ? (
@@ -1514,40 +2391,93 @@ export default function Studio({ onBack }) {
                     </button>
                   )}
                 </div>
-                <select className="st-exports-filter" value={exportsFilter} onChange={(e) => setExportsFilter(e.target.value)}>
+                <select className="st-exports-filter" value={exportsFilter} onChange={(e) => { setExportsFilter(e.target.value); setExportsPage(1); }}>
                   <option value="all">All Files ({exportsList.length})</option>
                   <option value="image">Images ({imageCount})</option>
                   <option value="vector">Vectors ({vectorCount})</option>
                 </select>
               </div>
-              {filteredExports.length > 0 ? (
-                <div className="st-var-grid">
-                  {filteredExports.map((file) => {
+              {currentItems.length > 0 ? (
+                <div className="st-export-log-list">
+                  {currentItems.map((file) => {
                     const fullUrl = file.imageUrl.startsWith('http') ? file.imageUrl : `${API}${file.imageUrl}`;
                     const previewSrc = (file.previewUrl || file.imageUrl).startsWith('http')
                       ? (file.previewUrl || file.imageUrl)
                       : `${API}${file.previewUrl || file.imageUrl}`;
                     const isSelected = selectedExports.has(file.id);
+
+                    // Match with a pipeline run
+                    const matchedRun = pipelineRuns.find(run => {
+                      if (!run.results) return false;
+                      return run.results.some(res => res.resultUrl && (res.resultUrl.endsWith(file.id) || res.resultUrl === file.imageUrl));
+                    });
+
+                    // Resolve original image URL
+                    const originalInputUrl = matchedRun
+                      ? (matchedRun.results.find(res => res.type === 'upload')?.resultUrl)
+                      : activeProject?.heroImageUrl;
+                    const originalSrc = originalInputUrl
+                      ? (originalInputUrl.startsWith('http') ? originalInputUrl : `${API}${originalInputUrl}`)
+                      : null;
+
                     return (
-                      <div key={file.id} className={`st-var-item ${isSelected ? 'selected' : ''}`}>
-                        <div className="st-export-check" onClick={() => toggleExportSelect(file.id)}>
-                          <input type="checkbox" checked={isSelected} readOnly />
+                      <div key={file.id} className={`st-export-log-card ${isSelected ? 'selected' : ''}`}>
+                        {/* Header metadata bar */}
+                        <div className="st-export-log-header">
+                          <div className="st-export-log-header-left">
+                            <div className="st-export-check" onClick={() => toggleExportSelect(file.id)}>
+                              <input type="checkbox" checked={isSelected} readOnly />
+                            </div>
+                            <span className="st-export-log-id" title={file.id}>{file.id}</span>
+                          </div>
+                          <div className="st-export-log-header-right">
+                            <span className="st-export-timestamp">{formatTimestamp(file.timestamp)}</span>
+                          </div>
                         </div>
-                        <img src={previewSrc} alt={file.id} loading="lazy" />
-                        <div className="st-export-meta">
-                          <span className={`st-export-badge ${file.type}`}>{file.format}</span>
-                          <span className="st-export-size">{file.size}</span>
-                        </div>
-                        <div className="st-export-actions">
-                          <a href={fullUrl} onClick={(e) => forceDownload(e, fullUrl)} className="st-dl-btn" title="Download">Download</a>
-                          <button
-                            className="st-export-trash"
-                            title="Delete"
-                            onClick={() => deleteExports([file.id])}
-                            disabled={isDeleting}
-                          >
-                            <I d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" s={14} />
-                          </button>
+
+                        {/* Split panel contents */}
+                        <div className="st-export-log-body">
+                          {/* Original Input image on the left */}
+                          <div className="st-export-log-panel left">
+                            <div className="st-panel-tag">Original Input</div>
+                            <div className="st-panel-image-container">
+                              {renderOriginalImage(originalSrc)}
+                            </div>
+                          </div>
+
+                          {/* Pipeline/tool step in the center */}
+                          <div className="st-export-log-panel center">
+                            <div className="st-panel-connection-line-bg" />
+                            <div className="st-panel-connection-content">
+                              {matchedRun ? renderPipelineStepper(matchedRun) : renderSingleToolStepper(file.id)}
+                            </div>
+                          </div>
+
+                          {/* Final Output image on the right */}
+                          <div className="st-export-log-panel right">
+                            <div className="st-panel-tag">Final Output</div>
+                            <div className="st-panel-image-container">
+                              <img src={previewSrc} alt="Final Output" className="st-export-log-image" loading="lazy" />
+                              <div className="st-export-image-hover">
+                                <a href={fullUrl} onClick={(e) => forceDownload(e, fullUrl)} className="st-export-hover-btn dl" title="Download">
+                                  <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
+                                  <span>Download</span>
+                                </a>
+                              </div>
+                            </div>
+                            <div className="st-export-meta-row">
+                              <span className={`st-export-badge ${file.format.toLowerCase()}`}>{file.format}</span>
+                              <span className="st-export-size">{file.size}</span>
+                              <button
+                                className="st-export-trash-btn"
+                                title="Delete"
+                                onClick={() => deleteExports([file.id])}
+                                disabled={isDeleting}
+                              >
+                                <I d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" s={14} />
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1555,6 +2485,41 @@ export default function Studio({ onBack }) {
                 </div>
               ) : (
                 <div className="st-empty-canvas"><span className="st-empty-icon">🔍</span><p>No {exportsFilter === 'vector' ? 'vector' : 'image'} files found.</p></div>
+              )}
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="st-pagination">
+                  <button
+                    className="st-pagination-btn prev"
+                    onClick={() => setExportsPage(prev => Math.max(prev - 1, 1))}
+                    disabled={exportsPage === 1}
+                  >
+                    <I d="M15 19l-7-7 7-7" s={14} />
+                    <span>Prev</span>
+                  </button>
+
+                  <div className="st-pagination-numbers">
+                    {pageNumbers.map(number => (
+                      <button
+                        key={number}
+                        className={`st-pagination-number ${exportsPage === number ? 'active' : ''}`}
+                        onClick={() => setExportsPage(number)}
+                      >
+                        {number}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    className="st-pagination-btn next"
+                    onClick={() => setExportsPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={exportsPage === totalPages}
+                  >
+                    <span>Next</span>
+                    <I d="M9 5l7 7-7 7" s={14} />
+                  </button>
+                </div>
               )}
             </>
           ) : (
@@ -1861,7 +2826,7 @@ export default function Studio({ onBack }) {
     );
   };
 
-  const creditPercent = Math.min(100, Math.round((state.user.creditsUsed / state.user.creditsLimit) * 100));
+  const creditPercent = Math.min(100, Math.round((user.creditsUsed / user.creditsLimit) * 100));
 
   const healthItems = [
     ['Tile Seamless', state.health.tileSeamless],
@@ -1885,14 +2850,35 @@ export default function Studio({ onBack }) {
               ))}
             </div>
           ))}
-          <div className="st-nav-section">ACCOUNT</div>
-          <button className="st-nav-item" onClick={() => setShowSettingsModal(true)}><I d="M12.2 2h-.4a2 2 0 00-2 2v.2a2 2 0 01-1 1.7l-.4.2a2 2 0 01-2 0l-.2-.1a2 2 0 00-2.7.7l-.2.4a2 2 0 00.7 2.7l.2.1a2 2 0 011 1.7v.5a2 2 0 01-1 1.8l-.2.1a2 2 0 00-.7 2.7l.2.4a2 2 0 002.7.7l.2-.1a2 2 0 012 0l.4.2a2 2 0 011 1.7v.2a2 2 0 002 2h.4a2 2 0 002-2v-.2a2 2 0 011-1.7l.4-.2a2 2 0 012 0l.2.1a2 2 0 002.7-.7l.2-.4a2 2 0 00-.7-2.7l-.2-.1a2 2 0 01-1-1.8v-.5a2 2 0 011-1.7l.2-.1a2 2 0 00.7-2.7l-.2-.4a2 2 0 00-2.7-.7l-.2.1a2 2 0 01-2 0l-.4-.2a2 2 0 01-1-1.7V4a2 2 0 00-2-2z" /><span>Settings</span></button>
+          
+          {user.role === 'admin' && (
+            <div>
+              <div className="st-nav-section">SYSTEM ADMINISTRATION</div>
+              <button 
+                className={`st-nav-item ${tool === 'admin' ? 'active' : ''}`} 
+                onClick={() => { setTool('admin'); setError(''); }}
+              >
+                <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" s={18} />
+                <span>Admin Workspace</span>
+              </button>
+            </div>
+          )}
+
+          {user.role === 'admin' && (
+            <>
+              <div className="st-nav-section">ACCOUNT</div>
+              <button className="st-nav-item" onClick={() => setShowSettingsModal(true)}>
+                <I d="M12.2 2h-.4a2 2 0 00-2 2v.2a2 2 0 01-1 1.7l-.4.2a2 2 0 01-2 0l-.2-.1a2 2 0 00-2.7.7l-.2.4a2 2 0 00.7 2.7l.2.1a2 2 0 011 1.7v.5a2 2 0 01-1 1.8l-.2.1a2 2 0 00-.7 2.7l.2.4a2 2 0 002.7.7l.2-.1a2 2 0 012 0l.4.2a2 2 0 011 1.7v.2a2 2 0 002 2h.4a2 2 0 002-2v-.2a2 2 0 011-1.7l.4-.2a2 2 0 012 0l.2.1a2 2 0 002.7-.7l.2-.4a2 2 0 00-.7-2.7l-.2-.1a2 2 0 01-1-1.8v-.5a2 2 0 011-1.7l.2-.1a2 2 0 00.7-2.7l-.2-.4a2 2 0 00-2.7-.7l-.2.1a2 2 0 01-2 0l-.4-.2a2 2 0 01-1-1.7V4a2 2 0 00-2-2z" />
+                <span>Settings</span>
+              </button>
+            </>
+          )}
         </div>
         <div className="st-sidebar-bottom">
-          <div className="st-credits-label">AI Credits <span className="st-plan">{state.user.plan}</span></div>
-          <div className="st-credits-text strong">{state.user.creditsUsed.toLocaleString()} <span>/ {state.user.creditsLimit.toLocaleString()}</span></div>
+          <div className="st-credits-label">AI Credits <span className="st-plan">{user.plan}</span></div>
+          <div className="st-credits-text strong">{user.creditsUsed.toLocaleString()} <span>/ {user.creditsLimit.toLocaleString()}</span></div>
           <div className="st-credits-bar"><div className="st-credits-fill" style={{ width: `${creditPercent}%` }} /></div>
-          <div className="st-credits-text">Resets in {state.user.resetDays} days</div>
+          <div className="st-credits-text">Resets in {user.resetDays} days</div>
           <button className="st-upgrade-btn">Upgrade Plan</button>
         </div>
       </aside>
@@ -1905,22 +2891,28 @@ export default function Studio({ onBack }) {
           <div className="st-user-actions">
             <button className="st-icon-btn"><I d="M18 8a6 6 0 00-12 0c0 7-3 7-3 7h18s-3 0-3-7M13.7 21a2 2 0 01-3.4 0" /></button>
             <button className="st-icon-btn"><I d="M9.1 9a3 3 0 115.8 1c0 2-3 2-3 4M12 17h.01" /></button>
-            <div className="st-avatar">{state.user.initials}</div>
-            <div className="st-user-meta"><strong>{state.user.name}</strong><span>{state.user.plan}</span></div>
+            <div className="st-avatar">{user.initials}</div>
+            <div className="st-user-meta"><strong>{user.name}</strong><span>{user.plan}</span></div>
+            <button className="st-nav-logout-btn" onClick={onLogout} title="Log Out Session">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '5px'}}>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+              Logout
+            </button>
           </div>
         </header>
-        <div className={`st-workspace ${tool === 'library' || tool === 'exports' ? 'full-width' : ''}`}>
+        <div className={`st-workspace ${tool === 'library' || tool === 'exports' || tool === 'mappings' || tool === 'admin' ? 'full-width' : ''}`}>
           <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
             <div className="st-page-head">
               <div>
                 <h1 className="st-title">{toolLabel} {tool === 'library' && <span className="st-pro-badge">Pro</span>}</h1>
-                <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Create, refine, and perfect repeat patterns with AI precision.' : tool === 'exports' ? 'View and download your recently exported assets.' : 'Upload artwork and generate print-ready assets.'}</p>
+                <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Create, refine, and perfect repeat patterns with AI precision.' : tool === 'exports' ? 'View and download your recently exported assets.' : tool === 'admin' ? 'Configure global credit limits, manage server quotas, and analyze Replicate GPU costs.' : 'Upload artwork and generate print-ready assets.'}</p>
               </div>
-              {/* Save/Export buttons hidden — exports auto-save to history */}
-              {/* <div className="st-actions"><button>Save</button><button className="primary">Export</button></div> */}
             </div>
             {isLoadingState && <div className="st-error">Loading SQLite-backed studio state...</div>}
-            {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless') && (
+            {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings') && (
               <div
                 className={`st-upload ${isDrag ? 'dragging' : ''} ${preview ? 'has-image' : ''}`}
                 onClick={() => fileRef.current?.click()}
@@ -1935,12 +2927,12 @@ export default function Studio({ onBack }) {
                 )}
               </div>
             )}
-            <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handleUpload(e.target.files[0])} />
+            <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0], 'tool')} />
             {renderCanvas()}
             {error && <div className="st-error">{error}</div>}
 
           </main>
-          {tool !== 'library' && tool !== 'exports' && (
+          {tool !== 'library' && tool !== 'exports' && tool !== 'mappings' && (
             <aside className="st-right-panel">
               {tool === 'dashboard' ? (
                 <div className="st-pl-right">
@@ -2035,6 +3027,31 @@ export default function Studio({ onBack }) {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cropSrc && (
+        <div className="st-modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="st-modal" style={{ maxWidth: '800px', width: '90%' }}>
+            <h2>Crop Image (Optional)</h2>
+            <p style={{ color: '#64748b', marginBottom: '1rem', fontSize: '0.9rem' }}>
+              Trim problematic edges before uploading. This is highly recommended to fix seams before making the pattern seamless. Skip if not needed.
+            </p>
+            <div style={{ maxHeight: '60vh', overflow: 'auto', background: '#f8fafc', padding: '1rem', borderRadius: '8px', display: 'flex', justifyContent: 'center' }}>
+              <ReactCrop crop={cropConfig} onChange={c => setCropConfig(c)}>
+                <img src={cropSrc} ref={cropImageRef} alt="Crop preview" style={{ maxWidth: '100%', maxHeight: '55vh' }} />
+              </ReactCrop>
+            </div>
+            <div className="st-modal-actions" style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button className="st-btn-outline" onClick={cancelCrop}>Cancel</button>
+              <button className="st-btn-outline" onClick={() => {
+                if (cropAction === 'pipeline') handlePipelineUpload(cropFile);
+                else handleUpload(cropFile);
+                cancelCrop();
+              }}>Skip Crop</button>
+              <button className="st-btn" onClick={applyCrop} disabled={!cropConfig?.width || !cropConfig?.height}>Apply & Upload</button>
             </div>
           </div>
         </div>

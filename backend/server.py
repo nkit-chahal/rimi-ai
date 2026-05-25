@@ -34,29 +34,105 @@ def allowed_file(filename):
 
 import json
 import sqlite3
+import threading
 from datetime import datetime, timedelta
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'rimi_ai.sqlite3')
 
+db_lock = threading.Lock()
+
 def db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=5.0)
     conn.row_factory = sqlite3.Row
+    # Enable Write-Ahead Logging (WAL) for high concurrency scaling
+    conn.execute("PRAGMA journal_mode=WAL;")
     return conn
+
 
 def rows_to_dicts(rows):
     return [dict(row) for row in rows]
 
+def resolve_input_url(input_filename):
+    if not input_filename:
+        return None
+    if input_filename.startswith('http://') or input_filename.startswith('https://') or input_filename.startswith('/'):
+        return input_filename
+    
+    if os.path.exists(os.path.join(UPLOAD_DIR, input_filename)):
+        return f"/uploads/{input_filename}"
+    if os.path.exists(os.path.join(RESULTS_DIR, input_filename)):
+        return f"/results/{input_filename}"
+    
+    PUBLIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public')
+    if os.path.exists(os.path.join(PUBLIC_DIR, input_filename)):
+        return f"/{input_filename}"
+    return f"/uploads/{input_filename}"
+
+def iso_to_epoch(iso_str):
+    try:
+        return datetime.fromisoformat(iso_str).timestamp()
+    except Exception:
+        return 0.0
+
+def log_export(project_id, filename, input_filename, tool_type, settings_dict=None, pipeline_run_id=None, pipeline_steps_list=None):
+    settings_json = json.dumps(settings_dict) if settings_dict is not None else '{}'
+    pipeline_steps_json = json.dumps(pipeline_steps_list) if pipeline_steps_list is not None else None
+    created_at = datetime.utcnow().isoformat()
+    
+    with db_lock:
+        conn = db()
+        try:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO exports 
+                (project_id, filename, input_filename, tool_type, settings_json, pipeline_run_id, pipeline_steps_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (project_id, filename, input_filename, tool_type, settings_json, pipeline_run_id, pipeline_steps_json, created_at)
+            )
+            conn.commit()
+        except Exception as e:
+            print(f"Error logging export: {e}")
+        finally:
+            conn.close()
+
 def init_db():
     conn = db()
+    
+    # Auto-migration of users table to support the expanded columns
+    try:
+        conn.execute("SELECT email FROM users LIMIT 1")
+    except sqlite3.OperationalError:
+        # Table exists but doesn't have the email column, or doesn't exist at all.
+        # Drop users table so we can recreate it with new schema
+        try:
+            conn.execute("DROP TABLE IF EXISTS users")
+            conn.commit()
+            print("Dropped old users table for migration.")
+        except Exception as e:
+            print(f"Error dropping users table: {e}")
+            
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
             name TEXT NOT NULL,
             initials TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'user',
             plan TEXT NOT NULL,
             credits_used INTEGER NOT NULL DEFAULT 0,
-            credits_limit INTEGER NOT NULL DEFAULT 20000,
+            credits_limit INTEGER NOT NULL DEFAULT 50000,
             reset_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS replicate_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER,
+            model_name TEXT NOT NULL,
+            duration REAL NOT NULL,
+            credits INTEGER NOT NULL,
+            cost_usd REAL NOT NULL,
+            created_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY,
@@ -140,15 +216,96 @@ def init_db():
             settings_json TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS exports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER,
+            filename TEXT NOT NULL UNIQUE,
+            input_filename TEXT,
+            tool_type TEXT NOT NULL,
+            settings_json TEXT DEFAULT '{}',
+            pipeline_run_id INTEGER,
+            pipeline_steps_json TEXT,
+            created_at TEXT NOT NULL
+        );
     """)
+    
+    # Auto-migration of existing files in the results directory
+    try:
+        if os.path.exists(RESULTS_DIR):
+            skip_prefixes = ('mask_', 'test_', 'omnisvg_', 'thumb_', 'prev_')
+            for filename in os.listdir(RESULTS_DIR):
+                filepath = os.path.join(RESULTS_DIR, filename)
+                if os.path.isfile(filepath):
+                    if filename.lower().startswith(skip_prefixes):
+                        continue
+                    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+                    if ext not in ('png', 'jpg', 'jpeg', 'svg', 'tiff'):
+                        continue
+                    
+                    row = conn.execute("SELECT 1 FROM exports WHERE filename = ?", (filename,)).fetchone()
+                    if not row:
+                        if filename.startswith('seamless_gen_') or filename.startswith('seamless_tile_'):
+                            tool_type = "Seamless Fix"
+                        elif filename.startswith('repeat_'):
+                            tool_type = "Repeat Set"
+                        elif filename.startswith('vec_'):
+                            tool_type = "Vectorize"
+                        elif filename.startswith('upscale_'):
+                            tool_type = "Super Resolution"
+                        elif filename.startswith('mockup_'):
+                            tool_type = "Mappings"
+                        elif filename.startswith('extracted_'):
+                            tool_type = "Extract Design"
+                        else:
+                            tool_type = "Seamless Fix"
+                        
+                        try:
+                            mtime = os.path.getmtime(filepath)
+                            created_at = datetime.utcfromtimestamp(mtime).isoformat()
+                        except Exception:
+                            created_at = datetime.utcnow().isoformat()
+                            
+                        conn.execute(
+                            """
+                            INSERT OR IGNORE INTO exports 
+                            (project_id, filename, input_filename, tool_type, settings_json, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                            (1, filename, None, tool_type, '{}', created_at)
+                        )
+            conn.commit()
+    except Exception as e:
+        print(f"Error during auto-migration: {e}")
+
+    # Seed users and demo database entries if project_count is 0
     project_count = conn.execute("SELECT COUNT(*) AS c FROM projects").fetchone()["c"]
-    if project_count == 0:
+    
+    # Ensure users are seeded regardless if table was just recreated/empty
+    user_count = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
+    if user_count == 0:
         now = datetime.utcnow()
         reset_at = now + timedelta(days=12)
+        # Admin account
         conn.execute(
-            "INSERT INTO users (id, name, initials, plan, credits_used, credits_limit, reset_at) VALUES (1, ?, ?, ?, ?, ?, ?)",
-            ("Ankit Chahal", "AC", "Pro Plan", 8450, 20000, reset_at.isoformat()),
+            """
+            INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at)
+            VALUES (1, 'admin@rim.ai', 'admin123', 'Admin User', 'AU', 'admin', 'Enterprise Admin', 0, 1000000, ?)
+            """,
+            (reset_at.isoformat(),)
         )
+        # Normal user account
+        conn.execute(
+            """
+            INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at)
+            VALUES (2, 'user@rim.ai', 'user123', 'Normal User', 'NU', 'user', 'Business Pro', 8450, 50000, ?)
+            """,
+            (reset_at.isoformat(),)
+        )
+        conn.commit()
+        print("Seeded database with pre-approved admin and normal user accounts.")
+
+    if project_count == 0:
+        now = datetime.utcnow()
         project_rows = [
             (1, "Spring Bloom Collection", "In Progress", "/demo_floral.png", "/demo_floral.png", now - timedelta(hours=2)),
             (2, "Botanical Dreams", "Completed", "/demo_botanical.png", "/demo_botanical.png", now - timedelta(days=1)),
@@ -189,9 +346,46 @@ def time_ago(iso_value):
     hours = max(1, int(delta.total_seconds() // 3600))
     return f"Updated {hours}h ago"
 
-def get_studio_state(project_id=1):
+def log_replicate_call(project_id, model_name, duration, credits, cost_usd):
+    created_at = datetime.utcnow().isoformat()
+    with db_lock:
+        conn = db()
+        try:
+            conn.execute(
+                """
+                INSERT INTO replicate_logs (project_id, model_name, duration, credits, cost_usd, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (project_id, model_name, duration, credits, cost_usd, created_at)
+            )
+            conn.commit()
+        except Exception as e:
+            print(f"Error logging replicate call: {e}")
+        finally:
+            conn.close()
+
+def get_studio_state(project_id=1, user_id=None):
     conn = db()
-    user = dict(conn.execute("SELECT * FROM users WHERE id = 1").fetchone())
+    if user_id is not None:
+        user_row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    else:
+        user_row = conn.execute("SELECT * FROM users ORDER BY id LIMIT 1").fetchone()
+        
+    if not user_row:
+        user = {
+            "id": 1,
+            "email": "user@rim.ai",
+            "name": "Default User",
+            "initials": "DU",
+            "role": "user",
+            "plan": "Business Pro",
+            "credits_used": 0,
+            "credits_limit": 50000,
+            "reset_at": datetime.utcnow().isoformat()
+        }
+    else:
+        user = dict(user_row)
+        
     projects = rows_to_dicts(conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall())
     project = dict(conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone() or projects[0])
     variations = rows_to_dicts(conn.execute("SELECT * FROM pattern_variations WHERE project_id = ? ORDER BY id", (project["id"],)).fetchall())
@@ -216,10 +410,16 @@ def get_studio_state(project_id=1):
     suggestion = conn.execute("SELECT body FROM suggestions WHERE project_id = ? ORDER BY id DESC LIMIT 1", (project["id"],)).fetchone()
     conn.close()
 
-    reset_at = datetime.fromisoformat(user["reset_at"])
-    reset_days = max(0, (reset_at.date() - datetime.utcnow().date()).days)
+    try:
+        reset_at = datetime.fromisoformat(user["reset_at"])
+        reset_days = max(0, (reset_at.date() - datetime.utcnow().date()).days)
+    except Exception:
+        reset_days = 30
 
     user_payload = {
+        "id": user["id"],
+        "email": user.get("email", ""),
+        "role": user.get("role", "user"),
         "name": user["name"],
         "initials": user["initials"],
         "plan": user["plan"],
@@ -295,7 +495,13 @@ init_db()
 @app.route('/api/studio-state')
 def studio_state():
     project_id = int(request.args.get('projectId', 1))
-    return jsonify({'success': True, 'state': get_studio_state(project_id)})
+    user_id = request.args.get('userId')
+    if user_id:
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            user_id = None
+    return jsonify({'success': True, 'state': get_studio_state(project_id, user_id)})
 
 @app.route('/api/projects/<int:project_id>/controls', methods=['PATCH'])
 def update_project_controls(project_id):
@@ -322,6 +528,13 @@ def update_project_controls(project_id):
             updates.append(f"{column} = ?")
             values.append(caster(data[key]))
 
+    user_id = request.args.get('userId') or data.get('userId') or data.get('user_id')
+    if user_id:
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            user_id = None
+
     if updates:
         updates.append("updated_at = ?")
         values.append(datetime.utcnow().isoformat())
@@ -339,9 +552,9 @@ def update_project_controls(project_id):
         conn.commit()
         conn.close()
 
-    return jsonify({'success': True, 'state': get_studio_state(project_id)})
+    return jsonify({'success': True, 'state': get_studio_state(project_id, user_id)})
 
-def record_activity(project_id, activity_type='export', count=1, credits=50):
+def record_activity(project_id, activity_type='export', count=1, credits=50, user_id=None):
     now = datetime.utcnow().isoformat()
     conn = db()
     if activity_type == 'export':
@@ -368,7 +581,11 @@ def record_activity(project_id, activity_type='export', count=1, credits=50):
             """,
             (count, count, credits, credits, project_id),
         )
-    conn.execute("UPDATE users SET credits_used = credits_used + ? WHERE id = 1", (credits,))
+    
+    # Resolve user_id dynamically
+    if not user_id:
+        user_id = 2  # Default to the normal user (ID 2)
+    conn.execute("UPDATE users SET credits_used = credits_used + ? WHERE id = ?", (credits, user_id))
     conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
     conn.commit()
     conn.close()
@@ -506,9 +723,11 @@ def extract_design():
     """
     Uses Groq LLM API to describe the image, then uses black-forest-labs/flux-fill-pro 
     to extract and generate a flat fabric pattern.
-    Expects JSON: { filename, projectId }
+    Expects JSON: { filename, projectId, userId }
     """
     import base64
+    import requests as http_requests
+    import time
     data = request.get_json()
     filename = data.get('filename', '')
     
@@ -528,6 +747,7 @@ def extract_design():
             mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"
             data_uri = f"data:{mime_type};base64,{encoded_string}"
 
+        start_time = time.time()
         output = replicate.run(
             "openai/gpt-image-2",
             input={
@@ -536,17 +756,54 @@ def extract_design():
                 "aspect_ratio": "1:1"
             }
         )
+        duration = time.time() - start_time
+        credits_used = max(10, int(round(duration * 12)))
+        cost_usd = duration * 0.00115
+        
+        project_id = int(data.get('projectId', 1))
+        user_id = data.get('userId') or data.get('user_id')
+        if user_id:
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                user_id = None
+
+        log_replicate_call(project_id, "openai/gpt-image-2", duration, credits_used, cost_usd)
 
         # output is typically a list of URLs
         image_urls = [str(url) for url in output] if isinstance(output, list) else [str(output)]
-        print(f"  [Extract Design] Done! Generated {len(image_urls)} tiles.")
+        print(f"  [Extract Design] Done! Generated {len(image_urls)} tiles. Downloading locally...")
 
-        project_id = data.get('projectId', 1)
-        record_activity(project_id, 'generation', len(image_urls), len(image_urls) * 20)
+        local_result_urls = []
+        
+        for url in image_urls:
+            resp = http_requests.get(url, timeout=60)
+            resp.raise_for_status()
+            
+            local_uuid = uuid.uuid4().hex
+            local_filename = f"extracted_{local_uuid}.png"
+            local_filepath = os.path.join(RESULTS_DIR, local_filename)
+            
+            with open(local_filepath, 'wb') as f:
+                f.write(resp.content)
+                
+            local_url = f"/results/{local_filename}"
+            local_result_urls.append(local_url)
+            
+            # Log export
+            log_export(
+                project_id=project_id,
+                filename=local_filename,
+                input_filename=filename,
+                tool_type="Extract Design",
+                settings_dict={"prompt": "Extract design out of outfit"}
+            )
+
+        record_activity(project_id, 'generation', len(local_result_urls), credits_used, user_id=user_id)
 
         return jsonify({
             'success': True,
-            'resultUrls': image_urls
+            'resultUrls': local_result_urls
         })
 
     except Exception as e:
@@ -638,37 +895,84 @@ def generate_inspirations():
         print(f"  [Inspirations] Groq prompt enhancement failed: {e}")
         designer_prompt = f"A repeating pattern of {user_prompt}, flat 2D textile design, highly detailed."
 
-    # 3. Call openai/gpt-image-2 for the requested variations
+    # 3. Generate variations — use FSTL seamless model if seamless=true, else GPT-Image-2
+    use_seamless = data.get('seamless', False)
     results = []
     errors = []
-
-    for i in range(count):
+    total_credits = 0
+    project_id = int(data.get('projectId', 1))
+    user_id = data.get('userId') or data.get('user_id')
+    if user_id:
         try:
-            print(f"  [Inspirations] Generating variant {i+1}/{count} using openai/gpt-image-2...")
-            
-            replicate_input = {
-                "prompt": designer_prompt + " - flat 2D repeating fabric pattern tile texture.",
-                "aspect_ratio": "1:1"
-            }
-            if data_uri:
-                replicate_input["input_images"] = [data_uri]
+            user_id = int(user_id)
+        except ValueError:
+            user_id = None
 
+    if use_seamless:
+        # Use FSTL text-to-image for natively seamless tiles (all at once)
+        try:
+            print(f"  [Inspirations] Generating {count} seamless tiles using FSTL text-to-image...")
+            import time
+            start_time = time.time()
             output = replicate.run(
-                "openai/gpt-image-2",
-                input=replicate_input
+                "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
+                input={
+                    "prompt": f"FSTL {designer_prompt}, seamless repeating textile pattern, tileable",
+                    "model": "dev",
+                    "aspect_ratio": "1:1",
+                    "num_outputs": min(4, count),
+                    "num_inference_steps": 28,
+                    "guidance_scale": 3.0,
+                    "output_format": "png",
+                }
             )
+            duration = time.time() - start_time
+            credits_used = max(10, int(round(duration * 12)))
+            cost_usd = duration * 0.00115
+            log_replicate_call(project_id, "replicate/seamless-texture", duration, credits_used, cost_usd)
+            total_credits += credits_used
 
-            image_url = str(output[0].url) if isinstance(output, list) and len(output) > 0 else str(output)
-            results.append(image_url)
-            print(f"  [Inspirations] Variant {i+1} done: {image_url[:80]}...")
-
+            for idx, out_url in enumerate(output if isinstance(output, list) else [output]):
+                url_str = str(out_url.url) if hasattr(out_url, 'url') else str(out_url)
+                results.append(url_str)
+                print(f"  [Inspirations] FSTL tile {idx+1} done: {url_str[:80]}...")
         except Exception as e:
-            print(f"  [Inspirations] Replicate generation error on variant {i+1}: {e}")
+            print(f"  [Inspirations] FSTL generation error: {e}")
             errors.append(str(e))
+    else:
+        for i in range(count):
+            try:
+                print(f"  [Inspirations] Generating variant {i+1}/{count} using openai/gpt-image-2...")
+                
+                replicate_input = {
+                    "prompt": designer_prompt + " - flat 2D repeating fabric pattern tile texture.",
+                    "aspect_ratio": "1:1"
+                }
+                if data_uri:
+                    replicate_input["input_images"] = [data_uri]
 
-    project_id = data.get('projectId', 1)
+                import time
+                start_time = time.time()
+                output = replicate.run(
+                    "openai/gpt-image-2",
+                    input=replicate_input
+                )
+                duration = time.time() - start_time
+                credits_used = max(10, int(round(duration * 12)))
+                cost_usd = duration * 0.00115
+                log_replicate_call(project_id, "openai/gpt-image-2", duration, credits_used, cost_usd)
+                total_credits += credits_used
+
+                image_url = str(output[0].url) if isinstance(output, list) and len(output) > 0 else str(output)
+                results.append(image_url)
+                print(f"  [Inspirations] Variant {i+1} done: {image_url[:80]}...")
+
+            except Exception as e:
+                print(f"  [Inspirations] Replicate generation error on variant {i+1}: {e}")
+                errors.append(str(e))
+
     if results:
-        record_activity(project_id, 'generation', len(results), len(results) * 20)
+        record_activity(project_id, 'generation', len(results), total_credits, user_id=user_id)
 
     return jsonify({
         'success': True,
@@ -677,32 +981,248 @@ def generate_inspirations():
     })
 
 
+# --------------- Generate Seamless Pattern (FSTL Text-to-Image) ---------------
+@app.route('/api/generate-seamless', methods=['POST'])
+def generate_seamless():
+    """
+    Uses replicate/seamless-texture FSTL model in text-to-image mode to generate
+    natively seamless tiles. This is the PRIMARY method — the model uses circular
+    padding internally, so tiles are seamless by construction.
+    
+    Expects JSON: { prompt, count, creativity, projectId, filename, imageUrl }
+    """
+    import base64
+    import requests as http_requests
+    from io import BytesIO
+    import numpy as np
+    from PIL import Image
+
+    data = request.get_json()
+    user_prompt = data.get('prompt', '')
+    count = min(4, max(1, int(data.get('count', 4))))
+    creativity = int(data.get('creativity', 3))
+    filename = data.get('filename', '')
+    image_url = data.get('imageUrl', '')
+    project_id = int(data.get('projectId', 1))
+
+    if not user_prompt:
+        return jsonify({'error': 'Prompt is required'}), 400
+
+    try:
+        # Step 1: Use Groq LLM to enhance the prompt for seamless tile generation
+        print(f"  [Generate Seamless] Enhancing prompt with Groq LLM (Creativity: {creativity})...")
+        
+        system_instruction = (
+            "You are a luxury textile designer and expert prompt engineer. "
+            f"The user wants a seamless, tileable fabric pattern based on: '{user_prompt}'. "
+            f"Creativity level: {creativity}/5 (1=faithful, 5=wild). "
+            "Write a prompt for the FSTL seamless texture model. "
+            "Describe the pattern in detail: motifs, arrangement, colors (use specific designer color terms), "
+            "background, artistic style (flat 2D vector, watercolor, hand-drawn, etc). "
+            "Keep it to a single paragraph, max 80 words. "
+            "Do NOT include any introduction, explanations, or quotes. Output ONLY the prompt text."
+        )
+
+        # Optionally include reference image in the LLM call
+        data_uri = None
+        if filename:
+            filepath = os.path.join(UPLOAD_DIR, filename)
+            if os.path.exists(filepath):
+                with open(filepath, "rb") as img_file:
+                    encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
+                    mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"
+                    data_uri = f"data:{mime_type};base64,{encoded_string}"
+        elif image_url and image_url.startswith('http'):
+            resp = http_requests.get(image_url, timeout=30)
+            encoded_string = base64.b64encode(resp.content).decode('utf-8')
+            data_uri = f"data:image/png;base64,{encoded_string}"
+
+        messages = []
+        if data_uri:
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": data_uri}},
+                    {"type": "text", "text": system_instruction}
+                ]
+            })
+        else:
+            messages.append({"role": "user", "content": system_instruction})
+
+        completion = groq_client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=messages,
+            temperature=0.3 + (creativity * 0.12),
+            max_completion_tokens=256,
+        )
+        designer_prompt = completion.choices[0].message.content.strip()
+        print(f"  [Generate Seamless] Designer prompt: {designer_prompt[:120]}...")
+
+        # Step 2: Generate seamless tiles using FSTL text-to-image mode
+        # Map creativity to guidance_scale: low creativity = higher guidance (more faithful)
+        guidance_map = {1: 4.5, 2: 3.5, 3: 3.0, 4: 2.5, 5: 2.0}
+        guidance = guidance_map.get(creativity, 3.0)
+
+        print(f"  [Generate Seamless] Generating {count} seamless tiles (guidance={guidance})...")
+        import time
+        start_time = time.time()
+        output = replicate.run(
+            "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
+            input={
+                "prompt": f"FSTL {designer_prompt}, seamless repeating textile pattern, tileable",
+                "model": "dev",
+                "aspect_ratio": "1:1",
+                "num_outputs": count,
+                "num_inference_steps": 28,
+                "guidance_scale": guidance,
+                "output_format": "png",
+            }
+        )
+        duration = time.time() - start_time
+        credits_used = max(10, int(round(duration * 12)))
+        cost_usd = duration * 0.00115
+        log_replicate_call(project_id, "replicate/seamless-texture", duration, credits_used, cost_usd)
+
+        # Step 3: Download, score, save, and return results
+        results = []
+        best_url = None
+        best_score = -1.0
+
+        for idx, out_url in enumerate(output if isinstance(output, list) else [output]):
+            url_str = str(out_url.url) if hasattr(out_url, 'url') else str(out_url)
+            
+            # Download and score
+            resp = http_requests.get(url_str, timeout=60)
+            img = Image.open(BytesIO(resp.content)).convert('RGB')
+            
+            # Compute perceptual seam score (absolute + ratio combined)
+            arr = np.array(img, dtype=np.float32)
+            h, w = arr.shape[:2]
+            # Absolute boundary pixel difference (most perceptually relevant)
+            seam_x = np.mean(np.abs(arr[:, 0, :] - arr[:, -1, :]))
+            seam_y = np.mean(np.abs(arr[0, :, :] - arr[-1, :, :]))
+            abs_score_x = max(0.0, 1.0 - seam_x / 50.0)
+            abs_score_y = max(0.0, 1.0 - seam_y / 50.0)
+            abs_score = (abs_score_x + abs_score_y) / 2.0
+            # Gradient ratio (boundary vs internal)
+            diff_x = np.mean(np.abs(arr[:, 1:, :] - arr[:, :-1, :]))
+            diff_y = np.mean(np.abs(arr[1:, :, :] - arr[:-1, :, :]))
+            rx = seam_x / max(1e-5, diff_x)
+            ry = seam_y / max(1e-5, diff_y)
+            ratio_x = max(0.0, min(1.0, 1.0 - (rx - 1.5) / 4.0)) if rx > 1.5 else 1.0
+            ratio_y = max(0.0, min(1.0, 1.0 - (ry - 1.5) / 4.0)) if ry > 1.5 else 1.0
+            ratio_score = (ratio_x + ratio_y) / 2.0
+            # Combined: absolute weighted more (70%) as it matches perception
+            score = abs_score * 0.7 + ratio_score * 0.3
+            
+            # Save tile locally
+            result_name = f"seamless_gen_{uuid.uuid4().hex[:8]}.png"
+            result_path = os.path.join(RESULTS_DIR, result_name)
+            img.save(result_path, 'PNG')
+            local_url = f'/results/{result_name}'
+            
+            results.append({
+                'url': local_url,
+                'remoteUrl': url_str,
+                'score': round(score, 3),
+                'index': idx
+            })
+            
+            if score > best_score:
+                best_score = score
+                best_url = local_url
+            
+            print(f"  [Generate Seamless] Tile {idx+1}: score={score:.3f} (abs_x={abs_score_x:.3f} abs_y={abs_score_y:.3f})")
+
+        # Update project with best tile
+        if best_url:
+            conn = db()
+            now = datetime.utcnow().isoformat()
+            conn.execute(
+                "UPDATE projects SET hero_image_url = ?, thumbnail_url = ?, updated_at = ? WHERE id = ?",
+                (best_url, best_url, now, project_id)
+            )
+            
+            # Update health score
+            score_pct = int(best_score * 100)
+            tile_seamless = 1 if best_score >= 0.70 else 0
+            label = "A - Excellent" if best_score >= 0.90 else "B - Good" if best_score >= 0.75 else "C - Fair" if best_score >= 0.60 else "D - Poor"
+            note = f"Generated natively seamless tile ({score_pct}% match)."
+            conn.execute(
+                "INSERT INTO pattern_health (project_id, score, label, tile_seamless, color_balance, print_readiness, resolution, note) "
+                "VALUES (?, ?, ?, ?, 1, ?, 1, ?) "
+                "ON CONFLICT(project_id) DO UPDATE SET "
+                "score=excluded.score, label=excluded.label, tile_seamless=excluded.tile_seamless, "
+                "color_balance=excluded.color_balance, print_readiness=excluded.print_readiness, "
+                "resolution=excluded.resolution, note=excluded.note",
+                (project_id, score_pct, label, tile_seamless, 1 if tile_seamless else 0, note)
+            )
+            conn.commit()
+            conn.close()
+
+            # Log best export
+            best_filename = best_url.split('/')[-1]
+            input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
+            log_export(
+                project_id=project_id,
+                filename=best_filename,
+                input_filename=input_fn,
+                tool_type="Seamless Fix",
+                settings_dict={"prompt": designer_prompt, "creativity": creativity, "input_image": input_fn or image_url}
+            )
+
+        user_id = data.get('userId') or data.get('user_id')
+        if user_id:
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                user_id = None
+
+        record_activity(project_id, 'generation', count, credits_used, user_id=user_id)
+
+        print(f"  [Generate Seamless] Done! Best score: {best_score:.3f}")
+        return jsonify({
+            'success': True,
+            'tiles': results,
+            'bestUrl': best_url,
+            'bestScore': round(best_score, 3),
+            'designerPrompt': designer_prompt,
+        })
+
+    except Exception as e:
+        print(f"  [Generate Seamless] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to generate seamless pattern: {str(e)}'}), 500
+
+
 # --------------- Make Seamless (Flux-2-Flex via Replicate) ---------------
 @app.route('/api/make-seamless', methods=['POST'])
 def make_seamless():
     """
-    Uses replicate/seamless-texture via Replicate with the 'Offset & Inpaint' 
-    technique to convert an image into a perfectly seamless repeating tile.
-    Expects JSON: { filename, imageUrl, hBrushPct, vBrushPct, projectId }
+    Uses Flux Fill Pro to inpaint only the seams, keeping the rest of the image exactly the same.
+    Expects JSON: { filename, imageUrl, projectId }
     """
     import base64
     from io import BytesIO
     import numpy as np
     from PIL import Image, ImageDraw, ImageChops, ImageFilter
     import requests as http_requests
+    import time
+    import uuid
+    from datetime import datetime
+    import replicate
 
     data = request.get_json()
     filename = data.get('filename', '')
     image_url = data.get('imageUrl', '')
-    h_brush_pct = int(data.get('hBrushPct', 25))
-    v_brush_pct = int(data.get('vBrushPct', 25))
     project_id = int(data.get('projectId', 1))
 
     if not filename and not image_url:
         return jsonify({'error': 'Filename or imageUrl is required'}), 400
 
     try:
-        # Load the source image
+        # 1. Load the source image
         if image_url and image_url.startswith('http'):
             print(f"  [Make Seamless] Downloading image from URL...")
             resp = http_requests.get(image_url, timeout=30)
@@ -727,299 +1247,167 @@ def make_seamless():
             b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
             return f"data:image/png;base64,{b64}"
 
-        # 1. Get Style-Aware LLM description + pattern classification in one call
-        print("  [Make Seamless] Describing & classifying pattern with Groq LLM...")
-        tile_uri = img_to_data_uri(img)
+        def compute_seam_score(img_to_score):
+            arr = np.array(img_to_score.convert("RGB"), dtype=np.float32)
+            h, w = arr.shape[:2]
+            strip_w = max(3, int(w * 0.03))
+            strip_h = max(3, int(h * 0.03))
+
+            left  = arr[:, :strip_w, :]
+            right = arr[:, -strip_w:, :]
+            v_diff = np.mean(np.abs(left - right[:, ::-1, :])) / 255.0
+            v_score = max(0.0, 1.0 - v_diff * 6.0)
+
+            top    = arr[:strip_h, :, :]
+            bottom = arr[-strip_h:, :, :]
+            h_diff = np.mean(np.abs(top - bottom[::-1, :, :])) / 255.0
+            h_score = max(0.0, 1.0 - h_diff * 6.0)
+
+            overall = (v_score + h_score) / 2.0
+            return {
+                "v": round(v_score, 4), "h": round(h_score, 4),
+                "overall": round(overall, 4),
+                "is_seamless": bool(v_score > 0.82 and h_score > 0.82),
+            }
+
+        pre_score = compute_seam_score(img)
+        print(f"  [Make Seamless] Pre-score: Overall={pre_score['overall']:.3f}")
+
+        # 2. Get LLM description
+        print("  [Make Seamless] Describing pattern with Groq LLM...")
+        tile_uri = img_to_data_uri(img.resize((512, 512), Image.Resampling.LANCZOS))
         completion = groq_client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": tile_uri}},
-                        {"type": "text", "text": (
-                            "Analyze this fabric/textile pattern. Provide TWO things:\n\n"
-                            "1. DESCRIPTION: Describe the pattern in detail (motifs, colors, background, "
-                            "artistic style like flat 2D vector, watercolor, hand-drawn, etc). Keep it under 2 sentences.\n\n"
-                            "2. TYPE: Classify into exactly ONE category:\n"
-                            "- organic (watercolor, loose floral, botanical, tossed motifs, painterly)\n"
-                            "- structured (line-art floral, damask, block print, toile, chinoiserie, vine trails)\n"
-                            "- geometric (stripes, checks, grids, lattice, regular shapes, polka dots)\n\n"
-                            "Format your response exactly as:\n"
-                            "DESCRIPTION: [your description]\n"
-                            "TYPE: [organic/structured/geometric]"
-                        )}
-                    ]
-                }
-            ],
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": tile_uri}},
+                    {"type": "text", "text": "Describe this repeating fabric/textile pattern precisely. Focus on: motif shapes, colors, background. 2 sentences max."}
+                ]
+            }],
             temperature=0.2,
             max_completion_tokens=200,
         )
-        llm_response = completion.choices[0].message.content.strip()
-        print(f"  [Make Seamless] LLM Response: {llm_response}")
-
-        # Parse description and type from response
-        description = llm_response
-        pattern_type = "organic"  # Default fallback
-        if "DESCRIPTION:" in llm_response and "TYPE:" in llm_response:
-            parts = llm_response.split("TYPE:")
-            description = parts[0].replace("DESCRIPTION:", "").strip()
-            type_str = parts[1].strip().lower()
-            if "structured" in type_str:
-                pattern_type = "structured"
-            elif "geometric" in type_str:
-                pattern_type = "geometric"
-            else:
-                pattern_type = "organic"
-        elif "structured" in llm_response.lower():
-            pattern_type = "structured"
-        elif "geometric" in llm_response.lower():
-            pattern_type = "geometric"
-
+        description = completion.choices[0].message.content.strip()
         print(f"  [Make Seamless] Description: {description}")
-        print(f"  [Make Seamless] Pattern type: {pattern_type}")
 
-        # 3. Per-type settings
-        PATTERN_SETTINGS = {
-            "organic": {
-                "brush_pct": 8,
-                "denoise": 0.40,
-                "candidates": 4,
-                "outside_change_max": 14.0,
-                "min_quality": 0.80,
-            },
-            "structured": {
-                "brush_pct": 4,
-                "denoise": 0.25,
-                "candidates": 4,
-                "outside_change_max": 7.0,
-                "min_quality": 0.82,
-            },
-            "geometric": {
-                "brush_pct": 2,
-                "denoise": 0.10,
-                "candidates": 4,
-                "outside_change_max": 3.0,
-                "min_quality": 0.85,
-            },
-        }
-        settings = PATTERN_SETTINGS[pattern_type]
-        brush_pct = settings["brush_pct"]
-        prompt_strength = settings["denoise"]
-        num_candidates = settings["candidates"]
-        outside_change_max = settings["outside_change_max"]
-        min_quality = settings["min_quality"]
+        # 3. Helpers for inpainting
+        def create_cross_mask(width, height, h_pct, v_pct, feather=True):
+            mask = Image.new("L", (width, height), 0)
+            draw = ImageDraw.Draw(mask)
+            x_off, y_off = width // 2, height // 2
+            h_brush = max(4, int(height * (h_pct / 100.0)))
+            v_brush = max(4, int(width * (v_pct / 100.0)))
+            draw.rectangle([0, y_off - h_brush // 2, width, y_off + h_brush // 2], fill=255)
+            draw.rectangle([x_off - v_brush // 2, 0, x_off + v_brush // 2, height], fill=255)
+            if feather:
+                mask = mask.filter(ImageFilter.GaussianBlur(radius=max(3, min(h_brush, v_brush) // 6)))
+                arr = np.array(mask, dtype=np.float32)
+                arr = np.clip(arr * 1.5, 0, 255).astype(np.uint8)
+                mask = Image.fromarray(arr)
+            return mask
 
-        print(f"  [Make Seamless] Settings: brush={brush_pct}% denoise={prompt_strength} "
-              f"candidates={num_candidates} outside_max={outside_change_max} min_quality={min_quality}")
+        replicate_calls = []
 
-        # 4. Resize to aspect-ratio preserving dimensions (multiples of 64)
-        max_dim = 1024
-        if orig_w > orig_h:
-            new_w = max_dim
-            new_h = int(max_dim * (orig_h / orig_w))
-        else:
-            new_h = max_dim
-            new_w = int(max_dim * (orig_w / orig_h))
+        def inpaint_pass(offset_img, mask_img, pass_num, guidance, steps):
+            print(f"  [Make Seamless] Running flux-fill-pro (Pass {pass_num}, guidance={guidance}, steps={steps})...")
+            prompt = (
+                f"A perfectly seamless, continuously repeating textile pattern. "
+                f"The design shows {description}. "
+                f"In the masked region, seamlessly continue and reconnect all motifs, "
+                f"lines, shapes, and background textures so the tile repeats perfectly "
+                f"with no visible seams, breaks, or discontinuities. "
+                f"Match the exact style, colors, line weights, and artistic technique."
+            )
+            img_uri = img_to_data_uri(offset_img)
+            mask_uri = img_to_data_uri(mask_img)
+
+            for attempt in range(3):
+                try:
+                    t0 = time.time()
+                    output = replicate.run(
+                        "black-forest-labs/flux-fill-pro",
+                        input={
+                            "image": img_uri,
+                            "mask": mask_uri,
+                            "prompt": prompt,
+                            "output_format": "png",
+                            "steps": steps,
+                            "guidance": guidance,
+                        }
+                    )
+                    duration = time.time() - t0
+                    credits_used = max(10, int(round(duration * 12)))
+                    cost_usd = duration * 0.00115
+                    log_replicate_call(project_id, "black-forest-labs/flux-fill-pro", duration, credits_used, cost_usd)
+                    replicate_calls.append((duration, credits_used))
+                    print(f"  [Make Seamless] Done in {duration:.1f}s. Downloading...")
+                    resp_img = http_requests.get(str(output), timeout=60)
+                    result_img = Image.open(BytesIO(resp_img.content))
+                    if result_img.mode != "RGB":
+                        result_img = result_img.convert("RGB")
+                    return result_img
+                except Exception as e:
+                    print(f"  [Make Seamless] Attempt {attempt+1}/3 failed: {e}")
+                    if attempt < 2:
+                        time.sleep((attempt + 1) * 10)
+                    else:
+                        raise
+
+        # 4. Multi-pass Seamless Pipeline
+        best_tile = img
+        best_score = pre_score
+
+        if not pre_score["is_seamless"]:
+            width, height = img.size
+            x_off, y_off = width // 2, height // 2
             
-        new_w = max(64, (new_w // 64) * 64)
-        new_h = max(64, (new_h // 64) * 64)
-
-        img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        x_offset, y_offset = new_w // 2, new_h // 2
-
-        # --- Seam scoring helpers ---
-        def compute_seam_score(tile_img):
-            """Overall seam score (0-1, higher = better)."""
-            a = np.array(tile_img.convert("RGB"), dtype=np.float32)
-            dx = np.mean(np.abs(a[:, 1:, :] - a[:, :-1, :]))
-            dy = np.mean(np.abs(a[1:, :, :] - a[:-1, :, :]))
-            sx = np.mean(np.abs(a[:, 0, :] - a[:, -1, :]))
-            sy = np.mean(np.abs(a[0, :, :] - a[-1, :, :]))
-            rx = sx / max(1e-5, dx)
-            ry = sy / max(1e-5, dy)
-            cx = max(0.0, 1.0 - (rx - 1.0) / 2.0) if rx > 1.0 else 1.0
-            cy = max(0.0, 1.0 - (ry - 1.0) / 2.0) if ry > 1.0 else 1.0
-            return (cx + cy) / 2.0
-
-        def compute_directional_scores(tile_img):
-            """Returns (h_score, v_score) — horizontal and vertical seam scores separately."""
-            a = np.array(tile_img.convert("RGB"), dtype=np.float32)
-            dx = np.mean(np.abs(a[:, 1:, :] - a[:, :-1, :]))
-            dy = np.mean(np.abs(a[1:, :, :] - a[:-1, :, :]))
-            sx = np.mean(np.abs(a[:, 0, :] - a[:, -1, :]))  # left↔right = vertical seam
-            sy = np.mean(np.abs(a[0, :, :] - a[-1, :, :]))  # top↔bottom = horizontal seam
-            rx = sx / max(1e-5, dx)
-            ry = sy / max(1e-5, dy)
-            v_score = max(0.0, 1.0 - (rx - 1.0) / 2.0) if rx > 1.0 else 1.0
-            h_score = max(0.0, 1.0 - (ry - 1.0) / 2.0) if ry > 1.0 else 1.0
-            return h_score, v_score
-
-        def compute_outside_mask_change(original, candidate, mask_img):
-            """Detect if AI modified pixels outside the mask. Returns change ratio (lower = better)."""
-            o = np.array(original, dtype=np.float32)
-            c = np.array(candidate, dtype=np.float32)
-            m = np.array(mask_img, dtype=np.float32) / 255.0
-            outside = (1.0 - m)
-            if outside.ndim == 2:
-                outside = outside[:, :, np.newaxis]
-            diff = np.abs(o - c) * outside
-            return np.mean(diff)
-
-        def qa_accept(score, outside_change, overall_orig):
-            """QA: accept candidates better than original + within outside-mask limit."""
-            if score <= overall_orig:
-                return False, f"score {score:.3f} <= original {overall_orig:.3f}"
-            if outside_change > outside_change_max:
-                return False, f"outside-mask {outside_change:.1f} > {outside_change_max}"
-            return True, "passed"
-
-        # 5. PRE-CHECK: Skip AI if already seamless
-        h_score_orig, v_score_orig = compute_directional_scores(img_resized)
-        overall_orig = (h_score_orig + v_score_orig) / 2.0
-        print(f"  [Make Seamless] Pre-check: H={h_score_orig:.3f} V={v_score_orig:.3f} Overall={overall_orig:.3f}")
-
-        SKIP_THRESHOLD = 0.92
-        need_h_fix = h_score_orig < SKIP_THRESHOLD
-        need_v_fix = v_score_orig < SKIP_THRESHOLD
-        ai_used = need_h_fix or need_v_fix
-
-        if not ai_used:
-            print("  [Make Seamless] Image is already seamless (both >= 0.92)! Skipping AI.")
-            fixed_tile = img_resized.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
-        else:
-            current_img = img_resized
-
-            # --- PASS 1: Horizontal Seam Fix (only if H seam failed) ---
-            if need_h_fix:
-                print(f"  [Make Seamless] Pass 1: Horizontal seam fix (H={h_score_orig:.3f} < {SKIP_THRESHOLD})...")
-                img_pass1_offset = ImageChops.offset(current_img, 0, y_offset)
-
-                mask_h = Image.new('L', (new_w, new_h), 0)
-                draw_h = ImageDraw.Draw(mask_h)
-                v_brush = max(4, int(new_h * (brush_pct / 100.0)))
-                draw_h.rectangle([0, y_offset - v_brush // 2, new_w, y_offset + v_brush // 2], fill=255)
-                mask_h = mask_h.filter(ImageFilter.GaussianBlur(radius=max(3, v_brush // 6)))
-                arr_h = np.array(mask_h, dtype=np.float32)
-                arr_h = np.clip(arr_h * 1.5, 0, 255).astype(np.uint8)
-                mask_h = Image.fromarray(arr_h)
-
-                print(f"    [{pattern_type}] Generating {num_candidates} candidates (brush={brush_pct}%, denoise={prompt_strength})...")
-                output_h = replicate.run(
-                    "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
-                    input={
-                        "model": "dev",
-                        "image": img_to_data_uri(img_pass1_offset),
-                        "mask": img_to_data_uri(mask_h),
-                        "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
-                        "prompt_strength": prompt_strength,
-                        "guidance_scale": 3.0,
-                        "num_outputs": num_candidates,
-                        "num_inference_steps": 30,
-                        "output_format": "png",
-                    }
-                )
-
-                # QA: Score candidates with strict thresholds
-                best_p1_img = None
-                best_p1_score = -1.0
-                for idx, out_url in enumerate(output_h if isinstance(output_h, list) else [output_h]):
-                    resp_h = http_requests.get(str(out_url), timeout=60)
-                    candidate = Image.open(BytesIO(resp_h.content)).convert('RGB')
-                    score = compute_seam_score(candidate)
-                    outside_change = compute_outside_mask_change(img_pass1_offset, candidate, mask_h)
-                    accepted, reason = qa_accept(score, outside_change, overall_orig)
-                    status = "" if accepted else f" [REJECTED: {reason}]"
-                    if accepted and score > best_p1_score:
-                        best_p1_score = score
-                        best_p1_img = candidate
-                    print(f"    P1 Candidate {idx+1}: score={score:.3f} outside={outside_change:.1f}{status}")
-
-                if best_p1_img is not None:
-                    print(f"  [Make Seamless] Pass 1 Best: {best_p1_score:.3f}")
-                    current_img = ImageChops.offset(best_p1_img, 0, -y_offset)
-                else:
-                    print("  [Make Seamless] Pass 1: All candidates rejected, keeping original")
-            else:
-                print(f"  [Make Seamless] Pass 1: SKIPPED (H={h_score_orig:.3f} >= {SKIP_THRESHOLD})")
-
-            # --- PASS 2: Vertical Seam Fix (only if V seam failed) ---
-            if need_v_fix:
-                print(f"  [Make Seamless] Pass 2: Vertical seam fix (V={v_score_orig:.3f} < {SKIP_THRESHOLD})...")
-                img_pass2_offset = ImageChops.offset(current_img, x_offset, 0)
-
-                mask_v = Image.new('L', (new_w, new_h), 0)
-                draw_v = ImageDraw.Draw(mask_v)
-                h_brush = max(4, int(new_w * (brush_pct / 100.0)))
-                draw_v.rectangle([x_offset - h_brush // 2, 0, x_offset + h_brush // 2, new_h], fill=255)
-                mask_v = mask_v.filter(ImageFilter.GaussianBlur(radius=max(3, h_brush // 6)))
-                arr_v = np.array(mask_v, dtype=np.float32)
-                arr_v = np.clip(arr_v * 1.5, 0, 255).astype(np.uint8)
-                mask_v = Image.fromarray(arr_v)
-
-                print(f"    [{pattern_type}] Generating {num_candidates} candidates (brush={brush_pct}%, denoise={prompt_strength})...")
-                output_v = replicate.run(
-                    "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
-                    input={
-                        "model": "dev",
-                        "image": img_to_data_uri(img_pass2_offset),
-                        "mask": img_to_data_uri(mask_v),
-                        "prompt": f"FSTL {description}, seamless repeating pattern, tileable",
-                        "prompt_strength": prompt_strength,
-                        "guidance_scale": 3.0,
-                        "num_outputs": num_candidates,
-                        "num_inference_steps": 30,
-                        "output_format": "png",
-                    }
-                )
-
-                # QA: Score candidates with strict thresholds
-                best_p2_img = None
-                best_p2_score = -1.0
-                for idx, out_url in enumerate(output_v if isinstance(output_v, list) else [output_v]):
-                    resp_v = http_requests.get(str(out_url), timeout=60)
-                    candidate = Image.open(BytesIO(resp_v.content)).convert('RGB')
-                    score = compute_seam_score(candidate)
-                    outside_change = compute_outside_mask_change(img_pass2_offset, candidate, mask_v)
-                    accepted, reason = qa_accept(score, outside_change, overall_orig)
-                    status = "" if accepted else f" [REJECTED: {reason}]"
-                    if accepted and score > best_p2_score:
-                        best_p2_score = score
-                        best_p2_img = candidate
-                    print(f"    P2 Candidate {idx+1}: score={score:.3f} outside={outside_change:.1f}{status}")
-
-                if best_p2_img is not None:
-                    print(f"  [Make Seamless] Pass 2 Best: {best_p2_score:.3f}")
-                    current_img = ImageChops.offset(best_p2_img, -x_offset, 0)
-                else:
-                    print("  [Make Seamless] Pass 2: All candidates rejected, keeping original")
-            else:
-                print(f"  [Make Seamless] Pass 2: SKIPPED (V={v_score_orig:.3f} >= {SKIP_THRESHOLD})")
-
-            # Resize back to original dimensions
-            fixed_tile = current_img.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+            # --- PASS 1 ---
+            print(f"  [Make Seamless] --- PASS 1 (wide mask 22%, guidance=50) ---")
+            offset1 = ImageChops.offset(img, x_off, y_off)
+            mask1 = create_cross_mask(width, height, h_pct=22, v_pct=22, feather=True)
+            filled1 = inpaint_pass(offset1, mask1, pass_num=1, guidance=50, steps=40)
+            
+            if filled1.size != (width, height):
+                filled1 = filled1.resize((width, height), Image.Resampling.LANCZOS)
+                
+            tile1 = ImageChops.offset(filled1, -x_off, -y_off)
+            score1 = compute_seam_score(tile1)
+            print(f"  [Make Seamless] SCORE: Overall={score1['overall']:.3f}")
+            
+            if score1["overall"] > best_score["overall"]:
+                best_tile = tile1
+                best_score = score1
+                
+            # --- PASS 2 ---
+            if not score1["is_seamless"]:
+                print(f"  [Make Seamless] --- PASS 2 (narrow mask 10%, guidance=70) ---")
+                offset2 = ImageChops.offset(tile1, x_off, y_off)
+                mask2 = create_cross_mask(width, height, h_pct=10, v_pct=10, feather=True)
+                filled2 = inpaint_pass(offset2, mask2, pass_num=2, guidance=70, steps=45)
+                
+                if filled2.size != (width, height):
+                    filled2 = filled2.resize((width, height), Image.Resampling.LANCZOS)
+                    
+                tile2 = ImageChops.offset(filled2, -x_off, -y_off)
+                score2 = compute_seam_score(tile2)
+                print(f"  [Make Seamless] SCORE: Overall={score2['overall']:.3f}")
+                
+                if score2["overall"] > best_score["overall"]:
+                    best_tile = tile2
+                    best_score = score2
+        
+        fixed_tile = best_tile
 
         print("  [Make Seamless] Base tile completed!")
 
-        # 7. Save result
+        # 5. Save result
         result_name = f"seamless_tile_{uuid.uuid4().hex[:8]}.png"
         result_path = os.path.join(RESULTS_DIR, result_name)
         fixed_tile.save(result_path, 'PNG', quality=95)
 
-        # 8. Compute mathematical seam quality metrics
-        arr = np.array(fixed_tile.convert("RGB"), dtype=np.float32)
-        diff_x_internal = np.mean(np.abs(arr[:, 1:, :] - arr[:, :-1, :]))
-        diff_y_internal = np.mean(np.abs(arr[1:, :, :] - arr[:-1, :, :]))
-        seam_x = np.mean(np.abs(arr[:, 0, :] - arr[:, -1, :]))
-        seam_y = np.mean(np.abs(arr[0, :, :] - arr[-1, :, :]))
-        
-        ratio_x = seam_x / max(1e-5, diff_x_internal)
-        ratio_y = seam_y / max(1e-5, diff_y_internal)
-        
-        score_x = max(0.0, 1.0 - (ratio_x - 1.0) / 2.0) if ratio_x > 1.0 else 1.0
-        score_y = max(0.0, 1.0 - (ratio_y - 1.0) / 2.0) if ratio_y > 1.0 else 1.0
-        overall_score = (score_x + score_y) / 2.0
-        
+        # 6. Database updates and response
+        overall_score = best_score["overall"]
         score_pct = int(overall_score * 100)
         tile_seamless = 1 if overall_score >= 0.70 else 0
         resolution = 1 if (orig_w >= 1024 and orig_h >= 1024) else 0
@@ -1039,7 +1427,6 @@ def make_seamless():
             label = "D - Poor"
             note = f"Significant seam mismatch detected ({score_pct}% match)."
 
-        # 9. Update SQLite Database
         conn = db()
         new_url = f'/results/{result_name}'
         now = datetime.utcnow().isoformat()
@@ -1062,8 +1449,8 @@ def make_seamless():
         )
         
         # Increment metrics
-        metrics = conn.execute("SELECT versions, ai_generations FROM project_metrics WHERE project_id = ?", (project_id,)).fetchone()
-        if metrics:
+        metrics_db = conn.execute("SELECT versions, ai_generations FROM project_metrics WHERE project_id = ?", (project_id,)).fetchone()
+        if metrics_db:
             conn.execute(
                 "UPDATE project_metrics SET versions = versions + 1, ai_generations = ai_generations + 1 WHERE project_id = ?",
                 (project_id,)
@@ -1072,7 +1459,25 @@ def make_seamless():
         conn.commit()
         conn.close()
 
-        record_activity(project_id, 'generation', 1, 20)
+        # Log export
+        input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
+        log_export(
+            project_id=project_id,
+            filename=result_name,
+            input_filename=input_fn,
+            tool_type="Seamless Fix",
+            settings_dict={"input_image": input_fn or image_url}
+        )
+
+        user_id = data.get('userId') or data.get('user_id')
+        if user_id:
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                user_id = None
+
+        total_credits = sum(c[1] for c in replicate_calls) if replicate_calls else 20
+        record_activity(project_id, 'generation', 1, total_credits, user_id=user_id)
 
         return jsonify({
             'success': True,
@@ -1130,6 +1535,9 @@ def create_repeat_set():
             img = Image.open(BytesIO(resp.content))
         elif filename:
             filepath = os.path.join(UPLOAD_DIR, filename)
+            if not os.path.exists(filepath):
+                # Fallback: check results directory (for pipeline chaining)
+                filepath = os.path.join(RESULTS_DIR, filename)
             if not os.path.exists(filepath):
                 return jsonify({'error': 'File not found'}), 404
             img = Image.open(filepath)
@@ -1191,8 +1599,24 @@ def create_repeat_set():
 
         print(f"  [Repeat Set] Saved: {result_name} ({tiled.size[0]}x{tiled.size[1]}) @ {dpi} DPI as {save_format}")
 
-        project_id = data.get('projectId', 1)
+        project_id = int(data.get('projectId', 1))
         record_activity(project_id, 'export', 1, 50)
+
+        # Log export
+        input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
+        log_export(
+            project_id=project_id,
+            filename=result_name,
+            input_filename=input_fn,
+            tool_type="Repeat Set",
+            settings_dict={
+                "gridSize": grid_size,
+                "scale": scale,
+                "repeatType": repeat_type,
+                "dpi": dpi,
+                "format": save_format
+            }
+        )
 
         return jsonify({
             'success': True,
@@ -1215,10 +1639,12 @@ def vectorize_image():
     Vectorizes a raster image to SVG.
     - engine='local': Uses vtracer (Rust-based, multi-color, runs locally)
     - engine='api': Uses recraft-ai/recraft-vectorize on Replicate ($0.01/run)
-    Expects JSON: { filename, engine, numColors, removeBg, projectId }
+    Expects JSON: { filename, engine, numColors, removeBg, projectId, userId }
     """
     import requests as http_requests
     from io import BytesIO
+    import time
+    import base64
 
     data = request.get_json()
     filename = data.get('filename', '')
@@ -1226,6 +1652,7 @@ def vectorize_image():
     engine = data.get('engine', 'local')
     num_colors = int(data.get('numColors', 32))
     remove_bg = data.get('removeBg', False)
+    project_id = int(data.get('projectId', 1))
 
     # Resolve filepath from filename or imageUrl
     filepath = None
@@ -1249,6 +1676,7 @@ def vectorize_image():
     else:
         return jsonify({'error': 'Provide either filename or imageUrl'}), 400
 
+    credits_used = 5  # local engine default
     try:
         if engine == 'api':
             # ---- Recraft AI Vectorize (Replicate) ----
@@ -1259,10 +1687,15 @@ def vectorize_image():
                 mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"
                 data_uri = f"data:{mime_type};base64,{encoded_string}"
 
+            start_time = time.time()
             output = replicate.run(
                 "recraft-ai/recraft-vectorize",
                 input={"image": data_uri}
             )
+            duration = time.time() - start_time
+            credits_used = 100  # Recraft API / Vectorize Replicate flat
+            cost_usd = duration * 0.00115  # standard GPU-based logging estimation
+            log_replicate_call(project_id, "recraft-ai/recraft-vectorize", duration, credits_used, cost_usd)
 
             # Download the SVG result
             svg_url = str(output.url) if hasattr(output, 'url') else str(output)
@@ -1326,11 +1759,32 @@ def vectorize_image():
 
             # Cleanup temp file
             os.remove(tmp_path)
+            credits_used = 5  # CPU edits (local PIL fixes) flat
 
             print(f"  [Vectorize] vtracer done! Saved: {result_name} ({os.path.getsize(result_path) // 1024}KB)")
 
-        project_id = data.get('projectId', 1)
-        record_activity(project_id, 'generation', 1, 15)
+        user_id = data.get('userId') or data.get('user_id')
+        if user_id:
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                user_id = None
+
+        record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
+
+        # Log export
+        input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
+        log_export(
+            project_id=project_id,
+            filename=result_name,
+            input_filename=input_fn,
+            tool_type="Vectorize",
+            settings_dict={
+                "engine": engine,
+                "numColors": num_colors,
+                "removeBg": remove_bg
+            }
+        )
 
         return jsonify({
             'success': True,
@@ -1361,6 +1815,7 @@ def upscale():
     try:
         import base64
         import uuid
+        import time
         
         print(f"  [Upscale] Processing {filename} with google/upscaler ({upscale_factor})...")
         
@@ -1370,6 +1825,7 @@ def upscale():
             mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"
             data_uri = f"data:{mime_type};base64,{encoded_string}"
 
+        start_time = time.time()
         output = replicate.run(
             "google/upscaler",
             input={
@@ -1377,6 +1833,19 @@ def upscale():
                 "upscale_factor": upscale_factor
             }
         )
+        duration = time.time() - start_time
+        credits_used = max(10, int(round(duration * 12)))
+        cost_usd = duration * 0.00115
+
+        project_id = int(data.get('projectId', 1))
+        user_id = data.get('userId') or data.get('user_id')
+        if user_id:
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                user_id = None
+
+        log_replicate_call(project_id, "google/upscaler", duration, credits_used, cost_usd)
 
         result_name = f"upscale_{uuid.uuid4().hex[:8]}.png"
         result_path = os.path.join(RESULTS_DIR, result_name)
@@ -1392,8 +1861,18 @@ def upscale():
             with open(result_path, "wb") as file:
                 file.write(resp.content)
 
-        project_id = data.get('projectId', 1)
-        record_activity(project_id, 'generation', 1, 30)
+        record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
+
+        # Log export
+        log_export(
+            project_id=project_id,
+            filename=result_name,
+            input_filename=filename,
+            tool_type="Super Resolution",
+            settings_dict={
+                "upscaleFactor": upscale_factor
+            }
+        )
 
         return jsonify({
             'success': True,
@@ -1509,61 +1988,86 @@ def format_file_size(size_bytes):
 @app.route('/api/exports')
 def list_exports():
     """
-    Returns a list of all exported files in the results directory,
-    sorted by newest first. Includes thumbnails, file size, and type.
+    Returns a list of all logged exports from the database,
+    sorted by newest first. Includes resolved input urls, tools,
+    settings, pipeline logs, file size, type, etc.
     """
     try:
-        if not os.path.exists(RESULTS_DIR):
-            return jsonify({'success': True, 'exports': []})
-
+        conn = db()
+        # Retrieve all exports from SQLite database
+        rows = conn.execute("SELECT * FROM exports ORDER BY created_at DESC").fetchall()
+        conn.close()
+        
         files = []
-        skip_prefixes = ('mask_', 'test_', 'omnisvg_', 'thumb_', 'prev_')
-        for filename in os.listdir(RESULTS_DIR):
+        for row in rows:
+            filename = row['filename']
             filepath = os.path.join(RESULTS_DIR, filename)
+            
+            # Extract extension and file size
+            ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+            is_vector = ext == 'svg'
+            
             if os.path.isfile(filepath):
-                if filename.lower().startswith(skip_prefixes):
-                    continue
-                
-                ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-                if ext not in ('png', 'jpg', 'jpeg', 'svg', 'tiff'):
-                    continue
-
-                is_vector = ext == 'svg'
                 file_size = os.path.getsize(filepath)
                 mtime = os.path.getmtime(filepath)
+            else:
+                file_size = 0
+                mtime = iso_to_epoch(row['created_at'])
                 
-                # Generate compressed preview for raster images
-                if is_vector:
-                    preview_url = f'/results/{filename}'
-                else:
-                    preview_url = get_preview(filename)
-
-                files.append({
-                    'id': filename,
-                    'imageUrl': f'/results/{filename}',
-                    'previewUrl': preview_url,
-                    'type': 'vector' if is_vector else 'image',
-                    'format': ext.upper(),
-                    'size': format_file_size(file_size),
-                    'sizeBytes': file_size,
-                    'timestamp': mtime
-                })
-        
-        files.sort(key=lambda x: x['timestamp'], reverse=True)
-        
+            # Generate preview url
+            if is_vector:
+                preview_url = f'/results/{filename}'
+            else:
+                preview_url = get_preview(filename)
+                
+            # Resolve settings and pipeline steps
+            settings = {}
+            if row['settings_json']:
+                try:
+                    settings = json.loads(row['settings_json'])
+                except Exception:
+                    pass
+                    
+            pipeline_steps = None
+            if row['pipeline_steps_json']:
+                try:
+                    pipeline_steps = json.loads(row['pipeline_steps_json'])
+                except Exception:
+                    pass
+            
+            files.append({
+                'id': filename,
+                'projectId': row['project_id'],
+                'filename': filename,
+                'imageUrl': f'/results/{filename}',
+                'previewUrl': preview_url,
+                'type': 'vector' if is_vector else 'image',
+                'format': ext.upper(),
+                'size': format_file_size(file_size),
+                'sizeBytes': file_size,
+                'timestamp': mtime,
+                'createdAt': row['created_at'],
+                'inputFilename': row['input_filename'],
+                'inputUrl': resolve_input_url(row['input_filename']),
+                'toolType': row['tool_type'],
+                'settings': settings,
+                'pipelineRunId': row['pipeline_run_id'],
+                'pipelineSteps': pipeline_steps
+            })
+            
         return jsonify({'success': True, 'exports': files})
     except Exception as e:
-        print(f"  [Exports] Error reading results directory: {e}")
+        print(f"  [Exports] Error loading exports: {e}")
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/exports', methods=['DELETE'])
 def delete_exports():
     """
-    Deletes one or more export files from the results directory.
+    Deletes one or more export files from the results directory and the database.
     Expects JSON: { filenames: ['file1.png', 'file2.png'] }
     """
-    data = request.get_json()
+    data = request.get_json() or {}
     filenames = data.get('filenames', [])
     
     if not filenames:
@@ -1571,19 +2075,40 @@ def delete_exports():
 
     deleted = []
     errors = []
-    for filename in filenames:
-        # Sanitize: prevent path traversal
-        safe_name = os.path.basename(filename)
-        filepath = os.path.join(RESULTS_DIR, safe_name)
-        if os.path.isfile(filepath):
-            try:
-                os.remove(filepath)
-                deleted.append(safe_name)
-                print(f"  [Exports] Deleted: {safe_name}")
-            except Exception as e:
-                errors.append(f"{safe_name}: {str(e)}")
-        else:
-            errors.append(f"{safe_name}: not found")
+    
+    with db_lock:
+        conn = db()
+        try:
+            for filename in filenames:
+                # Sanitize to avoid directory traversal
+                safe_name = os.path.basename(filename)
+                filepath = os.path.join(RESULTS_DIR, safe_name)
+                
+                db_exists = conn.execute("SELECT 1 FROM exports WHERE filename = ?", (safe_name,)).fetchone()
+                disk_exists = os.path.isfile(filepath)
+                
+                if db_exists or disk_exists:
+                    try:
+                        if disk_exists:
+                            os.remove(filepath)
+                        # Also check if there is a preview cached, and delete it
+                        preview_name = f"prev_{safe_name.rsplit('.', 1)[0]}.jpg"
+                        preview_path = os.path.join(PREVIEWS_DIR, preview_name)
+                        if os.path.isfile(preview_path):
+                            os.remove(preview_path)
+                            
+                        conn.execute("DELETE FROM exports WHERE filename = ?", (safe_name,))
+                        deleted.append(safe_name)
+                        print(f"  [Exports] Deleted: {safe_name}")
+                    except Exception as e:
+                        errors.append(f"{safe_name}: {str(e)}")
+                else:
+                    errors.append(f"{safe_name}: not found")
+            conn.commit()
+        except Exception as e:
+            errors.append(f"DB Error: {str(e)}")
+        finally:
+            conn.close()
 
     return jsonify({
         'success': True,
@@ -1701,8 +2226,12 @@ def create_pipeline_run():
 @app.route('/api/pipeline-runs/<int:run_id>', methods=['PATCH'])
 def update_pipeline_run(run_id):
     """Update a pipeline run's status and results."""
-    data = request.get_json()
+    data = request.get_json() or {}
     conn = db()
+    
+    # Fetch run details before updating
+    run = conn.execute("SELECT * FROM pipeline_runs WHERE id = ?", (run_id,)).fetchone()
+    
     sets = []
     vals = []
     if 'status' in data:
@@ -1719,6 +2248,63 @@ def update_pipeline_run(run_id):
         conn.execute(f"UPDATE pipeline_runs SET {', '.join(sets)} WHERE id = ?", vals)
         conn.commit()
     conn.close()
+    
+    # If run has successfully completed, capture the final output and initial input, plus full pipeline steps logs
+    if run and data.get('status') == 'completed':
+        project_id = run['project_id']
+        
+        # Extract initial input from settings or steps
+        initial_input = None
+        try:
+            settings_dict = json.loads(run['settings_json'])
+            initial_input = settings_dict.get('inputImage') or settings_dict.get('filename') or settings_dict.get('imageUrl')
+        except Exception:
+            pass
+            
+        if not initial_input:
+            try:
+                steps_list = json.loads(run['steps_json'])
+                if steps_list and len(steps_list) > 0:
+                    initial_input = steps_list[0].get('inputImage') or steps_list[0].get('filename')
+            except Exception:
+                pass
+                
+        # Extract final output from results
+        final_output = None
+        results_list = data.get('results') or []
+        if results_list:
+            last_result = results_list[-1]
+            if isinstance(last_result, dict):
+                final_output = last_result.get('url') or last_result.get('resultUrl') or last_result.get('mockupUrl')
+            elif isinstance(last_result, str):
+                final_output = last_result
+                
+        if final_output:
+            final_filename = final_output.split('/')[-1] if '/' in final_output else final_output
+            input_fn = initial_input.split('/')[-1] if (initial_input and '/' in initial_input) else initial_input
+            
+            settings_dict = {}
+            try:
+                settings_dict = json.loads(run['settings_json'])
+            except Exception:
+                pass
+                
+            steps_list = []
+            try:
+                steps_list = json.loads(run['steps_json'])
+            except Exception:
+                pass
+                
+            log_export(
+                project_id=project_id,
+                filename=final_filename,
+                input_filename=input_fn,
+                tool_type="Pipeline",
+                settings_dict=settings_dict,
+                pipeline_run_id=run_id,
+                pipeline_steps_list=steps_list
+            )
+            
     return jsonify({'success': True})
 
 
@@ -1795,6 +2381,406 @@ def delete_workflow(wf_id):
     conn.commit()
     conn.close()
     return jsonify({'success': True})
+
+
+# --------------- Generate Mockup (Style Transfer) ---------------
+@app.route('/api/generate-mockup', methods=['POST'])
+def generate_mockup():
+    """
+    Uses fofr/style-transfer on Replicate to transfer a pattern/print onto a product
+    template photo.
+    Expects JSON: { patternFilename, patternUrl, productType, category, projectId }
+    """
+    import requests as http_requests
+    import time
+
+    data = request.get_json()
+    pattern_filename = data.get('patternFilename', '')
+    pattern_url = data.get('patternUrl', '')
+    product_type = data.get('productType', '')
+    category = data.get('category', '')
+    project_id = int(data.get('projectId', 1))
+
+    if not product_type:
+        return jsonify({'error': 'productType is required'}), 400
+
+    if not pattern_filename and not pattern_url:
+        return jsonify({'error': 'patternFilename or patternUrl is required'}), 400
+
+    style_image_file = None
+    content_image_file = None
+    try:
+        # 1. Prepare style_image
+        style_image_input = None
+        if pattern_filename:
+            filepath = os.path.join(UPLOAD_DIR, pattern_filename)
+            if not os.path.exists(filepath):
+                return jsonify({'error': 'Pattern file not found'}), 404
+            style_image_file = open(filepath, 'rb')
+            style_image_input = style_image_file
+        elif pattern_url and pattern_url.startswith('http'):
+            style_image_input = pattern_url
+        else:
+            return jsonify({'error': 'Provide either patternFilename or patternUrl'}), 400
+
+        # 2. Load the product template image
+        product_template_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'public', 'products', f'{product_type}.png'
+        )
+        if not os.path.exists(product_template_path):
+            return jsonify({'error': f'Product template not found for: {product_type}'}), 404
+
+        content_image_file = open(product_template_path, 'rb')
+
+        # 3. Call fofr/style-transfer with retry logic
+        print(f"  [Generate Mockup] Running style-transfer for product '{product_type}'...")
+        result_url = None
+        credits_used = 0
+        for attempt in range(3):
+            try:
+                if style_image_file:
+                    style_image_file.seek(0)
+                content_image_file.seek(0)
+                t0 = time.time()
+                output = replicate.run(
+                    'fofr/style-transfer:f1023890703bc0a5a3a2c21b5e498833be5f6ef6e70e9daf6b9b3a4fd8309cf0',
+                    input={
+                        'style_image': style_image_input,
+                        'content_image': content_image_file,
+                        'style_strength': 0.75,
+                        'output_quality': 90,
+                    }
+                )
+                duration = time.time() - t0
+                credits_used = max(10, int(round(duration * 12)))
+                cost_usd = duration * 0.00115
+                log_replicate_call(project_id, 'fofr/style-transfer', duration, credits_used, cost_usd)
+                
+                result_url = str(output[0].url) if isinstance(output, list) and len(output) > 0 else str(output)
+                print(f"  [Generate Mockup] Style transfer done: {result_url[:80]}...")
+                break
+            except Exception as e:
+                print(f"  [Generate Mockup] Attempt {attempt+1}/3 failed: {e}")
+                if attempt < 2:
+                    time.sleep((attempt + 1) * 10)
+                else:
+                    raise
+
+        # 4. Download and save the result
+        resp = http_requests.get(result_url, timeout=60)
+        mockup_name = f"mockup_{uuid.uuid4().hex[:8]}.png"
+        mockup_path = os.path.join(RESULTS_DIR, mockup_name)
+        with open(mockup_path, 'wb') as f:
+            f.write(resp.content)
+        print(f"  [Generate Mockup] Saved mockup: {mockup_name}")
+
+        user_id = data.get('userId') or data.get('user_id')
+        if user_id:
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                user_id = None
+
+        record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
+
+        # Log export
+        input_fn = pattern_filename if pattern_filename else (pattern_url.split('/')[-1] if pattern_url else None)
+        log_export(
+            project_id=project_id,
+            filename=mockup_name,
+            input_filename=input_fn,
+            tool_type="Mappings",
+            settings_dict={
+                "productType": product_type,
+                "category": category
+            }
+        )
+
+        return jsonify({
+            'success': True,
+            'mockupUrl': f'/results/{mockup_name}',
+            'productType': product_type,
+        })
+
+    except Exception as e:
+        print(f"  [Generate Mockup] Error: {e}")
+        return jsonify({'error': f'Failed to generate mockup: {str(e)}'}), 500
+    finally:
+        if style_image_file:
+            style_image_file.close()
+        if content_image_file:
+            content_image_file.close()
+
+
+# --------------- Generate Mockups Batch ---------------
+@app.route('/api/generate-mockups-batch', methods=['POST'])
+def generate_mockups_batch():
+    """
+    Batch version of generate-mockup. Transfers a pattern onto multiple product
+    templates sequentially.
+    Expects JSON: { patternFilename, products, category, projectId }
+    """
+    import requests as http_requests
+    import time
+
+    data = request.get_json()
+    pattern_filename = data.get('patternFilename', '')
+    products = data.get('products', [])
+    category = data.get('category', '')
+    project_id = int(data.get('projectId', 1))
+
+    if not pattern_filename:
+        return jsonify({'error': 'patternFilename is required'}), 400
+
+    if not products or not isinstance(products, list):
+        return jsonify({'error': 'products must be a non-empty list'}), 400
+
+    pattern_image_file = None
+    try:
+        # 1. Open the pattern image once
+        filepath = os.path.join(UPLOAD_DIR, pattern_filename)
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'Pattern file not found'}), 404
+
+        pattern_image_file = open(filepath, 'rb')
+
+        # 2. Process each product
+        mockups = []
+        errors = []
+        total_credits = 0
+        for idx, product_type in enumerate(products):
+            content_image_file = None
+            try:
+                print(f"  [Batch Mockup] Processing product {idx+1}/{len(products)}: {product_type}")
+
+                # Load product template
+                product_template_path = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    'public', 'products', f'{product_type}.png'
+                )
+                if not os.path.exists(product_template_path):
+                    errors.append({'productType': product_type, 'error': f'Template not found for: {product_type}'})
+                    continue
+
+                content_image_file = open(product_template_path, 'rb')
+
+                # Call style-transfer with retry
+                result_url = None
+                for attempt in range(3):
+                    try:
+                        pattern_image_file.seek(0)
+                        content_image_file.seek(0)
+                        t0 = time.time()
+                        output = replicate.run(
+                            'fofr/style-transfer:f1023890703bc0a5a3a2c21b5e498833be5f6ef6e70e9daf6b9b3a4fd8309cf0',
+                            input={
+                                'style_image': pattern_image_file,
+                                'content_image': content_image_file,
+                                'style_strength': 0.75,
+                                'output_quality': 90,
+                            }
+                        )
+                        duration = time.time() - t0
+                        credits_used = max(10, int(round(duration * 12)))
+                        cost_usd = duration * 0.00115
+                        log_replicate_call(project_id, 'fofr/style-transfer', duration, credits_used, cost_usd)
+                        total_credits += credits_used
+
+                        result_url = str(output[0].url) if isinstance(output, list) and len(output) > 0 else str(output)
+                        print(f"  [Batch Mockup] Style transfer done for {product_type}: {result_url[:80]}...")
+                        break
+                    except Exception as e:
+                        print(f"  [Batch Mockup] Attempt {attempt+1}/3 for {product_type} failed: {e}")
+                        if attempt < 2:
+                            time.sleep((attempt + 1) * 10)
+                        else:
+                            raise
+
+                # Download and save
+                resp = http_requests.get(result_url, timeout=60)
+                mockup_name = f"mockup_{uuid.uuid4().hex[:8]}.png"
+                mockup_path = os.path.join(RESULTS_DIR, mockup_name)
+                with open(mockup_path, 'wb') as f:
+                    f.write(resp.content)
+                print(f"  [Batch Mockup] Saved mockup: {mockup_name}")
+
+                mockups.append({
+                    'productType': product_type,
+                    'mockupUrl': f'/results/{mockup_name}',
+                })
+
+                # Rate-limit delay between requests
+                if idx < len(products) - 1:
+                    time.sleep(2)
+
+            except Exception as e:
+                print(f"  [Batch Mockup] Error for {product_type}: {e}")
+                errors.append({'productType': product_type, 'error': str(e)})
+            finally:
+                if content_image_file:
+                    content_image_file.close()
+
+        if mockups:
+            user_id = data.get('userId') or data.get('user_id')
+            if user_id:
+                try:
+                    user_id = int(user_id)
+                except ValueError:
+                    user_id = None
+            record_activity(project_id, 'generation', len(mockups), total_credits, user_id=user_id)
+
+            # Log each mockup in the batch
+            for m in mockups:
+                mockup_fn = m['mockupUrl'].split('/')[-1]
+                log_export(
+                    project_id=project_id,
+                    filename=mockup_fn,
+                    input_filename=pattern_filename,
+                    tool_type="Mappings",
+                    settings_dict={
+                        "productType": m['productType'],
+                        "category": category,
+                        "batch": True
+                    }
+                )
+
+        return jsonify({
+            'success': True,
+            'mockups': mockups,
+            'errors': errors,
+        })
+
+    except Exception as e:
+        print(f"  [Batch Mockup] Error: {e}")
+        return jsonify({'error': f'Failed to generate batch mockups: {str(e)}'}), 500
+    finally:
+        if pattern_image_file:
+            pattern_image_file.close()
+
+
+# --------------- Authentication & Administrator Endpoints ---------------
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.get_json() or {}
+    email = data.get('email')
+    password = data.get('password')
+    
+    if not email or not password:
+        return jsonify({'success': False, 'error': 'Email and password are required'}), 400
+        
+    conn = db()
+    try:
+        user_row = conn.execute("SELECT * FROM users WHERE email = ?", (email.strip(),)).fetchone()
+        if user_row:
+            user = dict(user_row)
+            if user['password'] == password:
+                # Resolve resetDays
+                try:
+                    reset_at = datetime.fromisoformat(user["reset_at"])
+                    reset_days = max(0, (reset_at.date() - datetime.utcnow().date()).days)
+                except Exception:
+                    reset_days = 30
+                    
+                user_payload = {
+                    "id": user["id"],
+                    "email": user["email"],
+                    "role": user["role"],
+                    "name": user["name"],
+                    "initials": user["initials"],
+                    "plan": user["plan"],
+                    "creditsUsed": user["credits_used"],
+                    "creditsLimit": user["credits_limit"],
+                    "resetDays": reset_days,
+                }
+                return jsonify({'success': True, 'user': user_payload})
+        return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
+    except Exception as e:
+        print(f"Error during login: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/admin/logs', methods=['GET'])
+def admin_logs():
+    conn = db()
+    try:
+        replicate_logs_rows = conn.execute("SELECT * FROM replicate_logs ORDER BY id DESC").fetchall()
+        exports_rows = conn.execute("SELECT * FROM exports ORDER BY id DESC").fetchall()
+        
+        replicate_logs = rows_to_dicts(replicate_logs_rows)
+        exports = rows_to_dicts(exports_rows)
+        
+        return jsonify({
+            'success': True,
+            'replicateLogs': replicate_logs,
+            'exports': exports
+        })
+    except Exception as e:
+        print(f"Error fetching admin logs: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/admin/users', methods=['GET'])
+def admin_users():
+    conn = db()
+    try:
+        users_rows = conn.execute("SELECT * FROM users ORDER BY id").fetchall()
+        users = []
+        for row in users_rows:
+            u = dict(row)
+            try:
+                reset_at = datetime.fromisoformat(u["reset_at"])
+                reset_days = max(0, (reset_at.date() - datetime.utcnow().date()).days)
+            except Exception:
+                reset_days = 30
+            users.append({
+                "id": u["id"],
+                "email": u["email"],
+                "name": u["name"],
+                "initials": u["initials"],
+                "role": u["role"],
+                "plan": u["plan"],
+                "creditsUsed": u["credits_used"],
+                "creditsLimit": u["credits_limit"],
+                "resetDays": reset_days
+            })
+        return jsonify({'success': True, 'users': users})
+    except Exception as e:
+        print(f"Error fetching admin users: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/admin/adjust-credits', methods=['POST'])
+def admin_adjust_credits():
+    data = request.get_json() or {}
+    user_id = data.get('userId')
+    credits_limit = data.get('creditsLimit')
+    
+    if user_id is None or credits_limit is None:
+        return jsonify({'success': False, 'error': 'userId and creditsLimit are required'}), 400
+        
+    try:
+        user_id = int(user_id)
+        credits_limit = int(credits_limit)
+    except ValueError:
+        return jsonify({'success': False, 'error': 'userId and creditsLimit must be integers'}), 400
+        
+    conn = db()
+    try:
+        cur = conn.execute("UPDATE users SET credits_limit = ? WHERE id = ?", (credits_limit, user_id))
+        conn.commit()
+        if cur.rowcount == 0:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        return jsonify({'success': True, 'message': 'Credits limit updated successfully'})
+    except Exception as e:
+        print(f"Error adjusting credits: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
 
 
 # --------------- Health check ---------------
