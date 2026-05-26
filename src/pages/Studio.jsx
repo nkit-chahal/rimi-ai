@@ -134,6 +134,56 @@ export default function Studio({ onBack, currentUser, onLogout }) {
   const canvasRef = useRef(null);
   const hasLoadedControls = useRef(false);
 
+  const [bgTasks, setBgTasks] = useState([]);
+  const [showBgTasksDropdown, setShowBgTasksDropdown] = useState(false);
+
+  const addBgTask = (type, label, filename, triggerFn) => {
+    const taskId = Date.now().toString();
+    const newTask = {
+      id: taskId,
+      type,
+      label,
+      status: 'running',
+      progress: 5,
+      filename: filename || 'design_input.png',
+      resultUrl: null,
+      resultUrls: null,
+      error: null,
+      createdAt: new Date().toLocaleTimeString(),
+    };
+    
+    setBgTasks(prev => [newTask, ...prev]);
+
+    // Slow and premium progress bar simulation for AI timing
+    let progressVal = 5;
+    const interval = setInterval(() => {
+      progressVal = Math.min(95, progressVal + Math.floor(Math.random() * 6) + 2);
+      setBgTasks(prev => prev.map(t => t.id === taskId ? { ...t, progress: progressVal } : t));
+    }, 1200);
+
+    // Execute the Promise task in background
+    triggerFn()
+      .then((result) => {
+        clearInterval(interval);
+        setBgTasks(prev => prev.map(t => t.id === taskId ? { 
+          ...t, 
+          status: 'completed', 
+          progress: 100, 
+          resultUrl: result.url,
+          resultUrls: result.urls || null
+        } : t));
+      })
+      .catch((err) => {
+        clearInterval(interval);
+        setBgTasks(prev => prev.map(t => t.id === taskId ? { 
+          ...t, 
+          status: 'failed', 
+          progress: 0, 
+          error: err.message || 'Generation failed' 
+        } : t));
+      });
+  };
+
   const user = currentUser || state.user;
 
   // ===== ADMIN WORKSPACE STATE =====
@@ -293,7 +343,8 @@ export default function Studio({ onBack, currentUser, onLogout }) {
     setIsMappingGenerating(true);
     setMappingResults([]);
     setError('');
-    try {
+
+    const trigger = async () => {
       const r = await fetch(`${API}/api/generate-mockups-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -308,14 +359,15 @@ export default function Studio({ onBack, currentUser, onLogout }) {
       if (d.success && d.mockups) {
         setMappingResults(d.mockups);
         setMappingStep(4);
+        setIsMappingGenerating(false);
+        return { url: d.mockups[0]?.mockupUrl, urls: d.mockups.map(m => m.mockupUrl) };
       } else {
-        setError(d.error || 'Failed to generate mockups');
+        setIsMappingGenerating(false);
+        throw new Error(d.error || 'Failed to generate mockups');
       }
-    } catch (err) {
-      setError('Failed to connect to server: ' + err.message);
-    } finally {
-      setIsMappingGenerating(false);
-    }
+    };
+
+    addBgTask('mappings', `Apparel Mapping: ${mappingSelectedProducts.size} item(s)`, mappingPrint.filename, trigger);
   };
   // ===== END MAPPINGS =====
 
@@ -1153,20 +1205,25 @@ export default function Studio({ onBack, currentUser, onLogout }) {
     setIsEnh(true);
     setError('');
     setEnhUrl(null);
-    try {
+
+    const trigger = async () => {
       const r = await fetch(`${API}/api/extract-design`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, projectId: activeProject.id }) 
       });
       const d = await r.json();
-      if (d.success) setEnhUrl(d.resultUrls); // Now an array of URLs from SDXL
-      else setError(d.error);
-    } catch {
-      setError('Backend is not reachable. Start Flask on port 3001.');
-    } finally {
-      setIsEnh(false);
-    }
+      if (d.success) {
+        setEnhUrl(d.resultUrls);
+        setIsEnh(false);
+        return { url: d.resultUrls[0], urls: d.resultUrls };
+      } else {
+        setIsEnh(false);
+        throw new Error(d.error || 'Extraction failed');
+      }
+    };
+
+    addBgTask('pattern', 'Design Extraction', safeFilename || 'design.png', trigger);
   };
 
   const vectorize = async () => {
@@ -1188,16 +1245,26 @@ export default function Studio({ onBack, currentUser, onLogout }) {
     setIsVec(true);
     setError('');
     setVecUrl(null);
-    try {
-      const r = await fetch(`${API}/api/vectorize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, engine: vecEngine, numColors: vecColors, removeBg: vecIsolate, projectId: activeProject.id }) });
+
+    const trigger = async () => {
+      const r = await fetch(`${API}/api/vectorize`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, engine: vecEngine, numColors: vecColors, removeBg: vecIsolate, projectId: activeProject.id }) 
+      });
       const d = await r.json();
-      if (d.success) setVecUrl(`${API}${d.resultUrl}`);
-      else setError(d.error);
-    } catch {
-      setError('Backend is not reachable. Start Flask on port 3001.');
-    } finally {
-      setIsVec(false);
-    }
+      if (d.success) {
+        const fullUrl = `${API}${d.resultUrl}`;
+        setVecUrl(fullUrl);
+        setIsVec(false);
+        return { url: fullUrl };
+      } else {
+        setIsVec(false);
+        throw new Error(d.error || 'Vectorization failed');
+      }
+    };
+
+    addBgTask('vectorize', 'Bezier Vectorization', safeFilename || 'vector.png', trigger);
   };
 
   const upscale = async () => {
@@ -1208,20 +1275,26 @@ export default function Studio({ onBack, currentUser, onLogout }) {
     setIsUpscaling(true);
     setError('');
     setUpscaleUrl(null);
-    try {
+
+    const trigger = async () => {
       const r = await fetch(`${API}/api/upscale`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify({ filename: uploaded.filename, upscaleFactor, projectId: activeProject.id }) 
       });
       const d = await r.json();
-      if (d.success) setUpscaleUrl(`${API}${d.resultUrl}`);
-      else setError(d.error);
-    } catch {
-      setError('Backend is not reachable. Start Flask on port 3001.');
-    } finally {
-      setIsUpscaling(false);
-    }
+      if (d.success) {
+        const fullUrl = `${API}${d.resultUrl}`;
+        setUpscaleUrl(fullUrl);
+        setIsUpscaling(false);
+        return { url: fullUrl };
+      } else {
+        setIsUpscaling(false);
+        throw new Error(d.error || 'Upscaling failed');
+      }
+    };
+
+    addBgTask('upscale', `Super Resolution (${upscaleFactor})`, uploaded.filename, trigger);
   };
 
   const makeSeamless = async () => {
@@ -1242,7 +1315,8 @@ export default function Studio({ onBack, currentUser, onLogout }) {
     setIsSeamless(true);
     setError('');
     setSeamlessUrl(null);
-    try {
+
+    const trigger = async () => {
       const r = await fetch(`${API}/api/make-seamless`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
@@ -1256,14 +1330,18 @@ export default function Studio({ onBack, currentUser, onLogout }) {
       });
       const d = await r.json();
       if (d.success) {
-        setSeamlessUrl(`${API}${d.resultUrl}`);
+        const fullUrl = `${API}${d.resultUrl}`;
+        setSeamlessUrl(fullUrl);
         await loadStudioState(activeProject.id);
-      } else setError(d.error);
-    } catch {
-      setError('Backend is not reachable. Start Flask on port 3001.');
-    } finally {
-      setIsSeamless(false);
-    }
+        setIsSeamless(false);
+        return { url: fullUrl };
+      } else {
+        setIsSeamless(false);
+        throw new Error(d.error || 'Seamless generation failed');
+      }
+    };
+
+    addBgTask('seamless', 'Make Seamless Pattern', safeFilename || 'pattern.png', trigger);
   };
 
   const generateSeamless = async () => {
@@ -1275,7 +1353,8 @@ export default function Studio({ onBack, currentUser, onLogout }) {
     setError('');
     setSeamlessUrl(null);
     setSeamlessTiles([]);
-    try {
+
+    const trigger = async () => {
       const r = await fetch(`${API}/api/generate-seamless`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1291,16 +1370,21 @@ export default function Studio({ onBack, currentUser, onLogout }) {
       const d = await r.json();
       if (d.success) {
         setSeamlessTiles(d.tiles || []);
+        let bestUrl = '';
         if (d.bestUrl) {
-          setSeamlessUrl(`${API}${d.bestUrl}`);
+          bestUrl = `${API}${d.bestUrl}`;
+          setSeamlessUrl(bestUrl);
         }
         await loadStudioState(activeProject.id);
-      } else setError(d.error);
-    } catch {
-      setError('Backend is not reachable. Start Flask on port 3001.');
-    } finally {
-      setIsSeamless(false);
-    }
+        setIsSeamless(false);
+        return { url: bestUrl, urls: d.tiles ? d.tiles.map(t => `${API}${t}`) : null };
+      } else {
+        setIsSeamless(false);
+        throw new Error(d.error || 'Text-to-pattern failed');
+      }
+    };
+
+    addBgTask('seamless', `Text-to-Pattern: "${seamlessPrompt.substring(0, 20)}..."`, uploaded?.filename || 'text_input.png', trigger);
   };
 
   const toolLabel = {
@@ -2889,6 +2973,189 @@ export default function Studio({ onBack, currentUser, onLogout }) {
           </select>
           <div className="st-search"><I d="M21 21l-4.3-4.3M10 18a8 8 0 100-16 8 8 0 000 16z" s={16} /><input placeholder="Search projects, patterns, tools..." /><kbd>Ctrl K</kbd></div>
           <div className="st-user-actions">
+            {/* Background Tasks Tray Widget */}
+            <div className="st-bg-tasks-container" style={{ position: 'relative' }}>
+              <button 
+                className={`st-icon-btn ${bgTasks.some(t => t.status === 'running') ? 'active-pulse' : ''}`}
+                onClick={() => setShowBgTasksDropdown(!showBgTasksDropdown)}
+                title="AI Background Queue Manager"
+                style={{ 
+                  position: 'relative', 
+                  background: showBgTasksDropdown ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
+                  color: bgTasks.some(t => t.status === 'running') ? '#6366f1' : '#64748b'
+                }}
+              >
+                <I d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" s={18} />
+                {bgTasks.filter(t => t.status === 'running').length > 0 && (
+                  <span className="st-bg-tasks-badge" style={{
+                    position: 'absolute',
+                    top: '-2px',
+                    right: '-2px',
+                    background: '#6366f1',
+                    color: '#fff',
+                    borderRadius: '50%',
+                    width: '14px',
+                    height: '14px',
+                    fontSize: '8px',
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 6px rgba(99, 102, 241, 0.4)'
+                  }}>
+                    {bgTasks.filter(t => t.status === 'running').length}
+                  </span>
+                )}
+              </button>
+
+              {showBgTasksDropdown && (
+                <div 
+                  className="st-bg-tasks-dropdown st-glassmorphic-dropdown"
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: '0.5rem',
+                    width: '320px',
+                    background: 'rgba(255, 255, 255, 0.85)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.8)',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+                    padding: '0.85rem',
+                    zIndex: 9999,
+                    maxHeight: '400px',
+                    overflowY: 'auto'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.65rem' }}>
+                    <strong style={{ fontSize: '0.85rem', color: '#0f172a' }}>Background AI Queue</strong>
+                    <button 
+                      onClick={() => setBgTasks([])} 
+                      style={{ fontSize: '0.75rem', background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      Clear Queue
+                    </button>
+                  </div>
+
+                  {bgTasks.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '1.5rem', fontSize: '0.8rem', color: '#94a3b8' }}>
+                      No background tasks running. Your pattern extractions, vectorizations, and upscales will process here in real-time.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {bgTasks.map(t => (
+                        <div 
+                          key={t.id} 
+                          style={{ 
+                            background: '#fff', 
+                            border: '1px solid #f1f5f9', 
+                            borderRadius: '8px', 
+                            padding: '0.65rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.35rem'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1e293b' }}>{t.label}</span>
+                            <span style={{ 
+                              fontSize: '0.55rem', 
+                              fontWeight: 800, 
+                              padding: '2px 6px', 
+                              borderRadius: '4px',
+                              textTransform: 'uppercase',
+                              background: t.status === 'completed' ? '#dcfce7' : t.status === 'failed' ? '#fee2e2' : '#e0e7ff',
+                              color: t.status === 'completed' ? '#15803d' : t.status === 'failed' ? '#b91c1c' : '#4338ca',
+                            }}>
+                              {t.status}
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: '0.62rem', color: '#64748b', textAlign: 'left' }}>Input: {t.filename}</div>
+
+                          {t.status === 'running' && (
+                            <div style={{ width: '100%' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: '#6366f1', fontWeight: 700, marginBottom: '2px' }}>
+                                <span>Processing...</span>
+                                <span>{t.progress}%</span>
+                              </div>
+                              <div style={{ width: '100%', height: '4px', background: '#e2e8f0', borderRadius: '99px', overflow: 'hidden' }}>
+                                <div style={{ width: `${t.progress}%`, height: '100%', background: 'linear-gradient(90deg, #6366f1, #ec4899)', transition: 'width 0.4s ease' }} />
+                              </div>
+                            </div>
+                          )}
+
+                          {t.status === 'completed' && t.resultUrl && (
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '0.25rem', alignItems: 'center' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <img 
+                                  src={t.resultUrl.startsWith('http') ? t.resultUrl : `${API}${t.resultUrl}`} 
+                                  alt="Result" 
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                                />
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.35rem', flex: 1, justifyContent: 'flex-end' }}>
+                                <button 
+                                  onClick={() => {
+                                    setTool(t.type);
+                                    if (t.type === 'pattern') setEnhUrl(t.resultUrls || t.resultUrl);
+                                    if (t.type === 'seamless') setSeamlessUrl(t.resultUrl);
+                                    if (t.type === 'vectorize') setVecUrl(t.resultUrl);
+                                    if (t.type === 'upscale') setUpscaleUrl(t.resultUrl);
+                                    if (t.type === 'mappings') {
+                                      setMappingStep(4);
+                                      if (t.resultUrls) {
+                                        const recreatedMockups = t.resultUrls.map(url => ({ mockupUrl: url.replace(API, ''), productType: 'mockup' }));
+                                        setMappingResults(recreatedMockups);
+                                      }
+                                    }
+                                    setShowBgTasksDropdown(false);
+                                  }}
+                                  style={{ 
+                                    padding: '3px 8px', 
+                                    fontSize: '0.62rem', 
+                                    background: 'rgba(99, 102, 241, 0.08)', 
+                                    color: '#6366f1', 
+                                    border: 'none', 
+                                    borderRadius: '4px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  View
+                                </button>
+                                <a 
+                                  href={t.resultUrl.startsWith('http') ? t.resultUrl : `${API}${t.resultUrl}`}
+                                  download
+                                  onClick={(e) => forceDownload(e, t.resultUrl.startsWith('http') ? t.resultUrl : `${API}${t.resultUrl}`)}
+                                  style={{ 
+                                    padding: '3px 8px', 
+                                    fontSize: '0.62rem', 
+                                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
+                                    color: '#fff', 
+                                    borderRadius: '4px',
+                                    fontWeight: 700,
+                                    textDecoration: 'none',
+                                    textAlign: 'center'
+                                  }}
+                                >
+                                  Download
+                                </a>
+                              </div>
+                            </div>
+                          )}
+
+                          {t.status === 'failed' && (
+                            <span style={{ fontSize: '0.62rem', color: '#ef4444', fontWeight: 600 }}>Error: {t.error}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <button className="st-icon-btn"><I d="M18 8a6 6 0 00-12 0c0 7-3 7-3 7h18s-3 0-3-7M13.7 21a2 2 0 01-3.4 0" /></button>
             <button className="st-icon-btn"><I d="M9.1 9a3 3 0 115.8 1c0 2-3 2-3 4M12 17h.01" /></button>
             <div className="st-avatar">{user.initials}</div>
