@@ -3206,7 +3206,7 @@ export default function Studio({ onBack, currentUser, onLogout }) {
             </button>
           </div>
         </header>
-        <div className={`st-workspace ${tool === 'library' || tool === 'exports' || tool === 'mappings' || tool === 'admin' ? 'full-width' : ''}`}>
+        <div className={`st-workspace ${tool === 'library' || tool === 'exports' || tool === 'mappings' || tool.startsWith('admin') ? 'full-width' : ''}`}>
           <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
             <div className="st-page-head">
               <div>
@@ -3215,7 +3215,7 @@ export default function Studio({ onBack, currentUser, onLogout }) {
               </div>
             </div>
             {isLoadingState && <div className="st-error">Loading SQLite-backed studio state...</div>}
-            {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings') && (
+            {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && !tool.startsWith('admin')) && (
               <div
                 className={`st-upload ${isDrag ? 'dragging' : ''} ${preview ? 'has-image' : ''}`}
                 onClick={() => fileRef.current?.click()}
@@ -3235,7 +3235,7 @@ export default function Studio({ onBack, currentUser, onLogout }) {
             {error && <div className="st-error">{error}</div>}
 
           </main>
-          {tool !== 'library' && tool !== 'exports' && tool !== 'mappings' && (
+          {tool !== 'library' && tool !== 'exports' && tool !== 'mappings' && !tool.startsWith('admin') && (
             <aside className="st-right-panel">
               {tool === 'dashboard' ? (
                 <div className="st-pl-right">
