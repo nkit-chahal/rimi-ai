@@ -101,6 +101,18 @@ const NAV = [
   },
 ];
 
+const ADMIN_NAV = [
+  {
+    section: 'SYSTEM ADMINISTRATION',
+    items: [
+      { id: 'admin', label: 'System Overview', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
+      { id: 'admin-users', label: 'User Management', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
+      { id: 'admin-logs', label: 'Activity Logs', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
+      { id: 'admin-credits', label: 'Credits & Billing', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+    ],
+  },
+];
+
 const emptyState = {
   user: { name: '', initials: '', plan: '', creditsUsed: 0, creditsLimit: 1, resetDays: 0 },
   activeProject: { id: 1, name: 'Loading...', heroImageUrl: '/demo_floral.png' },
@@ -113,10 +125,11 @@ const emptyState = {
 };
 
 export default function Studio({ onBack, currentUser, onLogout }) {
-  const validTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'library', 'exports', 'admin'];
+  const validTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'library', 'exports', 'admin', 'admin-users', 'admin-logs', 'admin-credits'];
   const [tool, _setTool] = useState(() => {
     const hash = window.location.hash.replace('#', '');
-    return validTools.includes(hash) ? hash : 'pattern';
+    if (validTools.includes(hash)) return hash;
+    return currentUser?.role === 'admin' ? 'admin' : 'pattern';
   });
   const setTool = useCallback((t) => {
     _setTool(t);
@@ -1931,140 +1944,176 @@ export default function Studio({ onBack, currentUser, onLogout }) {
     { model: 'flux-dev-seamless (Seamless Outpaint)', duration: 45.0, credits: 60, timestamp: '2026-05-26 00:15:33' }
   ];
 
-  const renderAdminWorkspace = () => {
-    return (
-      <div className="admin-workspace-panel animate-fade-in">
-        <div className="admin-grid">
-          {/* Card 1: Credits Adjustment */}
-          <div className="admin-card glassmorphism-card">
-            <div className="admin-card-header">
-              <I d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z" s={20} />
-              <h3>AI Credits Adjustment</h3>
-            </div>
-            <form onSubmit={handleAdjustCredits} className="admin-form">
-              {creditFeedback && (
-                <div className="admin-feedback-badge">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                  </svg>
-                  <span>{creditFeedback}</span>
-                </div>
-              )}
-              <div className="admin-field">
-                <label>Select Organization / User</label>
-                <select 
-                  value={adminSelectedUser} 
-                  onChange={(e) => setAdminSelectedUser(e.target.value)}
-                  className="admin-select"
-                >
-                  <option value="business">Business Team (business@rimi.ai)</option>
-                  <option value="studioa">Design Studio A (studio-a@rimi.ai)</option>
-                  <option value="creative">Creative Agency (agency@rimi.ai)</option>
-                </select>
-              </div>
-
-              <div className="admin-user-info-bar">
-                <div>
-                  <strong>Current Limit:</strong> {adminUsers[adminSelectedUser].creditsLimit.toLocaleString()} credits
-                </div>
-                <div>
-                  <strong>Used:</strong> {adminUsers[adminSelectedUser].creditsUsed.toLocaleString()} credits ({Math.round((adminUsers[adminSelectedUser].creditsUsed/adminUsers[adminSelectedUser].creditsLimit)*100)}%)
-                </div>
-              </div>
-
-              <div className="admin-field">
-                <label>Adjust Credits Limit (Add or subtract)</label>
-                <div className="admin-input-group">
-                  <input 
-                    type="number" 
-                    value={creditAdjustmentAmount}
-                    onChange={(e) => setCreditAdjustmentAmount(e.target.value)}
-                    className="admin-input"
-                    placeholder="e.g. 5000"
-                  />
-                  <button type="submit" className="admin-btn-primary">
-                    Update Limit Instantly
-                  </button>
-                </div>
-              </div>
-            </form>
+  const renderAdminDashboard = () => (
+    <div className="admin-workspace-panel animate-fade-in">
+      <div className="admin-grid">
+        <div className="admin-card glassmorphism-card">
+          <div className="admin-card-header">
+            <I d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" s={20} />
+            <h3>System Overview</h3>
           </div>
-
-          {/* Card 2: Quick Metrics Overview */}
-          <div className="admin-card glassmorphism-card">
-            <div className="admin-card-header">
-              <I d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" s={20} />
-              <h3>System Overview</h3>
+          <div className="admin-overview-grid">
+            <div className="admin-overview-stat">
+              <span>Total Active Replicate Runs</span>
+              <strong>4,122 runs</strong>
             </div>
-            <div className="admin-overview-grid">
-              <div className="admin-overview-stat">
-                <span>Total Active Replicate Runs</span>
-                <strong>4,122 runs</strong>
-              </div>
-              <div className="admin-overview-stat">
-                <span>Average Generation Speed</span>
-                <strong>18.4s</strong>
-              </div>
-              <div className="admin-overview-stat">
-                <span>Replicate Spend (Today)</span>
-                <strong>$128.45</strong>
-              </div>
-              <div className="admin-overview-stat">
-                <span>Active WebSocket Nodes</span>
-                <strong>8 online</strong>
-              </div>
+            <div className="admin-overview-stat">
+              <span>Average Generation Speed</span>
+              <strong>18.4s</strong>
             </div>
-          </div>
-        </div>
-
-        {/* Replicate Logs Table */}
-        <div className="admin-card glassmorphism-card replicate-logs-section">
-          <div className="admin-card-header" style={{ justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <I d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" s={20} />
-              <h3>Replicate API Billing & Cost Analysis</h3>
+            <div className="admin-overview-stat">
+              <span>Replicate Spend (Today)</span>
+              <strong>$128.45</strong>
             </div>
-            <span className="admin-live-badge"><span className="pulse"></span> LIVE BILLING FEED</span>
-          </div>
-
-          <div className="admin-table-container">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>AI Model Name</th>
-                  <th>Execution Duration</th>
-                  <th>Credits Charged</th>
-                  <th>Replicate API Cost</th>
-                  <th>Timestamp</th>
-                </tr>
-              </thead>
-              <tbody>
-                {replicateLogs.map((log, index) => {
-                  const replicateCost = 0.00115 * log.duration;
-                  return (
-                    <tr key={index}>
-                      <td>
-                        <span className="model-tag">{log.model}</span>
-                      </td>
-                      <td>{log.duration.toFixed(1)}s</td>
-                      <td className="strong">{log.credits} credits</td>
-                      <td className="cost-tag replicate">${replicateCost.toFixed(5)}</td>
-                      <td className="time-tag">{log.timestamp}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="admin-overview-stat">
+              <span>Active WebSocket Nodes</span>
+              <strong>8 online</strong>
+            </div>
           </div>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+
+  const renderAdminUsers = () => (
+    <div className="admin-workspace-panel animate-fade-in">
+      <div className="admin-card glassmorphism-card replicate-logs-section">
+        <div className="admin-card-header">
+          <I d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" s={20} />
+          <h3>User Management</h3>
+        </div>
+        <div className="admin-table-container">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Organization / User Name</th>
+                <th>Plan Type</th>
+                <th>Credits Used</th>
+                <th>Credits Limit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(adminUsers).map(([key, u]) => (
+                <tr key={key}>
+                  <td className="strong">{u.name}</td>
+                  <td><span className="model-tag">{u.plan}</span></td>
+                  <td>{u.creditsUsed.toLocaleString()}</td>
+                  <td>{u.creditsLimit.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAdminLogs = () => (
+    <div className="admin-workspace-panel animate-fade-in">
+      <div className="admin-card glassmorphism-card replicate-logs-section">
+        <div className="admin-card-header" style={{ justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <I d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" s={20} />
+            <h3>Activity Logs (Replicate API Billing)</h3>
+          </div>
+          <span className="admin-live-badge"><span className="pulse"></span> LIVE BILLING FEED</span>
+        </div>
+        <div className="admin-table-container">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>AI Model Name</th>
+                <th>Execution Duration</th>
+                <th>Credits Charged</th>
+                <th>Replicate API Cost</th>
+                <th>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {replicateLogs.map((log, index) => {
+                const replicateCost = 0.00115 * log.duration;
+                return (
+                  <tr key={index}>
+                    <td>
+                      <span className="model-tag">{log.model}</span>
+                    </td>
+                    <td>{log.duration.toFixed(1)}s</td>
+                    <td className="strong">{log.credits} credits</td>
+                    <td className="cost-tag replicate">${replicateCost.toFixed(5)}</td>
+                    <td className="time-tag">{log.timestamp}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAdminCredits = () => (
+    <div className="admin-workspace-panel animate-fade-in">
+      <div className="admin-card glassmorphism-card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+        <div className="admin-card-header">
+          <I d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z" s={20} />
+          <h3>AI Credits Adjustment</h3>
+        </div>
+        <form onSubmit={handleAdjustCredits} className="admin-form">
+          {creditFeedback && (
+            <div className="admin-feedback-badge">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              <span>{creditFeedback}</span>
+            </div>
+          )}
+          <div className="admin-field">
+            <label>Select Organization / User</label>
+            <select 
+              value={adminSelectedUser} 
+              onChange={(e) => setAdminSelectedUser(e.target.value)}
+              className="admin-select"
+            >
+              <option value="business">Business Team (business@rimi.ai)</option>
+              <option value="studioa">Design Studio A (studio-a@rimi.ai)</option>
+              <option value="creative">Creative Agency (agency@rimi.ai)</option>
+            </select>
+          </div>
+          <div className="admin-user-info-bar">
+            <div>
+              <strong>Current Limit:</strong> {adminUsers[adminSelectedUser].creditsLimit.toLocaleString()} credits
+            </div>
+            <div>
+              <strong>Used:</strong> {adminUsers[adminSelectedUser].creditsUsed.toLocaleString()} credits ({Math.round((adminUsers[adminSelectedUser].creditsUsed/adminUsers[adminSelectedUser].creditsLimit)*100)}%)
+            </div>
+          </div>
+          <div className="admin-field">
+            <label>Adjust Credits Limit (Add or subtract)</label>
+            <div className="admin-input-group">
+              <input 
+                type="number" 
+                value={creditAdjustmentAmount}
+                onChange={(e) => setCreditAdjustmentAmount(e.target.value)}
+                className="admin-input"
+                placeholder="e.g. 5000"
+              />
+              <button type="submit" className="admin-btn-primary">
+                Update Limit Instantly
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
   // ===== END MAPPINGS RENDER =====
 
   const renderCanvas = () => {
-    if (tool === 'admin') return renderAdminWorkspace();
+    if (tool === 'admin') return renderAdminDashboard();
+    if (tool === 'admin-users') return renderAdminUsers();
+    if (tool === 'admin-logs') return renderAdminLogs();
+    if (tool === 'admin-credits') return renderAdminCredits();
     if (tool === 'mappings') return renderMappings();
     if (tool === 'dashboard') {
       return (
@@ -2924,7 +2973,7 @@ export default function Studio({ onBack, currentUser, onLogout }) {
       <aside className="st-sidebar">
         <div className="st-sidebar-top">
           <div className="st-logo" onClick={() => { setTool('dashboard'); setError(''); }} style={{ cursor: 'pointer' }}><span className="ln-logo-badge">RI</span> RIM AI</div>
-          {NAV.map((s) => (
+          {(user.role === 'admin' ? ADMIN_NAV : NAV).map((s) => (
             <div key={s.section || 'home'}>
               {s.section && <div className="st-nav-section">{s.section}</div>}
               {s.items.map((it) => (
@@ -2934,19 +2983,6 @@ export default function Studio({ onBack, currentUser, onLogout }) {
               ))}
             </div>
           ))}
-          
-          {user.role === 'admin' && (
-            <div>
-              <div className="st-nav-section">SYSTEM ADMINISTRATION</div>
-              <button 
-                className={`st-nav-item ${tool === 'admin' ? 'active' : ''}`} 
-                onClick={() => { setTool('admin'); setError(''); }}
-              >
-                <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" s={18} />
-                <span>Admin Workspace</span>
-              </button>
-            </div>
-          )}
 
           {user.role === 'admin' && (
             <>
