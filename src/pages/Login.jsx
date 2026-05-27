@@ -171,11 +171,7 @@ export default function Login({ onLogin, onGoToLanding }) {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="login-footer">
-          <button onClick={onGoToLanding} className="login-back-landing-btn">
-            ← Back to Public Website
-          </button>
           <p>© 2026 RIM AI. All Rights Reserved. Enterprise Grade Security.</p>
         </div>
       </div>

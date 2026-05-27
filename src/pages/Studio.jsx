@@ -2923,7 +2923,7 @@ export default function Studio({ onBack, currentUser, onLogout }) {
     <div className="studio">
       <aside className="st-sidebar">
         <div className="st-sidebar-top">
-          <div className="st-logo" onClick={onBack}><span className="ln-logo-badge">RI</span> RIM AI</div>
+          <div className="st-logo" onClick={() => { setTool('dashboard'); setError(''); }} style={{ cursor: 'pointer' }}><span className="ln-logo-badge">RI</span> RIM AI</div>
           {NAV.map((s) => (
             <div key={s.section || 'home'}>
               {s.section && <div className="st-nav-section">{s.section}</div>}
