@@ -59,6 +59,10 @@ export default function Login({ onLogin, onGoToLanding }) {
       setEmail('business@rimi.ai');
       setPassword('password123');
     }
+    
+    // Smooth scroll back to top to ensure the user sees the populated fields and sign in button
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
     setTimeout(() => {
       setAutofillTrigger(false);
     }, 600);
