@@ -139,7 +139,7 @@ export default function Login({ onLogin, onGoToLanding }) {
           {/* Quick-auth selectors */}
           <div className="login-quick-auth">
             <div className="login-quick-divider">
-              <span>Or Select a Demo Role to Autofill</span>
+              <span>Or Select a Role to Autofill</span>
             </div>
             <div className="login-quick-buttons">
               <button
@@ -150,7 +150,7 @@ export default function Login({ onLogin, onGoToLanding }) {
               >
                 <div className="demo-icon">BD</div>
                 <div className="demo-text">
-                  <strong>Business User Demo</strong>
+                  <strong>Business User</strong>
                   <span>Standard access levels</span>
                 </div>
               </button>
@@ -163,7 +163,7 @@ export default function Login({ onLogin, onGoToLanding }) {
               >
                 <div className="demo-icon admin-icon">SA</div>
                 <div className="demo-text">
-                  <strong>System Administrator Demo</strong>
+                  <strong>System Administrator</strong>
                   <span>Full control panel access</span>
                 </div>
               </button>
