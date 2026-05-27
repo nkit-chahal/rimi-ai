@@ -60,8 +60,9 @@ export default function Login({ onLogin, onGoToLanding }) {
       setPassword('password123');
     }
     
-    // Smooth scroll back to top to ensure the user sees the populated fields and sign in button
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Jump instantly to the top so the user immediately sees the filled credentials
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0; // fallback
 
     setTimeout(() => {
       setAutofillTrigger(false);
