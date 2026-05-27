@@ -5,6 +5,7 @@ export default function Login({ onLogin, onGoToLanding }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [autofillTrigger, setAutofillTrigger] = useState(false);
 
   const handleLogin = (e) => {
     if (e) e.preventDefault();
@@ -50,6 +51,7 @@ export default function Login({ onLogin, onGoToLanding }) {
 
   const loadDemo = (type) => {
     setError('');
+    setAutofillTrigger(true);
     if (type === 'admin') {
       setEmail('admin@rimi.ai');
       setPassword('admin123');
@@ -57,6 +59,9 @@ export default function Login({ onLogin, onGoToLanding }) {
       setEmail('business@rimi.ai');
       setPassword('password123');
     }
+    setTimeout(() => {
+      setAutofillTrigger(false);
+    }, 600);
   };
 
   return (
@@ -96,7 +101,7 @@ export default function Login({ onLogin, onGoToLanding }) {
 
             <div className="login-field">
               <label htmlFor="email">Work Email</label>
-              <div className="login-input-wrapper">
+              <div className={`login-input-wrapper ${autofillTrigger ? 'autofill-animate' : ''}`}>
                 <input
                   type="email"
                   id="email"
@@ -114,7 +119,7 @@ export default function Login({ onLogin, onGoToLanding }) {
                 <label htmlFor="password">Password</label>
                 <a href="#forgot" className="login-forgot" onClick={(e) => e.preventDefault()}>Forgot?</a>
               </div>
-              <div className="login-input-wrapper">
+              <div className={`login-input-wrapper ${autofillTrigger ? 'autofill-animate' : ''}`}>
                 <input
                   type="password"
                   id="password"
