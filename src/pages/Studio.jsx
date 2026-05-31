@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense as ReactSuspense } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense as ReactSuspense } from 'react';
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import * as fabric from 'fabric';
@@ -4228,12 +4228,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     // ===== RENDER PRINT ADVISOR =====
     const renderPrintAdvisor = () => {
         const fabricTypes = [
-            { id: 'cotton', label: 'Cotton', icon: 'ðŸŒ¿' },
-            { id: 'polyester', label: 'Polyester', icon: 'ðŸ§µ' },
-            { id: 'silk', label: 'Silk', icon: 'âœ¨' },
-            { id: 'linen', label: 'Linen', icon: 'ðŸŒ¾' },
-            { id: 'nylon', label: 'Nylon', icon: 'ðŸ”—' },
-            { id: 'rayon', label: 'Rayon', icon: 'ðŸ’§' },
+            { id: 'cotton', label: 'Cotton', icon: '🌿' },
+            { id: 'polyester', label: 'Polyester', icon: '🧵' },
+            { id: 'silk', label: 'Silk', icon: '✨' },
+            { id: 'linen', label: 'Linen', icon: '🌾' },
+            { id: 'nylon', label: 'Nylon', icon: '🔗' },
+            { id: 'rayon', label: 'Rayon', icon: '💧' },
         ];
         const methodColors = {
             'Screen Printing': '#22c55e',
@@ -4360,7 +4360,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 {/* Palette Extraction */}
                 {cwmPalette.length === 0 ? (
                     <div style={{ backgroundColor: 'var(--card-bg)', padding: '2.5rem', borderRadius: '16px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>ðŸŽ¨</div>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎨</div>
                         <h3 style={{ color: 'var(--text)', margin: '0 0 0.5rem 0' }}>Extract Base Palette</h3>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>Upload a pattern above, then extract its color palette to generate production colorways.</p>
                         <button className="st-btn primary" onClick={cwmExtractPalette} disabled={!uploaded || isCwmGenerating}
