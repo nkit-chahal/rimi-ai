@@ -21,7 +21,7 @@ def vectorize_image():
     Vectorizes a raster image to SVG.
     - engine='local': Uses vtracer (Rust-based, multi-color, runs locally)
     - engine='api': Uses recraft-ai/recraft-vectorize on Replicate ($0.01/run)
-    Expects JSON: { filename, engine, numColors, removeBg, projectId, userId }
+    Expects JSON: { filename, engine, numColors, projectId, userId }
     """
     import requests as http_requests
     from io import BytesIO
@@ -33,7 +33,6 @@ def vectorize_image():
     image_url = data.get('imageUrl', '')
     engine = data.get('engine', 'local')
     num_colors = int(data.get('numColors', 32))
-    remove_bg = data.get('removeBg', False)
     project_id = int(data.get('projectId', 1))
 
     # Extract user_id early for credit check
@@ -176,8 +175,7 @@ def vectorize_image():
             tool_type="Vectorize",
             settings_dict={
                 "engine": engine,
-                "numColors": num_colors,
-                "removeBg": remove_bg
+                "numColors": num_colors
             }
         )
 

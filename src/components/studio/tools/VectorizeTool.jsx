@@ -9,7 +9,6 @@ export default function VectorizeTool(props) {
     } = props;
 
     const [isVec, setIsVec] = useState(false);
-    const [vecIsolate, setVecIsolate] = useState(false);
     const [vecUrl, setVecUrl] = useState(null);
     const [isUpscaling, setIsUpscaling] = useState(false);
     const [upscaleFactor, setUpscaleFactor] = useState('x4');
@@ -22,7 +21,6 @@ export default function VectorizeTool(props) {
         try {
             const formData = new FormData();
             formData.append('image', uploaded);
-            formData.append('isolate', vecIsolate);
             const res = await fetch(`${API}/api/vectorize`, {
                 method: 'POST',
                 headers: { ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}) },
@@ -72,7 +70,6 @@ export default function VectorizeTool(props) {
                 <label className="st-label" style={{ color: '#6b7280', fontSize: '0.8rem', marginBottom: '1rem', display: 'block' }}>
                     Using High-Fidelity Cloud Vectorization (API)
                 </label>
-                <div className="st-toggle-row"><span>Isolate Motif</span><label className="st-toggle"><input type="checkbox" checked={vecIsolate} onChange={(e) => setVecIsolate(e.target.checked)} /><span className="st-toggle-slider" /></label></div>
                 <button className="st-export-btn" onClick={vectorize} disabled={isVec || !uploaded}>{isVec ? 'Vectorizing...' : 'Vectorize Image'}</button>
             </div>
 

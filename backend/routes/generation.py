@@ -214,24 +214,105 @@ def generate_inspirations():
             print(f"  [Inspirations] FSTL generation error: {e}")
             errors.append(str(e))
     else:
-        for i in range(count):
-            try:
-                print(f"  [Inspirations] Generating variant {i+1}/{count} using openai/gpt-image-2...")
-                replicate_input = {"prompt": designer_prompt + " - flat 2D repeating fabric pattern tile texture.", "aspect_ratio": "1:1"}
-                if data_uri:
-                    replicate_input["input_images"] = [data_uri]
-                start_time = time.time()
-                output = replicate.run("openai/gpt-image-2", input=replicate_input)
-                duration = time.time() - start_time
-                credits_used = max(10, int(round(duration * 12)))
-                cost_usd = duration * 0.00115
-                log_replicate_call(project_id, "openai/gpt-image-2", duration, credits_used, cost_usd)
-                total_credits += credits_used
-                image_url_result = str(output[0].url) if isinstance(output, list) and len(output) > 0 else str(output)
-                results.append(image_url_result)
-            except Exception as e:
-                print(f"  [Inspirations] Replicate generation error on variant {i+1}: {e}")
-                errors.append(str(e))
+        models = data.get('models', ['openai/gpt-image-2'])
+        if not models:
+            models = ['openai/gpt-image-2']
+        
+        aspect_ratio = data.get('aspect_ratio', '1:1')
+        resolution = int(data.get('resolution', 1024))
+        
+        # Map aspect ratio to width/height for models that need explicit dimensions
+        aspect_dimensions = {
+            '1:1': (resolution, resolution),
+            '4:3': (resolution, int(resolution * 3 / 4)),
+            '3:4': (int(resolution * 3 / 4), resolution),
+            '16:9': (resolution, int(resolution * 9 / 16)),
+            '9:16': (int(resolution * 9 / 16), resolution),
+            '3:2': (resolution, int(resolution * 2 / 3)),
+            '2:3': (int(resolution * 2 / 3), resolution),
+        }
+        width, height = aspect_dimensions.get(aspect_ratio, (resolution, resolution))
+            
+        for model_id in models:
+            for i in range(count):
+                try:
+                    print(f"  [Inspirations] Generating variant {i+1}/{count} using {model_id} ({aspect_ratio}, {resolution}px)...")
+                    
+                    # Build model-specific input parameters
+                    replicate_input = {"prompt": designer_prompt + " - flat 2D repeating fabric pattern tile texture."}
+                    
+                    # Aspect ratio - most models support this directly
+                    replicate_input["aspect_ratio"] = aspect_ratio
+                    
+                    # Resolution - model-specific handling
+                    if 'flux' in model_id:
+                        replicate_input["width"] = width
+                        replicate_input["height"] = height
+                    elif 'openai' in model_id:
+                        # GPT-Image-2 uses size strings
+                        size_map = {512: "1024x1024", 1024: "1024x1024", 1536: "1536x1536", 2048: "2048x2048"}
+                        replicate_input["size"] = size_map.get(resolution, "1024x1024")
+                    elif 'seedream' in model_id:
+                        replicate_input["image_size"] = f"{width}x{height}"
+                    
+                    # Reference image - model-specific key names
+                    if data_uri:
+                        if 'openai' in model_id:
+                            replicate_input["input_images"] = [data_uri]
+                        elif 'flux' in model_id:
+                            replicate_input["image"] = data_uri
+                        else:
+                            replicate_input["image"] = data_uri
+                        
+                    start_time = time.time()
+                    output = replicate.run(model_id, input=replicate_input)
+                    duration = time.time() - start_time
+                    
+                    # Exact Per-Image Costs from Replicate Invoice JSON
+                    # These models are billed per-image, not per-second!
+                    per_image_costs = {
+                        'openai/gpt-image-2': 0.128,
+                        'xai/grok-imagine-image': 0.02,
+                        'google/imagen-4-fast': 0.02,
+                        'google/imagen-4-ultra': 0.06, # Estimated from fast
+                        'google/nano-banana': 0.039,
+                        'google/nano-banana-2': 0.067,
+                        'google/nano-banana-pro': 0.150,
+                        'bytedance/seedream-4.5': 0.04,
+                        'black-forest-labs/flux-schnell': 0.003,
+                        'black-forest-labs/flux-fill-pro': 0.05,
+                        'qwen/qwen-image-layered': 0.04, # 0.01 + 0.03 run cost
+                        'black-forest-labs/flux-2-pro': 0.09 # Avg based on megapixel billing
+                    }
+                    
+                    # Determine cost
+                    # 1 generated image per loop iteration
+                    if model_id in per_image_costs:
+                        cost_usd = per_image_costs[model_id]
+                    else:
+                        # Fallback to time-based for models running on shared hardware 
+                        # like fofr/style-transfer (L40S) or seamless-texture (H100)
+                        cost_usd = duration * 0.001525 
+                    
+                    # Add 20% profit margin for user billing
+                    retail_usd = cost_usd * 1.20
+                    
+                    # 1000 credits = $1.00 scale for accuracy (charged based on retail price)
+                    credits_used = max(10, int(round(retail_usd * 1000)))
+                    
+                    # Log actual cost to vendor, but deduct retail credits from user
+                    log_replicate_call(project_id, model_id, duration, credits_used, cost_usd)
+                    total_credits += credits_used
+                    
+                    if isinstance(output, list) and len(output) > 0:
+                        image_url_result = str(output[0].url) if hasattr(output[0], 'url') else str(output[0])
+                    else:
+                        image_url_result = str(output.url) if hasattr(output, 'url') else str(output)
+                        
+                    results.append(image_url_result)
+                except Exception as e:
+                    print(f"  [Inspirations] Replicate generation error on {model_id} variant {i+1}: {e}")
+                    errors.append(str(e))
 
     if results:
         record_activity(project_id, 'generation', len(results), total_credits, user_id=user_id)

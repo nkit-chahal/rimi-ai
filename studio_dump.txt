@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense as ReactSuspense } from 'react';
+﻿import React, { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense as ReactSuspense } from 'react';
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import * as fabric from 'fabric';
@@ -385,14 +385,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const [prompt, setPrompt] = useState('');
     const [creativity, setCreativity] = useState(3);
-    const [variants, setVariants] = useState(1);
+    const [variants, setVariants] = useState(3);
     const [inspireColors, setInspireColors] = useState(['#94b09e', '#e7dec2', '#dca5a2']);
     const [inspireStyle, setInspireStyle] = useState('All Styles');
-    const [inspireModels, setInspireModels] = useState(['openai/gpt-image-2']);
-    const [inspireAspect, setInspireAspect] = useState('1:1');
-    const [inspireResolution, setInspireResolution] = useState('1024');
-    const [inspireProgress, setInspireProgress] = useState(0);
-    const [showModelModal, setShowModelModal] = useState(false);
     const [generatedVariations, setGeneratedVariations] = useState([]);
     const [analysis, setAnalysis] = useState(null);
     const [isDesc, setIsDesc] = useState(false);
@@ -404,6 +399,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const [vecEngine, setVecEngine] = useState('api');
     const [vecColors, setVecColors] = useState(32);
+    const [vecIsolate, setVecIsolate] = useState(false);
     const [isVec, setIsVec] = useState(false);
     const [vecUrl, setVecUrl] = useState(null);
 
@@ -2378,11 +2374,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     body: JSON.stringify(controls),
                 });
                 const d = await r.json();
-                if (d.success) setState(prev => ({
-                    ...prev,
-                    ...d.state,
-                    controls: { ...prev.controls, ...d.state.controls }
-                }));
+                if (d.success) setState(d.state);
             } catch {
                 setError('Control changes are local only because the SQLite API is offline.');
             }
@@ -2574,46 +2566,24 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 finalPrompt += `, color palette: ${inspireColors.join(', ')}`;
             }
 
-            setGeneratedVariations([]);
-            setInspireProgress(0);
-
-            let completedModels = 0;
-            const totalModels = inspireModels.length;
-
-            const fetchPromises = inspireModels.map(async (modelId) => {
-                try {
-                    const r = await fetch(`${API}/api/generate-inspirations`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            prompt: finalPrompt,
-                            creativity,
-                            count: variants,
-                            models: [modelId], // Only request for this specific model
-                            aspect_ratio: inspireAspect,
-                            resolution: inspireResolution,
-                            projectId: activeProject.id,
-                            filename: safeFilename,
-                            imageUrl: safeUrl,
-                            userId: currentUser?.id
-                        })
-                    });
-                    const d = await r.json();
-                    if (d.success) {
-                        setGeneratedVariations(prev => [...prev, ...d.variations]);
-                        updateCreditsFromResponse(d);
-                    } else if (d.error && completedModels === 0) {
-                        setError(d.error);
-                    }
-                } catch (e) {
-                    console.error(`Error with model ${modelId}:`, e);
-                } finally {
-                    completedModels++;
-                    setInspireProgress(Math.round((completedModels / totalModels) * 100));
-                }
+            const r = await fetch(`${API}/api/generate-inspirations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: finalPrompt,
+                    creativity,
+                    count: variants,
+                    projectId: activeProject.id,
+                    filename: safeFilename,
+                    imageUrl: safeUrl,
+                    userId: currentUser?.id
+                })
             });
-
-            await Promise.all(fetchPromises);
+            const d = await r.json();
+            if (d.success) {
+                setGeneratedVariations(d.variations);
+                updateCreditsFromResponse(d);
+            } else setError(d.error);
         } catch {
             setError('Backend is not reachable. Start Flask on port 3001.');
         } finally {
@@ -2745,7 +2715,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             const r = await fetch(`${API}/api/vectorize`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, engine: vecEngine, numColors: vecColors, projectId: activeProject.id, userId: currentUser?.id })
+                body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, engine: vecEngine, numColors: vecColors, removeBg: vecIsolate, projectId: activeProject.id, userId: currentUser?.id })
             });
             const d = await r.json();
             if (d.success) {
@@ -2945,155 +2915,18 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const renderControls = () => {
         if (tool === 'repeat') {
-            // Industry-standard repeat sizes (inches)
-            const repeatPresets = [
-                { w: 1, h: 1, label: '1×1″', cat: 'Ditsy' },
-                { w: 2, h: 2, label: '2×2″', cat: 'Ditsy' },
-                { w: 4, h: 4, label: '4×4″', cat: 'Small' },
-                { w: 6, h: 6, label: '6×6″', cat: 'Small' },
-                { w: 8, h: 8, label: '8×8″', cat: 'Medium' },
-                { w: 12, h: 12, label: '12×12″', cat: 'Medium' },
-                { w: 18, h: 18, label: '18×18″', cat: 'Large' },
-                { w: 24, h: 24, label: '24×24″', cat: 'Large' },
-                { w: 36, h: 36, label: '36×36″', cat: 'Engineered' },
-                { w: 48, h: 48, label: '48×48″', cat: 'Engineered' },
-            ];
-            const fabricWidths = [36, 44, 45, 54, 58, 60];
-            const rptW = controls.repeatWidth || 12;
-            const rptH = controls.repeatHeight || 12;
-            const fabW = controls.fabricWidth || 54;
-            const dpi = controls.exportDpi || 300;
-
-            // Centralized auto-grid calculation
-            const calcGrid = (fw, tw) => Math.max(2, Math.min(8, Math.ceil(fw / tw)));
-            const setRepeat = (patch) => {
-                const nextW = patch.repeatWidth ?? rptW;
-                const nextFab = patch.fabricWidth ?? fabW;
-                updateControls({ ...patch, gridSize: calcGrid(nextFab, nextW) });
-            };
-
-            // Derived calculations (always precise, always reactive)
-            const autoGrid = calcGrid(fabW, rptW);
-            const repeatsAcross = fabW / rptW;
-            const tilePxW = Math.round(rptW * dpi);
-            const tilePxH = Math.round(rptH * dpi);
-            const sheetPxW = tilePxW * autoGrid;
-            const sheetPxH = tilePxH * autoGrid;
-            const coverage = ((Math.floor(repeatsAcross) * rptW) / fabW * 100);
-
-            const isCustomSize = !repeatPresets.some(p => p.w === rptW && p.h === rptH);
-            const catColors = { Ditsy: '#10b981', Small: '#3b82f6', Medium: '#8b5cf6', Large: '#f59e0b', Engineered: '#ef4444' };
-            const activeCat = repeatPresets.find(p => p.w === rptW && p.h === rptH)?.cat || '';
-
             return (
                 <div className="st-ctrl">
                     <div className="st-settings-group">
-                        <div className="st-group-title">REPEAT DIMENSIONS</div>
-
-                        {/* Industry Category Tags */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '0.75rem' }}>
-                            {['Ditsy', 'Small', 'Medium', 'Large', 'Engineered'].map(cat => (
-                                <button key={cat} onClick={() => {
-                                    const p = repeatPresets.find(r => r.cat === cat);
-                                    if (p) setRepeat({ repeatWidth: p.w, repeatHeight: p.h });
-                                }}
-                                style={{
-                                    padding: '3px 10px', borderRadius: '999px', border: `1px solid ${activeCat === cat ? catColors[cat] : 'rgba(0,0,0,0.06)'}`,
-                                    background: activeCat === cat ? `${catColors[cat]}12` : 'transparent',
-                                    color: activeCat === cat ? catColors[cat] : '#64748b',
-                                    fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s ease', textTransform: 'uppercase', letterSpacing: '0.03em'
-                                }}>{cat}</button>
+                        <div className="st-group-title">TILE SETTINGS</div>
+                        <label className="st-label">Grid Size</label>
+                        <div className="st-btn-row">
+                            {['2x2', '3x3', '4x4', '5x5', '6x6'].map((n, i) => (
+                                <button key={n} className={`st-grid-btn ${controls.gridSize === i + 2 ? 'active' : ''}`} onClick={() => updateControls({ gridSize: i + 2 })}>{n}</button>
                             ))}
                         </div>
 
-                        {/* Preset Size Grid */}
-                        <label className="st-label">Tile Size (inches)</label>
-                        <div className="st-btn-row" style={{ flexWrap: 'wrap', gap: '6px' }}>
-                            {repeatPresets.map(p => (
-                                <button key={p.label}
-                                    className={`st-grid-btn ${rptW === p.w && rptH === p.h ? 'active' : ''}`}
-                                    onClick={() => setRepeat({ repeatWidth: p.w, repeatHeight: p.h })}
-                                    style={{ fontSize: '0.75rem', padding: '0.35rem 0.6rem', minWidth: 'auto' }}
-                                >{p.label}</button>
-                            ))}
-                            <button
-                                className={`st-grid-btn ${isCustomSize ? 'active' : ''}`}
-                                onClick={() => {}}
-                                style={{ fontSize: '0.75rem', padding: '0.35rem 0.6rem' }}
-                            >Custom</button>
-                        </div>
-
-                        {/* Custom Width × Height */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '6px', alignItems: 'center', marginTop: '0.75rem' }}>
-                            <div>
-                                <label className="st-label-sm" style={{ marginBottom: '2px' }}>Width</label>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <input type="number" min="0.5" max="72" step="0.5" value={rptW}
-                                        onChange={e => setRepeat({ repeatWidth: parseFloat(e.target.value) || 1 })}
-                                        className="st-select" style={{ width: '100%', textAlign: 'center', fontSize: '0.85rem', fontWeight: 700 }} />
-                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>″</span>
-                                </div>
-                            </div>
-                            <span style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 600, paddingTop: '16px' }}>×</span>
-                            <div>
-                                <label className="st-label-sm" style={{ marginBottom: '2px' }}>Height</label>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <input type="number" min="0.5" max="72" step="0.5" value={rptH}
-                                        onChange={e => setRepeat({ repeatHeight: parseFloat(e.target.value) || 1 })}
-                                        className="st-select" style={{ width: '100%', textAlign: 'center', fontSize: '0.85rem', fontWeight: 700 }} />
-                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>″</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="st-settings-group">
-                        <div className="st-group-title">FABRIC & LAYOUT</div>
-
-                        {/* Fabric Width */}
-                        <label className="st-label">Fabric Width</label>
-                        <div className="st-btn-row" style={{ gap: '4px', flexWrap: 'wrap' }}>
-                            {fabricWidths.map(fw => (
-                                <button key={fw}
-                                    className={`st-grid-btn ${fabW === fw ? 'active' : ''}`}
-                                    onClick={() => setRepeat({ fabricWidth: fw })}
-                                    style={{ fontSize: '0.75rem', padding: '0.35rem 0.5rem', minWidth: 'auto' }}
-                                >{fw}″</button>
-                            ))}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '0.5rem' }}>
-                            <input type="number" min="12" max="120" step="1" value={fabW}
-                                onChange={e => setRepeat({ fabricWidth: parseFloat(e.target.value) || 54 })}
-                                className="st-select" style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', fontWeight: 700 }} />
-                            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>inches</span>
-                        </div>
-
-                        {/* Auto-calculated info — fully reactive */}
-                        <div style={{ marginTop: '0.75rem', padding: '0.65rem 0.75rem', borderRadius: '10px', background: 'rgba(139, 92, 246, 0.04)', border: '1px solid rgba(139, 92, 246, 0.08)', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Repeats across</span>
-                                <span style={{ fontSize: '0.88rem', color: '#4f46e5', fontWeight: 800 }}>{Math.floor(repeatsAcross)}× <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 500 }}>({repeatsAcross.toFixed(2)})</span></span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Coverage</span>
-                                <span style={{ fontSize: '0.78rem', color: coverage >= 99.9 ? '#10b981' : '#f59e0b', fontWeight: 700 }}>{coverage.toFixed(1)}%</span>
-                            </div>
-                            <div style={{ height: '1px', background: 'rgba(0,0,0,0.04)', margin: '2px 0' }} />
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Grid preview</span>
-                                <span style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 700 }}>{autoGrid}×{autoGrid} tiles</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Single tile ({dpi} DPI)</span>
-                                <span style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 700 }}>{tilePxW}×{tilePxH} px</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Total sheet</span>
-                                <span style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 700 }}>{sheetPxW}×{sheetPxH} px</span>
-                            </div>
-                        </div>
-
-                        <label className="st-label" style={{ marginTop: '0.75rem' }}>Scale</label>
+                        <label className="st-label">Scale</label>
                         <div className="st-scale-row">
                             <button onClick={() => updateControls({ scale: Math.max(50, controls.scale - 10) })}>-</button>
                             <span style={{ flex: 1, textAlign: 'center' }}>{controls.scale}%</span>
@@ -3111,56 +2944,91 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         <div className="st-btn-row">
                             <button className={`st-sym-btn ${controls.repeatType === 'block' ? 'active' : ''}`} onClick={() => updateControls({ repeatType: 'block' })} title="None"><I d="M3 3h18v18H3z" s={14} /></button>
                             <button className={`st-sym-btn ${controls.repeatType === 'mirror' ? 'active' : ''}`} onClick={() => updateControls({ repeatType: 'mirror' })} title="Horizontal"><I d="M12 3v18M8 8l-4 4 4 4M16 8l4 4-4 4" s={14} /></button>
-                            <button className={`st-sym-btn ${controls.repeatType === 'half_drop' ? 'active' : ''}`} onClick={() => updateControls({ repeatType: 'half_drop' })} title="Half Drop"><I d="M3 12h18M8 8l4-4 4 4M8 16l4 4 4-4" s={14} /></button>
-                            <button className={`st-sym-btn ${controls.repeatType === 'half_brick' ? 'active' : ''}`} onClick={() => updateControls({ repeatType: 'half_brick' })} title="Half Brick"><I d="M3 3h7v7H3zM14 3h7v7h-7zM8.5 10h7v7h-7zM3 17h7v7H3zM14 17h7v7h-7z" s={14} /></button>
+                            <button className={`st-sym-btn ${controls.repeatType === 'half_drop' ? 'active' : ''}`} onClick={() => updateControls({ repeatType: 'half_drop' })} title="Vertical"><I d="M3 12h18M8 8l4-4 4 4M8 16l4 4 4-4" s={14} /></button>
                         </div>
                     </div>
                     <div className="st-settings-group">
                         <div className="st-group-title">EXPORT OPTIONS</div>
                         <div className="st-export-grid">
                             <div><label className="st-label-sm">Format</label><select value={controls.exportFormat} onChange={(e) => updateControls({ exportFormat: e.target.value })} className="st-select"><option>PNG</option><option>JPG</option><option>TIFF</option></select></div>
-                            <div><label className="st-label-sm">Resolution</label><select value={controls.exportDpi} onChange={(e) => updateControls({ exportDpi: +e.target.value })} className="st-select"><option value={72}>72 DPI</option><option value={150}>150 DPI</option><option value={300}>300 DPI</option><option value={600}>600 DPI</option></select></div>
+                            <div><label className="st-label-sm">Resolution</label><select value={controls.exportDpi} onChange={(e) => updateControls({ exportDpi: +e.target.value })} className="st-select"><option value={150}>150 DPI</option><option value={300}>300 DPI</option><option value={600}>600 DPI</option></select></div>
                         </div>
                     </div>
                     <button className="st-export-btn" onClick={() => createRepeat()} disabled={isRepeat || (!uploaded && !preview)}>{isRepeat ? 'Processing...' : 'Export Repeat Set'}</button>
                     {renderVariations(true)}
-                    {tool === 'inspire' && (
-                        <div className="st-chat-container">
-                            <div className="st-chat-search">
-                                <input type="text" placeholder="Describe your pattern..." />
-                                <button className="st-chat-send"><I d="M5 12h14M12 5l7 7-7 7" s={16} /></button>
-                            </div>
-                        </div>
-                    )}
                 </div>
             );
         }
+        if (tool === 'inspire') return (
+            <div className="st-ctrl" style={{ padding: '0.25rem' }}>
 
-        if (tool === 'vectorize') return (
-            <div className="st-ctrl st-vectorize-ctrl">
-                <div className="st-vectorize-card">
-                    <div className="st-vectorize-card-head">
-                        <span>Vector Output</span>
-                        <strong>SVG</strong>
-                    </div>
-                    <label className="st-label">Engine</label>
-                    <div className="st-vectorize-segment">
-                        <button className={vecEngine === 'api' ? 'active' : ''} onClick={() => setVecEngine('api')}>Cloud API</button>
-                        <button className={vecEngine === 'local' ? 'active' : ''} onClick={() => setVecEngine('local')}>Local</button>
-                    </div>
-                    {vecEngine === 'local' && (
-                        <div className="st-vectorize-slider">
-                            <div>
-                                <label className="st-label">Color Detail</label>
-                                <strong>{vecColors}</strong>
-                            </div>
-                            <input type="range" min="2" max="256" value={vecColors} onChange={(e) => setVecColors(Number(e.target.value))} />
-                        </div>
-                    )}
-                    <button className="st-export-btn" onClick={vectorize} disabled={isVec || (!uploaded && !preview && !activeProject?.heroImageUrl)}>
-                        {isVec ? 'Vectorizing...' : 'Vectorize Image'}
-                    </button>
+                <div className="st-inspire-sidebar-group">
+                    <div className="st-inspire-sidebar-label">Creativity <I d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm-1-11v6h2v-6h-2zm0-4v2h2V7h-2z" s={14} /></div>
+                    <input type="range" min="1" max="5" value={creativity} onChange={(e) => setCreativity(+e.target.value)} className="st-range" />
+                    <div className="st-range-labels"><span>Safe</span><span>Wild</span></div>
                 </div>
+
+                <div className="st-inspire-sidebar-group">
+                    <div className="st-inspire-sidebar-label">Variants <I d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm-1-11v6h2v-6h-2zm0-4v2h2V7h-2z" s={14} /></div>
+                    <div className="st-btn-row">
+                        {[1, 3, 5, 7].map((n) => <button key={n} className={`st-grid-btn ${variants === n ? 'active' : ''}`} onClick={() => setVariants(n)}>{n}</button>)}
+                    </div>
+                </div>
+
+                <div className="st-inspire-sidebar-group">
+                    <div className="st-inspire-sidebar-label">Color Mood <I d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm-1-11v6h2v-6h-2zm0-4v2h2V7h-2z" s={14} /></div>
+                    <div className="st-color-mood">
+                        <button className="st-color-btn" onClick={() => {
+                            const hex = prompt('Enter a hex color code (e.g. #ff0000):');
+                            if (hex && /^#[0-9A-F]{6}$/i.test(hex.trim())) {
+                                setInspireColors([...inspireColors, hex.trim()]);
+                            } else if (hex) {
+                                alert('Please enter a valid 6-digit hex code starting with #');
+                            }
+                        }} title="Add Color"><I d="M12 5v14M5 12h14" s={16} /></button>
+                        {inspireColors.map((c, i) => (
+                            <div
+                                key={i}
+                                className="st-color-circle"
+                                style={{ background: c, cursor: 'pointer' }}
+                                onClick={() => setInspireColors(inspireColors.filter((_, idx) => idx !== i))}
+                                title="Click to remove"
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                <div className="st-inspire-sidebar-group">
+                    <div className="st-inspire-sidebar-label">Style <I d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm-1-11v6h2v-6h-2zm0-4v2h2V7h-2z" s={14} /></div>
+                    <div className="st-style-tags">
+                        {['All Styles', 'Hand Painted', 'Minimal', 'Line Art', 'Vintage', 'Geometric'].map(s => (
+                            <button
+                                key={s}
+                                className={`st-style-tag ${inspireStyle === s ? 'active' : ''}`}
+                                onClick={() => setInspireStyle(s)}
+                            >
+                                {s}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div style={{ marginTop: '2rem' }}>
+                    <button className="st-generate-btn-lg" onClick={generate} disabled={isGen}>
+                        <I d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" s={18} />
+                        {isGen ? 'Generating...' : 'Generate Variations'}
+                    </button>
+                    <p className="st-generate-hint"><I d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" s={12} /> Uses ~{(creditPricing.inspire || 50) * variants} credits</p>
+                </div>
+            </div>
+        );
+        if (tool === 'vectorize') return (
+            <div className="st-ctrl">
+                <label className="st-label" style={{ color: '#6b7280', fontSize: '0.8rem', marginBottom: '1rem', display: 'block' }}>
+                    Using High-Fidelity Cloud Vectorization (API)
+                </label>
+                <div className="st-toggle-row"><span>Isolate Motif</span><label className="st-toggle"><input type="checkbox" checked={vecIsolate} onChange={(e) => setVecIsolate(e.target.checked)} /><span className="st-toggle-slider" /></label></div>
+                <button className="st-export-btn" onClick={vectorize} disabled={isVec || !uploaded}>{isVec ? 'Vectorizing...' : 'Vectorize Image'}</button>
             </div>
         );
         if (tool === 'upscale') return (
@@ -3229,8 +3097,119 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 <p className="st-generate-hint"><I d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" s={12} /> Uses ~{creditPricing.imageLayers || 100} credits</p>
             </div>
         );
-        if (tool === 'seamless') return null;
-        if (tool === 'pattern') return null;
+        if (tool === 'seamless') return (
+            <div className="st-pattern-right">
+                <div className="st-pattern-right-title">
+                    <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z" s={20} />
+                    Seamless Pattern
+                </div>
+                <div className="st-btn-row" style={{ marginBottom: '0.75rem' }}>
+                    <button className={`st-grid-btn ${seamlessMode === 'generate' ? 'active' : ''}`} onClick={() => setSeamlessMode('generate')} style={{ flex: 1 }}>âœ¨ Generate New</button>
+                    <button className={`st-grid-btn ${seamlessMode === 'fix' ? 'active' : ''}`} onClick={() => setSeamlessMode('fix')} style={{ flex: 1 }}>ðŸ”§ Fix Existing</button>
+                </div>
+
+                {seamlessMode === 'generate' ? (
+                    <>
+                        <p className="st-pattern-right-desc" style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>
+                            Generate natively seamless tiles from a text description. Uses AI with circular padding â€” tiles are seamless by construction.
+                        </p>
+                        <textarea
+                            value={seamlessPrompt}
+                            onChange={e => setSeamlessPrompt(e.target.value)}
+                            placeholder="Describe the pattern... e.g. 'watercolor roses on cream linen background' or 'geometric art deco gold lines on navy'"
+                            style={{ width: '100%', minHeight: '70px', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', resize: 'vertical', fontFamily: 'inherit', background: '#f8fafc' }}
+                        />
+                        {uploaded?.filename && (
+                            <p style={{ fontSize: '0.75rem', color: '#6366f1', margin: '0.3rem 0' }}>ðŸ“Ž Reference image will guide the style</p>
+                        )}
+                    </>
+                ) : (
+                    <p className="st-pattern-right-desc">
+                        Upload a tile and let AI fix the edges using offset + inpaint. Best for images that are almost seamless already.
+                    </p>
+                )}
+
+                {isSeamless || seamlessProgress > 0 ? (
+                    <div style={{ marginTop: '1rem', width: '100%' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#64748b', marginBottom: '0.5rem', fontWeight: 500 }}>
+                            <span>{seamlessStatus}</span>
+                            <span>{Math.round(seamlessProgress)}%</span>
+                        </div>
+                        <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ width: `${seamlessProgress}%`, height: '100%', background: '#6366f1', transition: 'width 0.2s linear' }} />
+                        </div>
+                    </div>
+                ) : seamlessMode === 'generate' ? (
+                    <button className="st-pattern-right-btn" onClick={generateSeamless} disabled={!seamlessPrompt.trim()} style={{ marginTop: '0.5rem' }}>
+                        <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} />
+                        Generate Seamless Tiles
+                    </button>
+                ) : (
+                    <button className="st-pattern-right-btn" onClick={makeSeamless} disabled={(!uploaded && !preview && !activeProject?.heroImageUrl)}>
+                        <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z" s={16} />
+                        Fix Uploaded Tile
+                    </button>
+                )}
+
+                {seamlessTiles.length > 0 && (
+                    <div style={{ marginTop: '1rem' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem', color: '#334155' }}>Generated Tiles (click to select)</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                            {seamlessTiles.map((tile, i) => (
+                                <div key={i} onClick={() => { setSeamlessUrl(`${API}${tile.url}`); setUploads(prev => ({ ...prev, [tool]: { ...prev[tool], url: `${API}${tile.url}` } })); }}
+                                    style={{ cursor: 'pointer', border: seamlessUrl === `${API}${tile.url}` ? '2px solid #6366f1' : '2px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+                                    <img src={`${API}${tile.url}`} alt={`Tile ${i + 1}`} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover' }} />
+                                    <div style={{ position: 'absolute', bottom: 4, right: 4, background: tile.score >= 0.9 ? '#22c55e' : tile.score >= 0.75 ? '#eab308' : '#ef4444', color: '#fff', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                        {Math.round(tile.score * 100)}%
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+        if (tool === 'pattern') return (
+            <div className="st-pattern-right">
+                <div className="st-pattern-right-title">
+                    <I d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" s={20} />
+                    Design Extraction
+                </div>
+                <p className="st-pattern-right-desc">
+                    AI analyzes your outfit or fabric image and extracts a clean, seamless, print-ready repeating pattern.
+                </p>
+                <button className="st-pattern-right-btn" onClick={extractDesign} disabled={isEnh || (!uploaded && !preview && !activeProject?.heroImageUrl)}>
+                    <I d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" s={16} />
+                    {isEnh ? 'Extracting...' : 'Extract Design'}
+                </button>
+                <div className="st-pattern-features-title">What you get</div>
+                <div className="st-pattern-feature">
+                    <div className="st-pattern-feature-icon"><I d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" s={18} /></div>
+                    <div className="st-pattern-feature-text">
+                        <h4>Seamless output</h4>
+                        <p>Perfectly tileable patterns with no visible seams.</p>
+                    </div>
+                </div>
+                <div className="st-pattern-feature">
+                    <div className="st-pattern-feature-icon"><I d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6v-8z" s={18} /></div>
+                    <div className="st-pattern-feature-text">
+                        <h4>Print-ready</h4>
+                        <p>High-quality files optimized for digital and physical printing.</p>
+                    </div>
+                </div>
+                <div className="st-pattern-feature">
+                    <div className="st-pattern-feature-icon"><I d="M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z M8 10v4 M12 10v4 M16 10v4" s={18} /></div>
+                    <div className="st-pattern-feature-text">
+                        <h4>High-resolution</h4>
+                        <p>Crisp, high-resolution results suitable for any scale.</p>
+                    </div>
+                </div>
+                <div className="st-pattern-security">
+                    <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" s={16} />
+                    <p>Your designs are private and secure. Only you can access your projects.</p>
+                </div>
+            </div>
+        );
     };
 
     // ===== MAPPINGS RENDER =====
@@ -3252,7 +3231,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                 onClick={() => { if (i + 1 < mappingStep || (i + 1 === 2 && mappingPrint)) setMappingStep(i + 1); }}
                             >
                                 <div className="st-map-step-num">
-                                    {mappingStep > i + 1 ? <I d="M5 13l4 4L19 7" s={14} /> : i + 1}
+                                    {mappingStep > i + 1 ? 'âœ“' : i + 1}
                                 </div>
                                 <span className="st-map-step-label">{label}</span>
                             </div>
@@ -3336,7 +3315,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                     <div className="st-map-category-icon"><I d={cat.icon} s={22} /></div>
                                     <div className="st-map-category-name">{cat.label}</div>
                                     <div className="st-map-category-desc">{cat.desc}</div>
-                                    <div className="st-map-category-check"><I d="M5 13l4 4L19 7" s={12} /></div>
+                                    <div className="st-map-category-check">âœ“</div>
                                 </div>
                             ))}
                         </div>
@@ -3410,17 +3389,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
                 {/* Loading state */}
                 {isMappingGenerating && (
-                    <div className="st-map-section" style={{ textAlign: 'center', padding: '3.5rem 2rem' }}>
-                        <div className="st-ai-processing" style={{ margin: '0 auto' }}>
-                            <div className="st-ai-sparkle-container">
-                                <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
-                                <div className="st-ai-ring" />
-                                <div className="st-ai-ring" />
-                                <div className="st-ai-ring" />
-                            </div>
-                        </div>
-                        <p style={{ fontWeight: 800, color: '#111827', fontSize: '1.05rem', marginTop: '1.5rem', letterSpacing: '-0.02em' }}>Generating AI Mockups</p>
-                        <p style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 500, marginTop: '0.35rem' }}>Mapping your pattern onto selected products — 30-60s per product</p>
+                    <div className="st-map-section" style={{ textAlign: 'center', padding: '3rem' }}>
+                        <div className="st-spinner" style={{ margin: '0 auto 1rem' }} />
+                        <p style={{ fontWeight: 600, color: '#374151' }}>Generating AI mockups...</p>
+                        <p style={{ fontSize: '0.82rem', color: '#6b7280' }}>This may take 30-60 seconds per product</p>
                     </div>
                 )}
 
@@ -4256,12 +4228,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     // ===== RENDER PRINT ADVISOR =====
     const renderPrintAdvisor = () => {
         const fabricTypes = [
-            { id: 'cotton', label: 'Cotton', icon: '🌿' },
-            { id: 'polyester', label: 'Polyester', icon: '🧵' },
-            { id: 'silk', label: 'Silk', icon: '✨' },
-            { id: 'linen', label: 'Linen', icon: '🌾' },
-            { id: 'nylon', label: 'Nylon', icon: '🔗' },
-            { id: 'rayon', label: 'Rayon', icon: '💧' },
+            { id: 'cotton', label: 'Cotton', icon: 'ðŸŒ¿' },
+            { id: 'polyester', label: 'Polyester', icon: 'ðŸ§µ' },
+            { id: 'silk', label: 'Silk', icon: 'âœ¨' },
+            { id: 'linen', label: 'Linen', icon: 'ðŸŒ¾' },
+            { id: 'nylon', label: 'Nylon', icon: 'ðŸ”—' },
+            { id: 'rayon', label: 'Rayon', icon: 'ðŸ’§' },
         ];
         const methodColors = {
             'Screen Printing': '#22c55e',
@@ -4388,7 +4360,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 {/* Palette Extraction */}
                 {cwmPalette.length === 0 ? (
                     <div style={{ backgroundColor: 'var(--card-bg)', padding: '2.5rem', borderRadius: '16px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎨</div>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>ðŸŽ¨</div>
                         <h3 style={{ color: 'var(--text)', margin: '0 0 0.5rem 0' }}>Extract Base Palette</h3>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>Upload a pattern above, then extract its color palette to generate production colorways.</p>
                         <button className="st-btn primary" onClick={cwmExtractPalette} disabled={!uploaded || isCwmGenerating}
@@ -4421,7 +4393,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                             next.has(i) ? next.delete(i) : next.add(i);
                                             return next;
                                         })} style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
-                                            {cwmLockedColors.has(i) ? <><I d="M12 10V6a4 4 0 00-8 0v4m-2 0h12a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2v-6a2 2 0 012-2z" s={10} /> Locked</> : <><I d="M8 11V7a4 4 0 018 0m-2 4H6a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2v-6a2 2 0 00-2-2z" s={10} /> Lock</>}
+                                            {cwmLockedColors.has(i) ? 'ðŸ”’ Locked' : 'ðŸ”“ Lock'}
                                         </button>
                                     </div>
                                 ))}
@@ -4444,12 +4416,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
                                 <button className="st-btn primary" onClick={cwmGenerateColorways} disabled={isCwmGenerating}
                                     style={{ flex: 1, padding: '0.85rem', fontWeight: 600 }}>
-                                    {isCwmGenerating ? <><div className="st-spinner" style={{ width: 16, height: 16 }} /> Generating...</> : <><I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={16} /> Generate 4 Colorways</>}
+                                    {isCwmGenerating ? <><div className="st-spinner" style={{ width: 16, height: 16 }} /> Generating...</> : 'ðŸŽ¨ Generate 4 Colorways'}
                                 </button>
                                 {cwmColorways.length > 0 && (
                                     <button className="st-btn" onClick={cwmExportLineCard} disabled={isCwmExporting}
                                         style={{ padding: '0.85rem 1.5rem' }}>
-                                        {isCwmExporting ? 'Exporting...' : <><I d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" s={14} /> Export Line Card PDF</>}
+                                        {isCwmExporting ? 'Exporting...' : 'ðŸ“„ Export Line Card PDF'}
                                     </button>
                                 )}
                             </div>
@@ -4529,8 +4501,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.25rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
                         <div className="st-group-title">OVERLAYS</div>
                         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                            <button className={`st-btn ${measureShowRuler ? 'primary' : ''}`} onClick={() => setMeasureShowRuler(!measureShowRuler)} style={{ flex: 1, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}><I d="M2 6h20v12H2zM6 6v12M10 6v12M14 6v12M18 6v12" s={14} /> Ruler</button>
-                            <button className={`st-btn ${measureShowGrid ? 'primary' : ''}`} onClick={() => setMeasureShowGrid(!measureShowGrid)} style={{ flex: 1, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}><I d="M3 3h18v18H3zM9 3v18M15 3v18M3 9h18M3 15h18" s={14} /> Grid</button>
+                            <button className={`st-btn ${measureShowRuler ? 'primary' : ''}`} onClick={() => setMeasureShowRuler(!measureShowRuler)} style={{ flex: 1, fontSize: '0.8rem' }}>ðŸ“ Ruler</button>
+                            <button className={`st-btn ${measureShowGrid ? 'primary' : ''}`} onClick={() => setMeasureShowGrid(!measureShowGrid)} style={{ flex: 1, fontSize: '0.8rem' }}>ðŸ“ Grid</button>
                         </div>
                     </div>
                 </div>
@@ -5241,7 +5213,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                     })}
                                 </div>
                             ) : (
-                                <div className="st-empty-canvas"><span className="st-empty-icon"><I d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" s={32} /></span><p>No {exportsFilter === 'vector' ? 'vector' : 'image'} files found.</p></div>
+                                <div className="st-empty-canvas"><span className="st-empty-icon">ðŸ”</span><p>No {exportsFilter === 'vector' ? 'vector' : 'image'} files found.</p></div>
                             )}
 
                             {/* Pagination Controls */}
@@ -5280,399 +5252,170 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             )}
                         </>
                     ) : (
-                        <div className="st-empty-canvas"><span className="st-empty-icon"><I d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" s={32} /></span><p>No exports generated yet for this project.</p></div>
+                        <div className="st-empty-canvas"><span className="st-empty-icon">ðŸ“</span><p>No exports generated yet for this project.</p></div>
                     )}
                 </div>
             );
         }
         if (tool === 'pattern') {
             const loading = isEnh;
-            
-            if (!preview) {
-                // CREATIVE EMPTY STATE — Animated Gradient Dropzone with Particles
-                return (
-                    <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
-                        <div
-                            className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
-                            onClick={() => fileRef.current?.click()}
-                            onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                            onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                            onDragLeave={() => setIsDrag(false)}
-                        >
-                            {/* Floating Particles */}
-                            <div className="st-particles">
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                            </div>
-                            
-                            {/* Pulsing Icon */}
-                            <div className="st-dropzone-icon-wrap">
-                                <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={36} />
-                            </div>
-                            
-                            <h2 className="st-dropzone-title">Upload artwork to extract</h2>
-                            <p className="st-dropzone-desc">Drag & drop or click to browse — AI will isolate repeating pattern elements</p>
-                            
-                            {/* Format Badges */}
-                            <div className="st-dropzone-badges">
-                                <span className="st-dropzone-badge">PNG</span>
-                                <span className="st-dropzone-badge">JPG</span>
-                                <span className="st-dropzone-badge">TIFF</span>
-                                <span className="st-dropzone-badge">Up to 50MB</span>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            // CREATIVE WORKSPACE — Comparison Cards with AI Processing
             return (
-                <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                    <div className="st-comparison-workspace">
-                        
-                        {/* Original Card */}
-                        <div className="st-comparison-card">
-                            <div className="st-comparison-card-head">
-                                <span>Original Input</span>
-                                <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} />
-                                    Replace
-                                </button>
-                            </div>
-                            <div className="st-comparison-card-body">
-                                <img src={preview} alt="Original artwork" />
-                            </div>
+                <div className="st-pattern-layout">
+                    <div
+                        className={`st-pattern-upload ${isDrag ? 'dragging' : ''}`}
+                        onClick={() => fileRef.current?.click()}
+                        onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
+                        onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
+                        onDragLeave={() => setIsDrag(false)}
+                    >
+                        <div className="st-pattern-upload-icon">
+                            <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={20} />
                         </div>
+                        <strong>Upload an image or drag &amp; drop</strong>
+                        <p>JPG, PNG &bull; Up to 50MB &bull; Recommended: 3000px or higher</p>
+                    </div>
 
-                        {/* Central Action Bridge */}
-                        <div className="st-comparison-action-bridge">
-                            <button className="st-extract-btn-creative" onClick={extractDesign} disabled={loading || !preview}>
-                                <div className={loading ? 'spin-icon' : ''}>
-                                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={20} />
-                                </div>
-                                {loading ? 'Extracting...' : 'Extract'}
-                            </button>
-                            <span className="st-credit-badge">
-                                <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                                {creditPricing.extract || 50} credits
-                            </span>
-                        </div>
-
-                        {/* Result Card */}
-                        <div className="st-comparison-card">
-                            <div className="st-comparison-card-head">
-                                <span>Extracted Pattern</span>
-                                {enhUrl && !Array.isArray(enhUrl) && (
-                                    <button onClick={(e) => forceDownload(e, enhUrl)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                        <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
+                    <div className="st-pattern-panels">
+                        <div className="st-pattern-panel">
+                            <div className="st-pattern-panel-label">Original</div>
+                            {preview ? (
+                                <img src={preview} alt="Original" className="st-pattern-image" />
+                            ) : (
+                                <>
+                                    <svg className="st-pattern-empty-img" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <rect x="25" y="30" width="60" height="65" rx="8" fill="#F3F4F6" stroke="#E5E7EB" strokeWidth="2" transform="rotate(-10 25 30)" />
+                                        <rect x="40" y="25" width="60" height="65" rx="8" fill="#FFFFFF" stroke="#E5E7EB" strokeWidth="2" />
+                                        <circle cx="55" cy="45" r="6" fill="#E5E7EB" />
+                                        <path d="M40 70L55 55L75 75L85 65L100 80" stroke="#E5E7EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    <div className="st-pattern-empty-title">No image uploaded</div>
+                                    <div className="st-pattern-empty-desc">Upload an outfit or fabric image to get started.</div>
+                                    <button className="st-pattern-btn-outline" onClick={() => fileRef.current?.click()}>
+                                        <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={16} />
+                                        Upload Image
                                     </button>
-                                )}
-                            </div>
-                            <div className="st-comparison-card-body">
-                                {enhUrl ? (
-                                    Array.isArray(enhUrl) ? (
-                                        <div className="st-result-reveal" style={{ position: 'absolute', inset: '0', padding: '1.25rem', display: 'flex', gap: '10px' }}>
-                                            {enhUrl.map((url, i) => (
-                                                <div key={i} style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                                                    <img src={url.startsWith('/') ? `${API}${url}` : url} alt={`Result ${i + 1}`} style={{ flex: 1, borderRadius: '10px', objectFit: 'contain' }} />
-                                                    <a href={url} onClick={(e) => forceDownload(e, url)} className="st-premium-download-btn" style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>Download</a>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="st-result-reveal">
-                                            <img src={enhUrl.startsWith('/') ? `${API}${enhUrl}` : enhUrl} alt="Result" />
-                                        </div>
-                                    )
-                                ) : loading ? (
-                                    // AI Sparkle Processing Animation
-                                    <div className="st-ai-processing">
-                                        <div className="st-ai-sparkle-container">
-                                            <div className="st-ai-sparkle-icon">
-                                                <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
+                                </>
+                            )}
+                        </div>
+
+                        <div className="st-pattern-arrow">
+                            <I d="M5 12h14M12 5l7 7-7 7" s={18} />
+                        </div>
+
+                        <div className="st-pattern-panel">
+                            <div className="st-pattern-panel-label">Extracted Pattern</div>
+                            {enhUrl ? (
+                                Array.isArray(enhUrl) ? (
+                                    <div style={{ position: 'absolute', inset: '0', padding: '3.5rem 1rem 1rem', display: 'flex', gap: '10px' }}>
+                                        {enhUrl.map((url, i) => (
+                                            <div key={i} style={{ flex: 1, position: 'relative' }}>
+                                                <img src={url} alt={`Result ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px' }} />
+                                                <a href={url} onClick={(e) => forceDownload(e, url)} className="st-dl-btn" style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>Download</a>
                                             </div>
-                                            <div className="st-ai-ring" />
-                                            <div className="st-ai-ring" />
-                                            <div className="st-ai-ring" />
-                                        </div>
-                                        <span className="st-ai-phase-text">AI is extracting pattern elements...</span>
+                                        ))}
                                     </div>
                                 ) : (
-                                    <div style={{ textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-                                        <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />
-                                        <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>Ready to extract repeating pattern</p>
-                                    </div>
-                                )}
-                            </div>
+                                    <>
+                                        <img src={enhUrl} alt="Result" className="st-pattern-image" />
+                                        <a href={enhUrl} onClick={(e) => forceDownload(e, enhUrl)} className="st-dl-btn" style={{ position: 'absolute', bottom: '1rem', right: '1rem' }}>Download</a>
+                                    </>
+                                )
+                            ) : loading ? (
+                                <div className="st-loading"><div className="st-spinner" /><span>Extracting Pattern...</span></div>
+                            ) : (
+                                <>
+                                    <svg className="st-pattern-empty-img" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <rect x="35" y="30" width="60" height="60" rx="8" fill="#F9FAFB" stroke="#E5E7EB" strokeWidth="2" strokeDasharray="4 4" />
+                                        <path d="M50 45C50 45 55 50 60 45C65 40 70 45 70 45" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M45 60C45 60 50 55 55 60C60 65 65 60 65 60" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M55 75C55 75 60 70 65 75C70 80 75 75 75 75" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M75 55L75 60M85 30L90 35M30 75L25 70" stroke="#C7D2FE" strokeWidth="2" strokeLinecap="round" />
+                                        <path d="M92 40L95 48L103 51L95 54L92 62L89 54L81 51L89 48Z" fill="#C7D2FE" />
+                                        <path d="M40 20L42 25L47 27L42 29L40 34L38 29L33 27L38 25Z" fill="#E0E7FF" />
+                                    </svg>
+                                    <div className="st-pattern-empty-title">Extracted pattern will appear here</div>
+                                    <div className="st-pattern-empty-desc">Our AI will analyze your image and generate a clean, seamless repeating design.</div>
+                                    <button className="st-pattern-btn-outline" disabled={true}>
+                                        <I d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" s={16} />
+                                        Extract Design
+                                    </button>
+                                </>
+                            )}
                         </div>
-
                     </div>
-
-                    {/* Quick Actions Toolbar */}
-                    {enhUrl && (
-                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem' }}>
-                            <div className="st-quick-actions">
-                                <button className="st-quick-action-btn primary" onClick={(e) => forceDownload(e, Array.isArray(enhUrl) ? enhUrl[0] : enhUrl)}>
-                                    <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} />
-                                    Download
-                                </button>
-                                <button className="st-quick-action-btn" onClick={() => { setTool('seamless'); }}>
-                                    <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={14} />
-                                    Send to Seamless
-                                </button>
-                                <button className="st-quick-action-btn" onClick={() => { setTool('repeat'); }}>
-                                    <I d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" s={14} />
-                                    Send to Repeat
-                                </button>
-                            </div>
-                        </div>
-                    )}
                 </div>
             );
         }
-
         if (tool === 'seamless') {
             const loading = isSeamless;
-            const pipelineStep = seamlessProgress < 15 ? 1 : seamlessProgress < 55 ? 2 : seamlessProgress < 90 ? 3 : 4;
-            const pipelineStages = [
-                { label: 'Upload', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12' },
-                { label: 'AI Generate', icon: 'M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z' },
-                { label: 'Score', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-                { label: 'Complete', icon: 'M5 13l4 4L19 7' }
-            ];
-            const promptChips = ['watercolor roses on cream', 'geometric aztec tribal', 'tropical palm leaves', 'ditsy floral vintage', 'abstract marble texture'];
-            const bestTileIndex = seamlessTiles.length > 0 ? seamlessTiles.reduce((best, tile, idx) => tile.score > seamlessTiles[best].score ? idx : best, 0) : -1;
-
             return (
-                <div className="st-pattern-layout" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', padding: '2rem' }}>
-                    
-                    {/* Spring-Physics Segmented Control */}
-                    <div className="st-segmented-control">
-                        <div className="st-segment-highlight" style={{ left: seamlessMode === 'generate' ? '4px' : '50%', width: 'calc(50% - 4px)' }} />
-                        <button className={`st-segment-btn ${seamlessMode === 'generate' ? 'active' : ''}`} onClick={() => setSeamlessMode('generate')}>
-                            <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} />
-                            Generate New
-                        </button>
-                        <button className={`st-segment-btn ${seamlessMode === 'fix' ? 'active' : ''}`} onClick={() => setSeamlessMode('fix')}>
-                            <I d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" s={16} />
-                            Fix Existing
-                        </button>
+                <div className="st-pattern-layout">
+                    <div
+                        className={`st-pattern-upload ${isDrag ? 'dragging' : ''}`}
+                        onClick={() => fileRef.current?.click()}
+                        onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
+                        onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
+                        onDragLeave={() => setIsDrag(false)}
+                    >
+                        <div className="st-pattern-upload-icon">
+                            <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={20} />
+                        </div>
+                        <strong>Upload an image or drag &amp; drop</strong>
+                        <p>JPG, PNG &bull; Up to 50MB</p>
                     </div>
 
-                    {seamlessMode === 'generate' ? (
-                        /* ═══════ GENERATE NEW WORKSPACE ═══════ */
-                        <div style={{ width: '100%', maxWidth: '800px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            {/* Prompt Container */}
-                            <div className="st-prompt-container">
-                                <div className="st-prompt-label">
-                                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={14} />
-                                    Describe your pattern
-                                </div>
-                                <textarea
-                                    className="st-prompt-textarea"
-                                    value={seamlessPrompt}
-                                    onChange={e => setSeamlessPrompt(e.target.value)}
-                                    placeholder="e.g. 'watercolor roses on cream linen background with soft petals'"
-                                    maxLength={500}
-                                />
-                                <div className="st-prompt-charcount">{seamlessPrompt.length} / 500</div>
-                                {/* Suggestion Chips */}
-                                <div className="st-prompt-chips">
-                                    {promptChips.map((chip, idx) => (
-                                        <button key={idx} className="st-prompt-chip" onClick={() => setSeamlessPrompt(chip)}>{chip}</button>
-                                    ))}
-                                </div>
-                                {/* Reference image indicator */}
-                                {uploaded?.filename && (
-                                    <div className="st-prompt-ref">
-                                        <I d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" s={14} />
-                                        Reference: {uploaded.filename} will guide the style
-                                    </div>
-                                )}
-                            </div>
-                            
-                            {/* Action Area */}
-                            <div style={{ display: 'flex', justifyContent: 'center' }}>
-                                {loading || seamlessProgress > 0 ? (
-                                    /* Pipeline Progress Visualization */
-                                    <div className="st-pipeline-progress">
-                                        <div className="st-pipeline-stages">
-                                            {pipelineStages.map((stage, idx) => {
-                                                const stepNum = idx + 1;
-                                                const isActive = stepNum === pipelineStep;
-                                                const isCompleted = stepNum < pipelineStep;
-                                                return (
-                                                    <React.Fragment key={idx}>
-                                                        <div className={`st-pipeline-stage ${isCompleted ? 'completed' : ''} ${isActive ? 'active' : ''}`}>
-                                                            <div className="st-pipeline-icon">
-                                                                <I d={stage.icon} s={14} />
-                                                            </div>
-                                                            <span className="st-pipeline-label">{stage.label}</span>
-                                                        </div>
-                                                        {idx < pipelineStages.length - 1 && (
-                                                            <div className={`st-pipeline-connector ${isCompleted ? 'completed' : ''}`} />
-                                                        )}
-                                                    </React.Fragment>
-                                                );
-                                            })}
-                                        </div>
-                                        <div className="st-pipeline-pct">{Math.round(seamlessProgress)}%</div>
-                                        <div className="st-pipeline-status">{seamlessStatus}</div>
-                                    </div>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                                        <button className="st-extract-btn-creative" onClick={generateSeamless} disabled={!seamlessPrompt.trim()}>
-                                            <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={18} />
-                                            Generate Seamless Tiles
-                                        </button>
-                                        <span className="st-credit-badge">
-                                            <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                                            {creditPricing.seamless || 80} credits
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Generated Results */}
-                            {seamlessTiles.length > 0 && (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
-                                    {seamlessTiles.map((tile, i) => {
-                                        const tileUrl = `${API}${tile.url}`;
-                                        const isSelected = seamlessUrl === tileUrl;
-                                        const isBest = i === bestTileIndex;
-                                        const scoreClass = tile.score >= 0.9 ? 'excellent' : tile.score >= 0.75 ? 'good' : 'poor';
-                                        return (
-                                            <div
-                                                key={i}
-                                                className={`st-tile-result-card ${isSelected ? 'selected' : ''}`}
-                                                onClick={() => { setSeamlessUrl(tileUrl); setUploads(prev => ({ ...prev, [tool]: { ...prev[tool], url: tileUrl } })); }}
-                                            >
-                                                <img src={tileUrl} alt={`Tile ${i + 1}`} />
-                                                <div className={`st-score-badge ${scoreClass}`}>
-                                                    {Math.round(tile.score * 100)}%
-                                                </div>
-                                                {isBest && <div className="st-best-pick">AI Pick</div>}
-                                                <div className="st-tile-result-overlay">
-                                                    <a href={tileUrl} onClick={(e) => { e.stopPropagation(); forceDownload(e, tileUrl); }}>
-                                                        <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={16} />
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                    <div className="st-pattern-panels">
+                        <div className="st-pattern-panel">
+                            <div className="st-pattern-panel-label">Original</div>
+                            {preview ? (
+                                <img src={preview} alt="Original" className="st-pattern-image" />
+                            ) : (
+                                <>
+                                    <svg className="st-pattern-empty-img" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <rect x="25" y="30" width="60" height="65" rx="8" fill="#F3F4F6" stroke="#E5E7EB" strokeWidth="2" transform="rotate(-10 25 30)" />
+                                        <rect x="40" y="25" width="60" height="65" rx="8" fill="#FFFFFF" stroke="#E5E7EB" strokeWidth="2" />
+                                        <circle cx="55" cy="45" r="6" fill="#E5E7EB" />
+                                        <path d="M40 70L55 55L75 75L85 65L100 80" stroke="#E5E7EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    <div className="st-pattern-empty-title">No image uploaded</div>
+                                </>
                             )}
                         </div>
-                    ) : (
-                        /* ═══════ FIX EXISTING WORKSPACE ═══════ */
-                        <>
-                            {!preview ? (
-                                /* Creative Dropzone */
-                                <div
-                                    className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
-                                    onClick={() => fileRef.current?.click()}
-                                    onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                                    onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                                    onDragLeave={() => setIsDrag(false)}
-                                >
-                                    <div className="st-particles">
-                                        <div className="st-particle" />
-                                        <div className="st-particle" />
-                                        <div className="st-particle" />
-                                        <div className="st-particle" />
-                                        <div className="st-particle" />
-                                        <div className="st-particle" />
-                                    </div>
-                                    <div className="st-dropzone-icon-wrap">
-                                        <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={36} />
-                                    </div>
-                                    <h2 className="st-dropzone-title">Upload a pattern tile to fix</h2>
-                                    <p className="st-dropzone-desc">AI will analyze and fix edge seams using offset & inpaint</p>
-                                    <div className="st-dropzone-badges">
-                                        <span className="st-dropzone-badge">PNG</span>
-                                        <span className="st-dropzone-badge">JPG</span>
-                                        <span className="st-dropzone-badge">TIFF</span>
-                                    </div>
-                                </div>
+
+                        <div className="st-pattern-arrow">
+                            <I d="M5 12h14M12 5l7 7-7 7" s={18} />
+                        </div>
+
+                        <div className="st-pattern-panel">
+                            <div className="st-pattern-panel-label">Seamless Base Tile</div>
+                            {seamlessUrl ? (
+                                <>
+                                    <img src={seamlessUrl} alt="Result" className="st-pattern-image" />
+                                    <a href={seamlessUrl} onClick={(e) => forceDownload(e, seamlessUrl)} className="st-dl-btn" style={{ position: 'absolute', bottom: '1rem', right: '1rem' }}>Download</a>
+                                </>
+                            ) : loading ? (
+                                <div className="st-loading"><div className="st-spinner" /><span>Fixing seams...</span></div>
                             ) : (
-                                /* Comparison Workspace */
-                                <div className="st-comparison-workspace">
-                                    {/* Original Input Card */}
-                                    <div className="st-comparison-card">
-                                        <div className="st-comparison-card-head">
-                                            <span>Original Input</span>
-                                            <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }}>Replace</button>
-                                        </div>
-                                        <div className="st-comparison-card-body">
-                                            <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                        </div>
-                                    </div>
-
-                                    {/* Action Bridge */}
-                                    <div className="st-comparison-action-bridge">
-                                        <button className="st-extract-btn-creative" onClick={makeSeamless} disabled={loading || (!uploaded && !preview && !activeProject?.heroImageUrl)}>
-                                            <I d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" s={18} />
-                                            {loading ? 'Fixing...' : 'Fix Uploaded Tile'}
-                                        </button>
-                                        <span className="st-credit-badge">
-                                            <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                                            {creditPricing.seamless || 80} credits
-                                        </span>
-                                    </div>
-
-                                    {/* Seamless Result Card */}
-                                    <div className="st-comparison-card">
-                                        <div className="st-comparison-card-head">
-                                            <span>Seamless Result</span>
-                                            {seamlessUrl && (
-                                                <button onClick={(e) => forceDownload(e, seamlessUrl)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                                    <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="st-comparison-card-body">
-                                            {seamlessUrl ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', alignItems: 'center' }}>
-                                                    <img className="st-result-reveal" src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Seamless Result" style={{ maxWidth: '100%', maxHeight: '280px', objectFit: 'contain', borderRadius: '8px' }} />
-                                                    <div className="st-tile-preview-2x2">
-                                                        <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 1" />
-                                                        <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 2" />
-                                                        <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 3" />
-                                                        <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 4" />
-                                                    </div>
-                                                    <a href={seamlessUrl} onClick={(e) => forceDownload(e, seamlessUrl)} className="st-extract-btn-creative" style={{ fontSize: '0.85rem', padding: '0.5rem 1.25rem' }}>
-                                                        <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
-                                                        Download Tile
-                                                    </a>
-                                                </div>
-                                            ) : loading ? (
-                                                <div className="st-ai-processing">
-                                                    <div className="st-ai-sparkle-container">
-                                                        <div className="st-ai-sparkle-icon">
-                                                            <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={24} />
-                                                        </div>
-                                                        <div className="st-ai-ring" />
-                                                        <div className="st-ai-ring" />
-                                                        <div className="st-ai-ring" />
-                                                    </div>
-                                                    <div className="st-ai-phase-text">{seamlessStatus || 'AI is fixing seams...'}</div>
-                                                </div>
-                                            ) : (
-                                                <div style={{ textAlign: 'center', color: '#9ca3af', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '2rem 0' }}>
-                                                    <I d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" s={48} />
-                                                    <p>Seamless pattern will appear here.</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
+                                <>
+                                    <svg className="st-pattern-empty-img" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <rect x="35" y="30" width="60" height="60" rx="8" fill="#F9FAFB" stroke="#E5E7EB" strokeWidth="2" strokeDasharray="4 4" />
+                                        <path d="M50 45C50 45 55 50 60 45C65 40 70 45 70 45" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M45 60C45 60 50 55 55 60C60 65 65 60 65 60" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M55 75C55 75 60 70 65 75C70 80 75 75 75 75" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M75 55L75 60M85 30L90 35M30 75L25 70" stroke="#C7D2FE" strokeWidth="2" strokeLinecap="round" />
+                                        <path d="M92 40L95 48L103 51L95 54L92 62L89 54L81 51L89 48Z" fill="#C7D2FE" />
+                                        <path d="M40 20L42 25L47 27L42 29L40 34L38 29L33 27L38 25Z" fill="#E0E7FF" />
+                                    </svg>
+                                    <div className="st-pattern-empty-title">Seamless pattern will appear here</div>
+                                    <div className="st-pattern-empty-desc">Our AI will offset your image and seamlessly redraw the connections.</div>
+                                    <button className="st-pattern-btn-outline" disabled={true}>
+                                        <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z" s={16} />
+                                        Make Seamless Base Tile
+                                    </button>
+                                </>
                             )}
-                        </>
-                    )}
+                        </div>
+                    </div>
                 </div>
             );
         }
@@ -5758,7 +5501,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                 <p>Loading palettes...</p>
                             ) : brandPalettes.length === 0 ? (
                                 <div className="st-empty-canvas" style={{ minHeight: '200px' }}>
-                                    <span className="st-empty-icon" style={{ fontSize: '2rem' }}></span>
+                                    <span className="st-empty-icon" style={{ fontSize: '2rem' }}>ðŸŽ¨</span>
                                     <p>No brand palettes saved yet.</p>
                                 </div>
                             ) : (
@@ -6061,13 +5804,13 @@ if (tool === 'imagelayers') {
                             <div style={{ display: 'flex', gap: '10px', height: '100%', alignItems: 'center' }}>
                                 {resultUrl.map((url, i) => (
                                     <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        <img src={url.startsWith('/') ? `${API}${url}` : url} alt={`Result ${i + 1}`} style={{ width: '100%', height: 'auto', borderRadius: '8px' }} />
+                                        <img src={url} alt={`Result ${i + 1}`} style={{ width: '100%', height: 'auto', borderRadius: '8px' }} />
                                         <a href={url} onClick={(e) => forceDownload(e, url)} className="st-dl-btn">Download</a>
                                     </div>
                                 ))}
                             </div>
                         ) : <>
-                            <img src={resultUrl.startsWith('/') ? `${API}${resultUrl}` : resultUrl} alt="Result" style={{ maxWidth: '100%', maxHeight: '320px', objectFit: 'contain' }} />
+                            <img src={resultUrl} alt="Result" style={{ maxWidth: '100%', maxHeight: '320px', objectFit: 'contain' }} />
                             <a href={resultUrl} onClick={(e) => forceDownload(e, resultUrl)} className="st-dl-btn" style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>Download {tool === 'vectorize' ? 'SVG' : 'PNG'}</a>
                         </>
                     ) : loading ? <span className="st-processing">Processing...</span> : <span className="st-compare-empty">Result appears here</span>}
@@ -6075,300 +5818,101 @@ if (tool === 'imagelayers') {
             </div>
             );
     }
-        const allAvailableModels = [
-                { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'AI', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-                { id: 'google/imagen-4-fast', name: 'Imagen 4 Fast', sub: 'Google', brand: 'gemini', logo: 'Gm', icon: 'M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4L12 2z' },
-                { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest Labs', brand: 'deepseek', logo: 'FL', icon: 'M12 2C6.477 2 2 6.477 2 12c0 4.411 2.865 8.166 6.839 9.462.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.699-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.577.688.48C19.138 20.161 22 16.416 22 12c0-5.523-4.477-10-10-10z' },
-                { id: 'google/imagen-4-ultra', name: 'Imagen 4 Ultra', sub: 'Google', brand: 'anthropic', logo: 'G', icon: 'M12 2L10.5 8 5 9.5 9.5 12 8 18l4.5-2L17 19l-1.5-5.5L20 10.5 14 9.5z' },
-                { id: 'xai/grok-imagine-image', name: 'Grok 3 Mini', sub: 'xAI', brand: 'xai', logo: 'xAI', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z' },
-                { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'BD', icon: 'M4 4h4v16H4zm6 4h4v12h-4zm6 4h4v8h-4z' },
-                { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'NB', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-                { id: 'google/nano-banana-pro', name: 'Nano Banana Pro', sub: 'Google', brand: 'google', logo: 'NP', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' }
-            ];
-
-            const promptChips = ['Botanical repeat', 'Hand-painted floral', 'Art deco geometric', 'Soft watercolor', 'Vintage textile', 'Tropical foliage'];
-
             return (
-            <div className="st-inspire-main st-inspire-studio">
-                
-                {/* Modal for AI Preferences */}
-                {showModelModal && (
-                    <div className="st-model-modal-overlay" onClick={() => setShowModelModal(false)}>
-                        <div className="st-model-modal-content" onClick={e => e.stopPropagation()}>
-                            <div className="st-model-header">
-                                <div>
-                                    <h2>AI model preferences</h2>
-                                    <p>Manage and reorder your AI models and generation settings</p>
-                                </div>
-                                <button className="st-model-close" onClick={() => setShowModelModal(false)}><I d="M6 18L18 6M6 6l12 12" s={20} /></button>
-                            </div>
-
-                            <div className="st-model-list">
-                                {allAvailableModels.map(m => {
-                                    const isActive = inspireModels.includes(m.id);
-                                    return (
-                                        <div key={m.id} className="st-model-row" style={{ opacity: isActive ? 1 : 0.6 }}>
-                                            <div className="st-model-row-left">
-                                                <div className="st-model-drag"><I d="M8 6h2v2H8V6zm0 5h2v2H8v-2zm0 5h2v2H8v-2zm4-10h2v2h-2V6zm0 5h2v2h-2v-2zm0 5h2v2h-2v-2z" s={16} /></div>
-                                                <div className="st-model-name">
-                                                    <I d={m.icon} s={16} /> {m.name}
-                                                </div>
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                <div className="st-model-dropdown">{m.sub} <I d="M6 9l6 6 6-6" s={12} style={{ marginLeft: '4px' }} /></div>
-                                                <div className={`st-toggle ${isActive ? 'active' : ''}`} onClick={() => {
-                                                    if (isActive) {
-                                                        if (inspireModels.length > 1) setInspireModels(inspireModels.filter(id => id !== m.id));
-                                                    } else {
-                                                        setInspireModels([...inspireModels, m.id]);
-                                                    }
-                                                }}>
-                                                    <div className="st-toggle-knob" />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Moved Generation Settings inside Modal */}
-                            <div style={{ display: 'flex', borderTop: '1px solid rgba(255,255,255,0.05)', background: '#171717' }}>
-                                <div className="st-modal-group" style={{ flex: 1, borderRight: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <div className="st-modal-label">Aspect Ratio</div>
-                                    <select className="st-modal-dark-select" value={inspireAspect} onChange={e => setInspireAspect(e.target.value)}>
-                                        <option value="1:1">1:1 Square</option>
-                                        <option value="4:3">4:3 Standard</option>
-                                        <option value="16:9">16:9 Widescreen</option>
-                                        <option value="9:16">9:16 Mobile</option>
-                                    </select>
-                                </div>
-                                <div className="st-modal-group" style={{ flex: 1 }}>
-                                    <div className="st-modal-label">Resolution</div>
-                                    <select className="st-modal-dark-select" value={inspireResolution} onChange={e => setInspireResolution(e.target.value)}>
-                                        <option value="512">512px Draft</option>
-                                        <option value="1024">1K Standard</option>
-                                        <option value="1536">1.5K High</option>
-                                        <option value="2048">2K Ultra</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="st-modal-group" style={{ background: '#171717' }}>
-                                <div className="st-modal-label">Creativity Level</div>
-                                <div style={{ display: 'flex', background: '#262626', padding: '0.35rem', borderRadius: '10px', position: 'relative' }}>
-                                    {['Conservative', 'Balanced', 'Creative', 'Bold', 'Wild'].map((lvl, idx) => (
-                                        <div key={lvl} className={`st-creativity-pill-dark ${creativity === idx + 1 ? 'active' : ''}`} onClick={() => setCreativity(idx + 1)}>
-                                            {lvl}
-                                            {creativity === idx + 1 && <div className="st-creativity-highlight-dark" />}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="st-model-footer">
-                                <button className="st-model-btn-sec" onClick={() => setShowModelModal(false)}>Apply for this chat</button>
-                                <button className="st-model-btn-pri" onClick={() => setShowModelModal(false)}>Save as default</button>
-                            </div>
+            <div className="st-inspire-main">
+                {/* Upload Box */}
+                <div
+                    className={`st-inspire-upload-box ${preview ? 'has-image' : ''}`}
+                    onClick={() => fileRef.current?.click()}
+                    onDrop={(e) => { e.preventDefault(); handleUpload(e.dataTransfer.files[0]); }}
+                    onDragOver={(e) => e.preventDefault()}
+                >
+                    {preview ? (
+                        <div className="st-upload-preview" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                            <img src={preview} alt="Uploaded reference" style={{ maxHeight: '160px', borderRadius: '8px', objectFit: 'contain' }} />
+                            <div><span className="st-upload-name">{uploaded?.originalName || 'Image Uploaded'}</span><span className="st-upload-hint">Click to replace</span></div>
                         </div>
+                    ) : (
+                        <>
+                            <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={24} />
+                            <h3>Upload reference image (optional)</h3>
+                            <p>PNG, JPG up to 10MB</p>
+                        </>
+                    )}
+                </div>
+
+                {/* Prompt Box */}
+                <div className="st-inspire-prompt-container">
+                    <div className="st-inspire-prompt-top">
+                        <div className="st-inspire-prompt-icon">
+                            <I d="M5 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3zM16 12l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3zM14 2l1.5 4.5L20 8l-4.5 1.5L14 14l-1.5-4.5L8 8l4.5-1.5L14 2z" s={20} />
+                        </div>
+                        <input
+                            className="st-inspire-prompt-input"
+                            placeholder="Describe the pattern inspiration you want to create..."
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && generate()}
+                        />
                     </div>
-                )}
-
-                <section className="st-inspire-board">
-                    <div className="st-inspire-main-column">
-                        <div className="st-inspire-topbar">
-                            <div className="st-inspire-model-box st-inspire-model-top">
-                                <div className="st-inspire-model-box-head">
-                                    <span>AI Generation Models</span>
-                                    <strong>{inspireModels.length} enabled</strong>
-                                </div>
-                                <div className="st-inspire-model-top-grid">
-                                    {allAvailableModels.map((m) => {
-                                        const active = inspireModels.includes(m.id);
-                                        return (
-                                            <button key={m.id} className="st-inspire-model-row" onClick={() => {
-                                                if (active) {
-                                                    if (inspireModels.length > 1) setInspireModels(inspireModels.filter(id => id !== m.id));
-                                                } else {
-                                                    setInspireModels([...inspireModels, m.id]);
-                                                }
-                                            }}>
-                                                <span className={`st-model-brand ${m.brand}`}>{m.logo}</span>
-                                                <strong>{m.name}</strong>
-                                                <small>{m.sub}</small>
-                                                <i className={active ? 'active' : ''} />
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                    <div className="st-inspire-prompt-bottom">
+                        <div className="st-inspire-tags">
+                            {['Floral', 'Geometric', 'Minimal', 'Vintage', 'Watercolor', 'Tropical'].map(t => (
+                                <button key={t} className="st-inspire-tag" onClick={() => setPrompt(prev => prev ? `${prev}, ${t}` : t)}>
+                                    <I d="M7 21l7-14M3 11h18M3 17h18" s={12} /> {t}
+                                </button>
+                            ))}
                         </div>
-
-                        <div className="st-inspire-compose-row">
-                            <button className={`st-inspire-upload-zone ${preview ? 'has-image' : ''}`} onClick={() => fileRef.current?.click()}>
-                                <span><I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={18} /></span>
-                                <strong>{preview ? 'Replace Reference Image' : 'Upload Reference Image'}</strong>
-                                <small>JPG, PNG, or WebP</small>
+                        <div className="st-inspire-prompt-actions">
+                            {uploaded && (
+                                <button
+                                    className="st-btn"
+                                    onClick={descImg}
+                                    disabled={isDesc}
+                                    style={{ background: '#f5f3ff', color: 'var(--primary)', border: 'none', marginRight: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700 }}
+                                    title="Auto-describe uploaded image"
+                                >
+                                    <I d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" s={14} />
+                                    {isDesc ? 'Analyzing...' : 'Auto-Describe'}
+                                </button>
+                            )}
+                            <button className="st-inspire-send-btn" onClick={generate} disabled={isGen}>
+                                <I d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" s={16} />
                             </button>
-                            <div className={`st-inspire-photo-preview ${preview ? 'has-image' : ''}`}>
-                                {preview ? (
-                                    <img src={preview} alt="Uploaded reference preview" />
-                                ) : (
-                                    <div>
-                                        <I d="M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM8 14l2.5-2.5L13 14l2-2 3 3M8.5 8.5h.01" s={24} />
-                                        <strong>Uploaded photo preview</strong>
-                                        <span>Your reference image will appear here.</span>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="st-inspire-prompt-card">
-                                <label className="st-inspire-field-label" htmlFor="inspire-prompt">Prompt</label>
-                                <textarea
-                                    id="inspire-prompt"
-                                    className="st-inspire-prompt-area"
-                                    placeholder="A delicate floral pattern unfolds in muted hues of pale yellow, sage green, and dusty blue on a creamy white background. Curved stems with intricate swirls and leaves."
-                                    value={prompt}
-                                    onChange={(e) => setPrompt(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault();
-                                            generate();
-                                        }
-                                    }}
-                                    rows={3}
-                                />
-                                <div className="st-inspire-prompt-footer">
-                                    <div className="st-inspire-model-pills">
-                                        {inspireModels.slice(0, 2).map((mId) => {
-                                            const cfg = allAvailableModels.find(m => m.id === mId) || allAvailableModels[0];
-                                            return <span key={mId}><i className={`st-model-brand ${cfg.brand}`}>{cfg.logo}</i> {cfg.name}</span>;
-                                        })}
-                                        {inspireModels.length > 2 && <span>+{inspireModels.length - 2}</span>}
-                                    </div>
-                                    <div className="st-inspire-action-row">
-                                        <button className="st-inspire-soft-btn" onClick={descImg} disabled={isDesc || !uploaded}>
-                                            <I d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" s={13} />
-                                            {isDesc ? 'Analyzing' : 'Auto-Describe'}
-                                        </button>
-                                        <button className="st-inspire-primary-btn" onClick={generate} disabled={isGen || !prompt.trim()}>
-                                            <I d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" s={14} />
-                                            {isGen ? 'Generating' : 'Generate'}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
-
-                        <div className="st-inspire-results-header">
-                            <div>
-                                <h3>Generated Variations</h3>
-                                <p>{generatedVariations.length ? `${generatedVariations.length} variations from ${inspireModels.length} model${inspireModels.length > 1 ? 's' : ''}` : 'Generated pattern variations will appear here.'}</p>
-                            </div>
-                            <div className="st-inspire-results-actions">
-                                <button className="active" title="Grid view"><I d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" s={14} /></button>
-                                <button title="List view"><I d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" s={14} /></button>
-                                {generatedVariations.length > 0 && (
-                                    <button className="download" onClick={async (e) => {
-                                        e.preventDefault();
-                                        for (let i = 0; i < generatedVariations.length; i++) {
-                                            await forceDownload(e, generatedVariations[i]);
-                                            await new Promise(r => setTimeout(r, 400));
-                                        }
-                                    }}>
-                                        <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} />
-                                        Download All
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        {isGen && generatedVariations.length === 0 ? (
-                            <div className="st-inspire-loading">
-                                <div className="st-spinner" />
-                                <strong>Generating {variants * inspireModels.length} variations</strong>
-                                <span>Using {inspireModels.length} active model{inspireModels.length > 1 ? 's' : ''} in parallel.</span>
-                            </div>
-                        ) : generatedVariations.length > 0 ? (
-                            <div className="st-inspire-results-stack">
-                                {isGen && (
-                                    <div className="st-inspire-progress">
-                                        <div><span style={{ width: `${inspireProgress}%` }} /></div>
-                                        <strong>{inspireProgress}%</strong>
-                                    </div>
-                                )}
-                                <div className="st-inspire-var-grid">
-                                    {generatedVariations.map((u, i) => (
-                                        <div key={u + i} className={`st-inspire-var-item ${i === 0 ? 'active' : ''}`}>
-                                            {i === 0 && <div className="st-inspire-selected-mark"><I d="M20 6L9 17l-5-5" s={13} /></div>}
-                                            <img src={u.startsWith('/') ? `${API}${u}` : u} alt={`Variation ${i + 1}`} />
-                                            <div className="st-inspire-var-actions">
-                                                <button className="st-inspire-var-btn" title="Favorite"><I d="M20.8 4.6a5.5 5.5 0 0 0-7.7 0l-1.1 1-1.1-1a5.5 5.5 0 0 0-7.8 7.8l1 1 7.9 7.9 7.9-7.9 1-1a5.5 5.5 0 0 0 0-7.8z" s={14} /></button>
-                                                <button className="st-inspire-var-btn" onClick={(e) => forceDownload(e, u)} title="Download"><I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /></button>
-                                                <button className="st-inspire-var-btn" title="Use as base" onClick={() => { setUploads(prev => ({ ...prev, [tool]: { url: u.startsWith('/') ? `${API}${u}` : u, file: { filename: u.split('/').pop() } } })); }}><I d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" s={14} /></button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="st-inspire-empty-state">
-                                <div><I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} /></div>
-                                <strong>Ready to create</strong>
-                                <span>Write a prompt, upload a reference image, then generate pattern variations.</span>
-                            </div>
-                        )}
                     </div>
+                </div>
 
-                    <aside className="st-inspire-refine-panel">
-                        <div className="st-inspire-refine-title">Refine Your Results</div>
-
-                        <div className="st-inspire-control-group">
-                            <label>Creativity <I d="M12 17h.01M12 13a4 4 0 10-4-4" s={12} /></label>
-                            <div className="st-inspire-named-segments">
-                                {['Conservative', 'Balanced', 'Creative', 'Bold'].map((name, idx) => (
-                                    <button key={name} className={creativity === idx + 1 ? 'active' : ''} onClick={() => setCreativity(idx + 1)}>{name}</button>
-                                ))}
-                            </div>
+                {/* Generated Variations */}
+                <div className="st-inspire-section">
+                    <div className="st-inspire-section-header">
+                        <div className="st-inspire-section-title">
+                            <h2>Generated Variations</h2>
+                            <p>Generated from your prompt</p>
                         </div>
-
-                        <div className="st-inspire-control-group">
-                            <label>Variants</label>
-                            <div className="st-inspire-number-grid">
-                                {[1, 2, 4, 6, 8, 10, 12, 16, 20].map(n => (
-                                    <button key={n} className={variants === n ? 'active' : ''} onClick={() => setVariants(n)}>{n}</button>
-                                ))}
-                            </div>
+                        <a href="#" className="st-inspire-section-link"><I d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" s={14} /> View history</a>
+                    </div>
+                    {isGen ? (
+                        <div className="st-loading" style={{ height: '200px' }}><div className="st-spinner" /><span>Generating variations...</span></div>
+                    ) : generatedVariations.length > 0 ? (
+                        <div className="st-inspire-var-grid">
+                            {generatedVariations.map((u, i) => (
+                                <div key={u} className={`st-inspire-var-item ${i === 0 ? 'active' : ''}`}>
+                                    <img src={u} alt={`Variation ${i + 1}`} />
+                                    <div className="st-inspire-var-actions">
+                                        <button className="st-inspire-var-btn"><I d="M20.8 4.6a5.5 5.5 0 0 0-7.7 0l-1.1 1-1.1-1a5.5 5.5 0 0 0-7.8 7.8l1 1 7.9 7.9 7.9-7.9 1-1a5.5 5.5 0 0 0 0-7.8z" s={14} /></button>
+                                        <button className="st-inspire-var-btn" onClick={(e) => forceDownload(e, u)}><I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /></button>
+                                        <button className="st-inspire-var-btn"><I d="M5 12h.01M12 12h.01M19 12h.01" s={14} /></button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-
-                        <div className="st-inspire-control-group">
-                            <label>Style</label>
-                            <div className="st-inspire-chip-grid">
-                                {['All Styles', 'Hand Painted', 'Minimal', 'Line Art', 'Vintage', 'Geometric'].map(style => (
-                                    <button key={style} className={inspireStyle === style || (style === 'All Styles' && inspireStyle === 'All Styles') ? 'active' : ''} onClick={() => setInspireStyle(style)}>{style}</button>
-                                ))}
-                            </div>
+                    ) : (
+                        <div className="st-empty-canvas" style={{ minHeight: '160px', background: 'transparent' }}>
+                            <p>Enter a prompt above to generate beautiful variations.</p>
                         </div>
-
-                        <div className="st-inspire-control-group">
-                            <label>Aspect Ratio</label>
-                            <select className="st-inspire-select" value={inspireAspect} onChange={e => setInspireAspect(e.target.value)}>
-                                <option value="1:1">1:1 Square</option>
-                                <option value="4:3">4:3 Standard</option>
-                                <option value="16:9">16:9 Widescreen</option>
-                                <option value="9:16">9:16 Mobile</option>
-                            </select>
-                        </div>
-
-                        <div className="st-inspire-control-group">
-                            <label>Resolution</label>
-                            <select className="st-inspire-select" value={inspireResolution} onChange={e => setInspireResolution(e.target.value)}>
-                                <option value="512">512px Draft</option>
-                                <option value="1024">1K - Standard</option>
-                                <option value="1536">1.5K High</option>
-                                <option value="2048">2K Ultra</option>
-                            </select>
-                        </div>
-
-                    </aside>
-                </section>
+                    )}
+                </div>
             </div>
             );
   };
@@ -6423,36 +5967,19 @@ if (tool === 'imagelayers') {
                     </div>
                     <div className="st-sidebar-bottom">
                         {user.role === 'admin' ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <div className="st-credits-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={14} />
-                                    Replicate <span className="st-plan">Supervisor</span>
-                                </div>
+                            <div style={{ padding: '4px 0' }}>
+                                <div className="st-credits-label">Replicate <span className="st-plan">Supervisor</span></div>
                                 <div className="st-credits-text strong">${budgetData.totalSpent.toFixed(2)} <span>/ ${budgetData.budget.toFixed(2)}</span></div>
                                 <div className="st-credits-bar"><div className="st-credits-fill" style={{ width: `${budgetData.budget > 0 ? Math.min(100, (budgetData.totalSpent / budgetData.budget) * 100) : 0}%` }} /></div>
                                 <div className="st-credits-text">${budgetData.remaining.toFixed(2)} remaining</div>
                             </div>
                         ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <div className="st-credits-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={14} />
-                                    AI Credits <span className="st-plan">{user.plan}</span>
-                                </div>
+                            <>
+                                <div className="st-credits-label">AI Credits <span className="st-plan">{user.plan}</span></div>
                                 <div className="st-credits-text strong">{(user.creditsLimit - user.creditsUsed).toLocaleString()} <span>/ {user.creditsLimit.toLocaleString()}</span></div>
                                 <div className="st-credits-bar"><div className="st-credits-fill" style={{ width: `${creditPercent}%` }} /></div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div className="st-credits-text" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <I d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" s={12} />
-                                        Resets in {user.resetDays} days
-                                    </div>
-                                    <button onClick={() => setShowSettingsModal(true)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', cursor: 'pointer', padding: '2px', borderRadius: '6px', transition: 'all 0.2s ease' }}
-                                        onMouseEnter={e => e.currentTarget.style.color = '#a78bfa'}
-                                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.35)'}
-                                    >
-                                        <I d="M12.2 2h-.4a2 2 0 00-2 2v.2a2 2 0 01-1 1.7l-.4.2a2 2 0 01-2 0l-.2-.1a2 2 0 00-2.7.7l-.2.4a2 2 0 00.7 2.7l.2.1a2 2 0 011 1.7v.5a2 2 0 01-1 1.8l-.2.1a2 2 0 00-.7 2.7l.2.4a2 2 0 002.7.7l.2-.1a2 2 0 012 0l.4.2a2 2 0 011 1.7v.2a2 2 0 002 2h.4a2 2 0 002-2v-.2a2 2 0 011-1.7l.4-.2a2 2 0 012 0l.2.1a2 2 0 002.7-.7l.2-.4a2 2 0 00-.7-2.7l-.2-.1a2 2 0 01-1-1.8v-.5a2 2 0 011-1.7l.2-.1a2 2 0 00.7-2.7l-.2-.4a2 2 0 00-2.7-.7l-.2.1a2 2 0 01-2 0l-.4-.2a2 2 0 01-1-1.7V4a2 2 0 00-2-2z" s={14} />
-                                    </button>
-                                </div>
-                            </div>
+                                <div className="st-credits-text">Resets in {user.resetDays} days</div>
+                            </>
                         )}
                     </div>
                 </aside>
@@ -6660,12 +6187,12 @@ if (tool === 'imagelayers') {
                             </button>
                         </div>
                     </header>
-                    <div className={`st-workspace ${tool === 'pattern' || tool === 'seamless' || tool === 'inspire' || tool === 'library' || tool === 'exports' || tool === 'mappings' || tool === 'print-advisor' || tool === 'colorway-manager' || tool === 'measurement' || tool.startsWith('admin') ? 'full-width' : ''}`}>
+                    <div className={`st-workspace ${tool === 'library' || tool === 'exports' || tool === 'mappings' || tool === 'print-advisor' || tool === 'colorway-manager' || tool === 'measurement' || tool.startsWith('admin') ? 'full-width' : ''}`}>
                         <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
                             <div className="st-page-head">
                                 <div>
                                     <h1 className="st-title">{toolLabel} {tool === 'library' && <span className="st-pro-badge">Pro</span>}</h1>
-                                    {tool !== 'inspire' && <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Create, refine, and perfect repeat patterns with AI precision.' : tool === 'exports' ? 'View and download your recently exported assets.' : tool === 'print-advisor' ? 'Analyze your pattern and get production-ready print method recommendations.' : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.' : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.' : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.' : 'Upload artwork and generate print-ready assets.'}</p>}
+                                    <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Create, refine, and perfect repeat patterns with AI precision.' : tool === 'exports' ? 'View and download your recently exported assets.' : tool === 'print-advisor' ? 'Analyze your pattern and get production-ready print method recommendations.' : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.' : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.' : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.' : 'Upload artwork and generate print-ready assets.'}</p>
                                 </div>
                             </div>
                             {isLoadingState && <div className="st-error">Loading SQLite-backed studio state...</div>}
@@ -6689,7 +6216,7 @@ if (tool === 'imagelayers') {
                             {error && <div className="st-error">{error}</div>}
 
                         </main>
-                        {tool !== 'library' && tool !== 'exports' && tool !== 'mappings' && tool !== 'pattern' && tool !== 'seamless' && !tool.startsWith('admin') && (
+                        {tool !== 'library' && tool !== 'exports' && tool !== 'mappings' && !tool.startsWith('admin') && (
                             <aside className="st-right-panel">
                                 {tool === 'dashboard' ? (
                                     <div className="st-pl-right">
