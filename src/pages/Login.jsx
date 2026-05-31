@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export default function Login({ onLogin, onGoToLanding }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -7,7 +9,7 @@ export default function Login({ onLogin, onGoToLanding }) {
   const [isLoading, setIsLoading] = useState(false);
   const [autofillTrigger, setAutofillTrigger] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     if (e) e.preventDefault();
     setError('');
 
@@ -18,35 +20,24 @@ export default function Login({ onLogin, onGoToLanding }) {
 
     setIsLoading(true);
 
-    // Simulate slight loading delay for premium feel
-    setTimeout(() => {
-      if (email === 'admin@rimi.ai' && password === 'admin123') {
-        onLogin({
-          email: 'admin@rimi.ai',
-          role: 'admin',
-          name: 'System Administrator',
-          initials: 'SA',
-          plan: 'Admin Workspace',
-          creditsUsed: 12050,
-          creditsLimit: 25000,
-          resetDays: 14
-        });
-      } else if (email === 'business@rimi.ai' && password === 'password123') {
-        onLogin({
-          email: 'business@rimi.ai',
-          role: 'user',
-          name: 'Business Designer',
-          initials: 'BD',
-          plan: 'Business Studio',
-          creditsUsed: 4200,
-          creditsLimit: 10000,
-          resetDays: 18
-        });
+    try {
+      const res = await fetch(`${API}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const data = await res.json();
+
+      if (data.success && data.user) {
+        onLogin(data.user, data.token);
       } else {
-        setError('Invalid email or password.');
+        setError(data.error || 'Invalid email or password.');
         setIsLoading(false);
       }
-    }, 800);
+    } catch (err) {
+      setError('Unable to connect to server. Please try again.');
+      setIsLoading(false);
+    }
   };
 
   const loadDemo = (type) => {
@@ -60,9 +51,8 @@ export default function Login({ onLogin, onGoToLanding }) {
       setPassword('password123');
     }
     
-    // Jump instantly to the top so the user immediately sees the filled credentials
     window.scrollTo({ top: 0, behavior: 'instant' });
-    document.documentElement.scrollTop = 0; // fallback
+    document.documentElement.scrollTop = 0;
 
     setTimeout(() => {
       setAutofillTrigger(false);
@@ -149,7 +139,7 @@ export default function Login({ onLogin, onGoToLanding }) {
           {/* Quick-auth selectors */}
           <div className="login-quick-auth">
             <div className="login-quick-divider">
-              <span>Or Select a Role to Autofill</span>
+              <span>Quick Login</span>
             </div>
             <div className="login-quick-buttons">
               <button
@@ -161,7 +151,7 @@ export default function Login({ onLogin, onGoToLanding }) {
                 <div className="demo-icon">BD</div>
                 <div className="demo-text">
                   <strong>Business User</strong>
-                  <span>Standard access levels</span>
+                  <span>Design tools access</span>
                 </div>
               </button>
 
@@ -169,12 +159,12 @@ export default function Login({ onLogin, onGoToLanding }) {
                 type="button"
                 className="login-demo-btn admin"
                 onClick={() => loadDemo('admin')}
-                title="Log in as System Administrator (Admin Role)"
+                title="Log in as System Administrator (Supervisor Role)"
               >
                 <div className="demo-icon admin-icon">SA</div>
                 <div className="demo-text">
-                  <strong>System Administrator</strong>
-                  <span>Full control panel access</span>
+                  <strong>Supervisor Admin</strong>
+                  <span>Full control panel</span>
                 </div>
               </button>
             </div>

@@ -4,16 +4,43 @@ import Studio from './pages/Studio';
 import Login from './pages/Login';
 
 function App() {
-  const [view, setView] = useState('login');
-  const [currentUser, setCurrentUser] = useState(null);
+  const [view, setView] = useState(() => {
+    const saved = localStorage.getItem('rim_user');
+    return saved ? 'studio' : 'login';
+  });
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('rim_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [currentToken, setCurrentToken] = useState(() => {
+    try {
+      const saved = localStorage.getItem('rim_token');
+      return saved ? saved : null;
+    } catch {
+      return null;
+    }
+  });
 
-  const handleLogin = (user) => {
+  const handleLogin = (user, token) => {
     setCurrentUser(user);
+    if (token) {
+      setCurrentToken(token);
+      localStorage.setItem('rim_token', token);
+    }
+    localStorage.setItem('rim_user', JSON.stringify(user));
     setView('studio');
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setCurrentToken(null);
+    localStorage.removeItem('rim_user');
+    localStorage.removeItem('rim_token');
+    window.location.hash = '';
     setView('login');
   };
 
@@ -24,6 +51,7 @@ function App() {
     return (
       <Studio 
         currentUser={currentUser} 
+        currentToken={currentToken}
         onLogout={handleLogout} 
       />
     );
@@ -37,4 +65,3 @@ function App() {
 }
 
 export default App;
-
