@@ -622,29 +622,77 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     // ===== MAPPINGS =====
     const MAPPING_CATEGORIES = [
-        { id: 'home', label: 'Home', desc: 'Bedding, decor, kitchen', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
-        { id: 'apparel', label: 'Apparel', desc: 'Clothing, fashion, wear', icon: 'M20.38 3.46L16 2 12 5.5 8 2 3.62 3.46a2 2 0 00-1.34 2.23l.58 3.47c.06.37.29.7.62.89L8 12.75V21h8v-8.25l4.52-2.7c.33-.19.56-.52.62-.89l.58-3.47a2 2 0 00-1.34-2.23z' },
-        { id: 'accessories', label: 'Accessories', desc: 'Bags, cases, small items', icon: 'M20 7h-4V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v3H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 4h4v3h-4V4z' },
-        { id: 'wall_art', label: 'Wall Art', desc: 'Frames, canvases, decor', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
-        { id: 'other', label: 'Other', desc: 'Custom products', icon: 'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' },
+        { id: 'home', label: 'Home & Living', desc: 'Bedding, upholstery, kitchen, bath', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
+        { id: 'apparel', label: 'Apparel', desc: 'Shirts, dresses, ethnic, swimwear', icon: 'M20.38 3.46L16 2 12 5.5 8 2 3.62 3.46a2 2 0 00-1.34 2.23l.58 3.47c.06.37.29.7.62.89L8 12.75V21h8v-8.25l4.52-2.7c.33-.19.56-.52.62-.89l.58-3.47a2 2 0 00-1.34-2.23z' },
+        { id: 'accessories', label: 'Bags & Accessories', desc: 'Totes, cases, hats, ties', icon: 'M20 7h-4V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v3H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 4h4v3h-4V4z' },
+        { id: 'wall_art', label: 'Wall Art & Decor', desc: 'Canvas, frames, posters, wallpaper', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
+        { id: 'fabric', label: 'Fabric Presentation', desc: 'Rolls, swatches, draped displays', icon: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z' },
+        { id: 'stationery', label: 'Stationery & Gifts', desc: 'Wrapping, notebooks, packaging', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
     ];
     const MAPPING_PRODUCTS = {
         home: [
-            { id: 'bed_sheet', name: 'Bed Sheet', image: '/products/bed_sheet.png' },
-            { id: 'pillow_cover', name: 'Pillow Cover', image: '/products/pillow_cover.png' },
-            { id: 'comforter', name: 'Comforter', image: '/products/comforter.png' },
-            { id: 'cushion', name: 'Cushion', image: '/products/cushion.png' },
+            { id: 'bed_sheet', name: 'Bed Sheet' },
+            { id: 'pillow_cover', name: 'Pillow Cover' },
+            { id: 'pillow_lumbar', name: 'Lumbar Pillow' },
+            { id: 'comforter', name: 'Comforter' },
+            { id: 'duvet_cover', name: 'Duvet Cover' },
+            { id: 'cushion_floor', name: 'Floor Cushion' },
+            { id: 'throw_blanket', name: 'Throw Blanket' },
+            { id: 'curtain', name: 'Curtain' },
+            { id: 'shower_curtain', name: 'Shower Curtain' },
+            { id: 'tablecloth', name: 'Tablecloth' },
+            { id: 'table_runner', name: 'Table Runner' },
+            { id: 'napkin_set', name: 'Napkin Set' },
+            { id: 'apron', name: 'Kitchen Apron' },
+            { id: 'oven_mitt', name: 'Oven Mitt' },
+            { id: 'chair_upholstery', name: 'Accent Chair' },
+            { id: 'sofa_upholstery', name: 'Sofa' },
+            { id: 'ottoman', name: 'Ottoman' },
+            { id: 'headboard', name: 'Headboard' },
+            { id: 'wallpaper', name: 'Wallpaper' },
         ],
         apparel: [
-            { id: 'tshirt', name: 'T-Shirt', image: '/products/tshirt.png' },
+            { id: 'tshirt', name: 'T-Shirt' },
+            { id: 'polo', name: 'Polo Shirt' },
+            { id: 'hoodie', name: 'Hoodie' },
+            { id: 'jacket', name: 'Jacket' },
+            { id: 'tank_top', name: 'Tank Top' },
+            { id: 'dress', name: 'Dress' },
+            { id: 'skirt', name: 'Skirt' },
+            { id: 'shorts', name: 'Shorts' },
+            { id: 'kurta', name: 'Kurta' },
+            { id: 'saree', name: 'Saree' },
+            { id: 'lehenga', name: 'Lehenga' },
+            { id: 'kimono', name: 'Kimono Robe' },
+            { id: 'scarf', name: 'Scarf' },
+            { id: 'bandana', name: 'Bandana' },
+            { id: 'swimsuit', name: 'Swimsuit' },
         ],
         accessories: [
-            { id: 'tote_bag', name: 'Tote Bag', image: '/products/tote_bag.png' },
+            { id: 'tote_bag', name: 'Tote Bag' },
+            { id: 'backpack', name: 'Backpack' },
+            { id: 'crossbody', name: 'Crossbody Bag' },
+            { id: 'makeup_bag', name: 'Makeup Bag' },
+            { id: 'laptop_sleeve', name: 'Laptop Sleeve' },
+            { id: 'phone_case', name: 'Phone Case' },
+            { id: 'hat_bucket', name: 'Bucket Hat' },
+            { id: 'tie', name: 'Necktie' },
+            { id: 'bow_tie', name: 'Bow Tie' },
         ],
         wall_art: [
-            { id: 'cushion', name: 'Canvas Print', image: '/products/cushion.png' },
+            { id: 'canvas_print', name: 'Canvas Print' },
+            { id: 'framed_print', name: 'Framed Print' },
+            { id: 'poster', name: 'Poster' },
         ],
-        other: [],
+        fabric: [
+            { id: 'fabric_roll', name: 'Fabric Roll' },
+            { id: 'fabric_swatch', name: 'Fabric Swatch' },
+            { id: 'fabric_draped', name: 'Draped Fabric' },
+        ],
+        stationery: [
+            { id: 'wrapping_paper', name: 'Wrapping Paper' },
+            { id: 'notebook', name: 'Notebook' },
+        ],
     };
 
     const [mappingStep, setMappingStep] = useState(1);
@@ -652,7 +700,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [mappingPrintPreview, setMappingPrintPreview] = useState(null);
     const [mappingCategory, setMappingCategory] = useState('home');
     const [mappingSelectedProducts, setMappingSelectedProducts] = useState(new Set());
-    const [mappingControls, setMappingControls] = useState({ scale: 120, posX: 10, posY: -5, rotate: 0, flipH: false, flipV: false });
     const [mappingResults, setMappingResults] = useState([]);
     const [isMappingGenerating, setIsMappingGenerating] = useState(false);
     const [mappingProductSearch, setMappingProductSearch] = useState('');
@@ -696,6 +743,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     products: Array.from(mappingSelectedProducts),
                     category: mappingCategory,
                     projectId: activeProject.id,
+                    userId: user.id,
                 }),
             });
             const d = await r.json();
@@ -703,6 +751,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 setMappingResults(d.mockups);
                 setMappingStep(4);
                 setIsMappingGenerating(false);
+                updateCreditsFromResponse(d);
                 return { url: d.mockups[0]?.mockupUrl, urls: d.mockups.map(m => m.mockupUrl) };
             } else {
                 setIsMappingGenerating(false);
@@ -710,7 +759,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             }
         };
 
-        addBgTask('mappings', `Apparel Mapping: ${mappingSelectedProducts.size} item(s)`, mappingPrint.filename, trigger);
+        addBgTask('mappings', `Product Mockup: ${mappingSelectedProducts.size} item(s)`, mappingPrint.filename, trigger);
     };
     // ===== END MAPPINGS =====
 
@@ -3484,7 +3533,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                     <div className="st-map-product-check">
                                         <I d="M5 13l4 4L19 7" s={14} />
                                     </div>
-                                    <img className="st-map-product-img" src={product.image} alt={product.name} />
+                                    <div className="st-map-product-icon">
+                                        <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={28} />
+                                    </div>
                                     <div className="st-map-product-name">{product.name}</div>
                                 </div>
                             ))}
@@ -3545,11 +3596,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             setMappingPrintPreview(null);
                             setMappingSelectedProducts(new Set());
                             setMappingResults([]);
-                            setMappingControls({ scale: 120, posX: 10, posY: -5, rotate: 0, flipH: false, flipV: false });
-                        }}>Cancel</button>
+                        }}>Reset</button>
                     </div>
                     <div className="st-map-footer-right">
-                        <button className="st-map-draft-btn">Save as Draft</button>
+
                         <button
                             className="st-map-primary-btn"
                             disabled={!mappingPrint || mappingSelectedProducts.size === 0 || isMappingGenerating}
