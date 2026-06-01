@@ -3579,12 +3579,19 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                             key={product.id}
                                             className={`st-map-product ${mappingSelectedProducts.has(product.id) ? 'selected' : ''}`}
                                             onClick={() => { toggleMappingProduct(product.id); if (mappingStep < 3) setMappingStep(3); }}
+                                            style={{ overflow: 'hidden' }}
                                         >
                                             <div className="st-map-product-check">
                                                 <I d="M5 13l4 4L19 7" s={14} />
                                             </div>
-                                            <div className="st-map-product-icon">
-                                                <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={28} />
+                                            <div className="st-map-product-image-container" style={{ width: '100%', height: '120px', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                {product.image ? (
+                                                    <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                                ) : (
+                                                    <div className="st-map-product-icon">
+                                                        <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={28} />
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="st-map-product-name">{product.name}</div>
                                         </div>
