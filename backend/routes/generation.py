@@ -214,9 +214,7 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
                 "aspect_ratio": "1:1",
             }
             # Model-specific extra params
-            if 'seedream' in model_id:
-                replicate_input["image_size"] = "2048x2048"
-            elif 'imagen' in model_id:
+            if 'imagen' in model_id:
                 replicate_input["image_size"] = "2K"
             elif 'flux' in model_id:
                 replicate_input["prompt_upsampling"] = True
