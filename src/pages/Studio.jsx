@@ -4744,9 +4744,36 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                         <div style={{ width: `${rec.score}%`, height: '100%', borderRadius: '3px', background: `linear-gradient(90deg, ${methodColors[rec.method] || '#3b82f6'}, ${methodColors[rec.method] || '#3b82f6'}aa)`, transition: 'width 0.6s ease' }} />
                                     </div>
                                     {rec.filePrep && (
-                                        <div style={{ marginTop: '0.85rem', padding: '0.8rem 1rem', borderRadius: '10px', backgroundColor: 'var(--bg)', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-                                            <I d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" s={14} style={{ flexShrink: 0, marginTop: '1px' }} />
-                                            <span><strong style={{ color: 'var(--text)' }}>File Prep:</strong> {rec.filePrep}</span>
+                                        <div style={{ marginTop: '0.85rem', padding: '0.8rem 1rem', borderRadius: '10px', backgroundColor: 'var(--bg)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem', fontWeight: 700, color: 'var(--text)', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                                <I d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" s={14} />
+                                                File Preparation
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem', marginBottom: '0.6rem' }}>
+                                                {rec.filePrep.colorMode && (
+                                                    <div style={{ padding: '0.5rem 0.6rem', borderRadius: '8px', background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                                                        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>Color Mode</div>
+                                                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)' }}>{rec.filePrep.colorMode}</div>
+                                                    </div>
+                                                )}
+                                                {rec.filePrep.fileFormat && (
+                                                    <div style={{ padding: '0.5rem 0.6rem', borderRadius: '8px', background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                                                        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>Format</div>
+                                                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)' }}>{rec.filePrep.fileFormat}</div>
+                                                    </div>
+                                                )}
+                                                {rec.filePrep.resolution && (
+                                                    <div style={{ padding: '0.5rem 0.6rem', borderRadius: '8px', background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+                                                        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>Resolution</div>
+                                                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)' }}>{rec.filePrep.resolution}</div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {rec.filePrep.notes && (
+                                                <p style={{ margin: 0, fontSize: '0.78rem', lineHeight: 1.55, color: 'var(--text-muted)' }}>
+                                                    <strong style={{ color: 'var(--text)' }}>Notes:</strong> {rec.filePrep.notes}
+                                                </p>
+                                            )}
                                         </div>
                                     )}
                                 </div>
