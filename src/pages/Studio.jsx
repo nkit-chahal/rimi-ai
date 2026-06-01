@@ -697,12 +697,23 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             { id: 'pillow_cover', name: 'Pillow Cover', image: '/products/pillow_cover.png' },
             { id: 'comforter', name: 'Comforter', image: '/products/comforter.png' },
             { id: 'cushion', name: 'Cushion', image: '/products/cushion.png' },
+            { id: 'curtain', name: 'Curtain', image: '/products/curtain.png' },
+            { id: 'tablecloth', name: 'Tablecloth', image: '/products/tablecloth.png' },
+            { id: 'sofa_upholstery', name: 'Sofa Upholstery', image: '/products/sofa_upholstery.png' },
+            { id: 'wallpaper', name: 'Wallpaper', image: '/products/wallpaper.png' },
         ],
         apparel: [
             { id: 'tshirt', name: 'T-Shirt', image: '/products/tshirt.png' },
+            { id: 'hoodie', name: 'Hoodie', image: '/products/hoodie.png' },
+            { id: 'dress', name: 'Dress', image: '/products/dress.png' },
+            { id: 'saree', name: 'Saree', image: '/products/saree.png' },
+            { id: 'kimono', name: 'Kimono', image: '/products/kimono.png' },
         ],
         accessories: [
             { id: 'tote_bag', name: 'Tote Bag', image: '/products/tote_bag.png' },
+            { id: 'backpack', name: 'Backpack', image: '/products/backpack.png' },
+            { id: 'phone_case', name: 'Phone Case', image: '/products/phone_case.png' },
+            { id: 'scarf', name: 'Scarf', image: '/products/scarf.png' },
         ],
         custom: [
             { id: 'custom_product', name: 'Custom Product Mapping', image: null },
