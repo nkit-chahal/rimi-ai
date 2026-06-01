@@ -124,48 +124,102 @@ EXTRACT_MODELS = [
         'prompt': 'A perfectly flat, 2D seamless repeating pattern tile of the exact fabric design, motif, and colors seen in the input image. Extract the design out of the outfit. High resolution, perfectly flat texture.',
         'input_key': 'input_images',
         'input_list': True,
+        'supports_image': True,
         'cost_per_image': 0.128,
     },
     {
         'id': 'google/imagen-4-ultra',
         'name': 'Imagen 4',
-        'prompt': 'Isolate and recreate the fabric pattern from this image as a clean, flat 2D textile tile. Precise color matching, seamless repeating pattern, high resolution.',
-        'input_key': 'image',
+        'prompt': '',  # Will be generated from image description
+        'input_key': None,
         'input_list': False,
+        'supports_image': False,
         'cost_per_image': 0.06,
     },
     {
         'id': 'black-forest-labs/flux-2-pro',
         'name': 'Flux 2 Pro',
-        'prompt': 'Generate a perfectly flat seamless 2D repeating pattern tile matching the motifs, textures, and colors from the input image. Clean textile design, high resolution.',
-        'input_key': 'image',
+        'prompt': '',  # Will be generated from image description
+        'input_key': None,
         'input_list': False,
+        'supports_image': False,
         'cost_per_image': 0.09,
     },
     {
         'id': 'bytedance/seedream-4.5',
         'name': 'SeDream',
-        'prompt': 'Create a high-resolution flat 2D seamless repeating fabric pattern tile based on the design visible in this image. Extract the pattern elements and colors faithfully.',
-        'input_key': 'image',
+        'prompt': '',  # Will be generated from image description
+        'input_key': None,
         'input_list': False,
+        'supports_image': False,
         'cost_per_image': 0.04,
     },
 ]
 
 
-def _run_single_extract(model_cfg, data_uri, project_id, filename):
+def _describe_image_for_extraction(data_uri):
+    """Use Groq vision to describe the pattern/design in an image for text-only models."""
+    try:
+        completion = groq_client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[{"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": data_uri}},
+                {"type": "text", "text": (
+                    "Analyze this image and describe the fabric/textile pattern or design you see in extreme detail. "
+                    "Focus on: the exact motifs (flowers, geometric shapes, animals, etc.), their arrangement and spacing, "
+                    "the precise color palette (use specific color names like 'dusty rose', 'navy blue', 'sage green'), "
+                    "the background color, the style (watercolor, digital, hand-drawn, block print, etc.), "
+                    "and any texture details. Write a single dense paragraph, max 100 words. "
+                    "Output ONLY the description, no preamble."
+                )}
+            ]}],
+            temperature=0.3,
+            max_completion_tokens=200,
+        )
+        desc = completion.choices[0].message.content.strip()
+        print(f"  [Extract Multi] Image description: {desc[:100]}...")
+        return desc
+    except Exception as e:
+        print(f"  [Extract Multi] Image description failed: {e}")
+        return "floral fabric pattern with detailed motifs and rich colors"
+
+
+def _run_single_extract(model_cfg, data_uri, project_id, filename, image_description=None):
     """Run a single model extraction. Returns dict with result or error."""
     model_id = model_cfg['id']
     try:
         print(f"  [Extract Multi] Starting {model_id}...")
-        replicate_input = {
-            "prompt": model_cfg['prompt'],
-            "aspect_ratio": "1:1",
-        }
-        if model_cfg['input_list']:
-            replicate_input[model_cfg['input_key']] = [data_uri]
+
+        if model_cfg['supports_image']:
+            # Model accepts image input directly
+            replicate_input = {
+                "prompt": model_cfg['prompt'],
+                "aspect_ratio": "1:1",
+            }
+            if model_cfg['input_list']:
+                replicate_input[model_cfg['input_key']] = [data_uri]
+            else:
+                replicate_input[model_cfg['input_key']] = data_uri
         else:
-            replicate_input[model_cfg['input_key']] = data_uri
+            # Text-only model — use the image description as prompt
+            desc = image_description or "detailed fabric pattern"
+            text_prompt = (
+                f"A perfectly flat, 2D seamless repeating pattern tile for textile/fabric printing. "
+                f"The pattern design: {desc}. "
+                f"High resolution, perfectly flat texture, no perspective, no shadows, "
+                f"clean edges suitable for seamless tiling."
+            )
+            replicate_input = {
+                "prompt": text_prompt,
+                "aspect_ratio": "1:1",
+            }
+            # Model-specific extra params
+            if 'seedream' in model_id:
+                replicate_input["image_size"] = "2048x2048"
+            elif 'imagen' in model_id:
+                replicate_input["image_size"] = "2K"
+            elif 'flux' in model_id:
+                replicate_input["prompt_upsampling"] = True
 
         start_time = time.time()
         output = replicate.run(model_id, input=replicate_input)
@@ -239,12 +293,19 @@ def extract_design_multi():
 
     print(f"  [Extract Multi] Launching 4 models in parallel for {filename}...")
 
+    # Describe the image once for text-only models
+    has_text_only = any(not m['supports_image'] for m in EXTRACT_MODELS)
+    image_description = None
+    if has_text_only:
+        print("  [Extract Multi] Describing image for text-only models...")
+        image_description = _describe_image_for_extraction(data_uri)
+
     # Run all 4 models in parallel
     results = []
     total_credits = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = {
-            executor.submit(_run_single_extract, m, data_uri, project_id, filename): m
+            executor.submit(_run_single_extract, m, data_uri, project_id, filename, image_description): m
             for m in EXTRACT_MODELS
         }
         for future in concurrent.futures.as_completed(futures):
