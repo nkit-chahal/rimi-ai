@@ -129,7 +129,7 @@ def _generate_single_mockup(
     else:
         # Load built-in template
         template_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             'public', 'products', f'{product_type}.png'
         )
         if not os.path.exists(template_path):
