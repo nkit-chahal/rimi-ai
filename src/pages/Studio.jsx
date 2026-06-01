@@ -3924,328 +3924,497 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     // ===== END ADMIN RENDER =====
 
     const renderColorways = () => {
+        if (!preview) {
+            return (
+                <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
+                    <div
+                        className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
+                        onClick={() => fileRef.current?.click()}
+                        onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
+                        onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
+                        onDragLeave={() => setIsDrag(false)}
+                    >
+                        <div className="st-particles">
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                        </div>
+                        <div className="st-dropzone-icon-wrap">
+                            <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={36} />
+                        </div>
+                        <h2 className="st-dropzone-title">Upload artwork for Colorways</h2>
+                        <p className="st-dropzone-desc">Drag & drop or click to browse — map and generate new colorways</p>
+                        <div className="st-dropzone-badges">
+                            <span className="st-dropzone-badge">PNG</span>
+                            <span className="st-dropzone-badge">JPG</span>
+                            <span className="st-dropzone-badge">TIFF</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         return (
-            <div className="st-tool-content st-colorways">
-                <div className="st-canvas-container" style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+            <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
+                <div className="st-comparison-workspace">
+                    <div className="st-comparison-card">
+                        <div className="st-comparison-card-head">
+                            <span>Original Artwork</span>
+                            <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} /> Replace
+                            </button>
+                        </div>
+                        <div className="st-comparison-card-body" style={{ position: 'relative' }}>
+                            <img src={preview} alt="Original" />
+                        </div>
+                    </div>
 
-                    <div className="st-panel st-panel-left" style={{ flex: '1 1 300px', maxWidth: '400px', backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                        <h3 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--text)' }}>Color Palette</h3>
-
-                        {!cwExtractedPalette.length ? (
-                            <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-                                <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>Extract colors from your uploaded image to get started.</p>
-                                <button
-                                    className="st-btn primary"
-                                    onClick={extractColors}
-                                    disabled={!uploaded || isCwExtracting}
-                                    style={{ width: '100%' }}
-                                >
-                                    {isCwExtracting ? 'Extracting...' : 'Extract Colors'}
-                                </button>
+                    <div className="st-comparison-action-bridge">
+                        <button className="st-extract-btn-creative" onClick={generateColorway} disabled={isCwRecoloring || !cwExtractedPalette.length}>
+                            <div className={isCwRecoloring ? 'spin-icon' : ''}>
+                                <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={20} />
                             </div>
-                        ) : (
-                            <div className="st-cw-palette-editor">
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Color Mapping</label>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                        {cwTargetPalette.map((mapping, idx) => (
-                                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
-                                                    <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: mapping.old, border: '1px solid var(--border)' }}></span>
-                                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{mapping.old}</span>
-                                                </div>
-                                                <I d="M14 5l7 7m0 0l-7 7m7-7H3" s={14} />
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
-                                                    <input
-                                                        type="color"
-                                                        value={mapping.new}
-                                                        onChange={(e) => {
-                                                            const newPalette = [...cwTargetPalette];
-                                                            newPalette[idx].new = e.target.value;
-                                                            setCwTargetPalette(newPalette);
-                                                        }}
-                                                        style={{ width: '30px', height: '30px', padding: 0, border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                                                    />
-                                                    <input
-                                                        type="text"
-                                                        value={mapping.new}
-                                                        onChange={(e) => {
-                                                            const newPalette = [...cwTargetPalette];
-                                                            newPalette[idx].new = e.target.value;
-                                                            setCwTargetPalette(newPalette);
-                                                        }}
-                                                        style={{ width: '70px', fontSize: '0.8rem', fontFamily: 'monospace', padding: '0.25rem', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '4px' }}
-                                                    />
-                                                </div>
-                                            </div>
+                            {isCwRecoloring ? 'Generating...' : 'Recolor'}
+                        </button>
+                        <span className="st-credit-badge">
+                            <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
+                            10 credits
+                        </span>
+                    </div>
+
+                    <div className="st-comparison-card">
+                        <div className="st-comparison-card-head">
+                            <span>Latest Colorway</span>
+                            {cwUrl && (
+                                <button onClick={(e) => forceDownload(e, `${API}${cwUrl}`)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                    <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
+                                </button>
+                            )}
+                        </div>
+                        <div className="st-comparison-card-body">
+                            {cwUrl ? (
+                                <div className="st-result-reveal">
+                                    <img src={`${API}${cwUrl}`} alt="Result" />
+                                </div>
+                            ) : isCwRecoloring ? (
+                                <div className="st-ai-processing">
+                                    <div className="st-ai-sparkle-container">
+                                        <div className="st-ai-sparkle-icon">
+                                            <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={28} />
+                                        </div>
+                                        <div className="st-ai-ring" />
+                                        <div className="st-ai-ring" />
+                                        <div className="st-ai-ring" />
+                                    </div>
+                                    <span className="st-ai-phase-text">AI is recoloring pattern...</span>
+                                </div>
+                            ) : (
+                                <div style={{ textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />
+                                    <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>Ready to generate</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Color Mapping Editor - Below Workspace */}
+                <div style={{ marginTop: '2rem', backgroundColor: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border)', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div>
+                            <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text)', fontSize: '1.2rem' }}>Color Mapping Editor</h3>
+                            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Extract palette from original artwork and map to new target colors.</p>
+                        </div>
+                        <button className="st-extract-btn-creative" onClick={extractColors} disabled={!uploaded || isCwExtracting} style={{ width: 'auto', padding: '0.5rem 1rem' }}>
+                            <div className={isCwExtracting ? 'spin-icon' : ''}>
+                                <I d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" s={16} />
+                            </div>
+                            {isCwExtracting ? 'Extracting...' : 'Extract Colors'}
+                        </button>
+                    </div>
+
+                    {cwExtractedPalette.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                            {cwTargetPalette.map((mapping, idx) => (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                                        <span style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: mapping.old, border: '1px solid var(--border)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)' }}></span>
+                                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontFamily: 'monospace', fontWeight: 600 }}>{mapping.old}</span>
+                                    </div>
+                                    <div style={{ color: 'var(--text-muted)' }}><I d="M14 5l7 7m0 0l-7 7m7-7H3" s={16} /></div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                                        <input
+                                            type="color"
+                                            value={mapping.new}
+                                            onChange={(e) => {
+                                                const newPalette = [...cwTargetPalette];
+                                                newPalette[idx].new = e.target.value;
+                                                setCwTargetPalette(newPalette);
+                                            }}
+                                            style={{ width: '36px', height: '36px', padding: 0, border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                                        />
+                                        <input
+                                            type="text"
+                                            value={mapping.new}
+                                            onChange={(e) => {
+                                                const newPalette = [...cwTargetPalette];
+                                                newPalette[idx].new = e.target.value;
+                                                setCwTargetPalette(newPalette);
+                                            }}
+                                            style={{ width: '75px', fontSize: '0.85rem', fontFamily: 'monospace', padding: '0.4rem', backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '6px', fontWeight: 600 }}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                
+                {/* Recent Variations */}
+                {cwVariations.length > 0 && (
+                    <div style={{ marginTop: '2rem' }}>
+                        <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text)', fontSize: '1.1rem' }}>Recent Variations</h3>
+                        <div className="st-variations-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem' }}>
+                            {cwVariations.map((v, i) => (
+                                <div key={i} style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'translateY(-2px)' } }} onClick={() => { setCwUrl(v.url); setCwTargetPalette([...v.targetPalette]); }}>
+                                    <img src={`${API}${v.url}`} alt={`Variation ${i}`} style={{ width: '100%', display: 'block', aspectRatio: '1/1', objectFit: 'cover' }} />
+                                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', padding: '0.5rem', display: 'flex', gap: '4px', overflowX: 'auto' }}>
+                                        {v.targetPalette.map((p, j) => (
+                                            <div key={j} style={{ width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0, backgroundColor: p.new, border: '1px solid rgba(255,255,255,0.2)' }} />
                                         ))}
                                     </div>
                                 </div>
-
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button
-                                        className="st-btn"
-                                        onClick={() => setCwTargetPalette(cwExtractedPalette.map(p => ({ old: p.hex, new: p.hex })))}
-                                        style={{ flex: 1 }}
-                                    >
-                                        Reset
-                                    </button>
-                                    <button
-                                        className="st-btn primary"
-                                        onClick={generateColorway}
-                                        disabled={isCwRecoloring}
-                                        style={{ flex: 2 }}
-                                    >
-                                        {isCwRecoloring ? 'Generating...' : 'Generate (10 cr)'}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                            ))}
+                        </div>
                     </div>
-
-                    <div className="st-panel st-panel-right" style={{ flex: '2 1 500px', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                        {cwUrl ? (
-                            <div className="st-preview-card" style={{ backgroundColor: 'var(--card-bg)', padding: '1rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                                <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text)' }}>Latest Colorway</h3>
-                                <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', backgroundColor: 'var(--bg)', borderRadius: '8px', overflow: 'hidden' }}>
-                                    <img src={`${API}${cwUrl}`} alt="Recolored" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                </div>
-                                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
-                                    <a href={`${API}${cwUrl}`} onClick={(e) => forceDownload(e, `${API}${cwUrl}`)} className="st-dl-btn">
-                                        <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={16} /> Download
-                                    </a>
-                                </div>
-                            </div>
-                        ) : uploaded ? (
-                            <div className="st-preview-card" style={{ backgroundColor: 'var(--card-bg)', padding: '1rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                                <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text)' }}>Original Artwork</h3>
-                                <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', backgroundColor: 'var(--bg)', borderRadius: '8px', overflow: 'hidden' }}>
-                                    <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                </div>
-                            </div>
-                        ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '400px', color: 'var(--text-muted)', border: '2px dashed var(--border)', borderRadius: '16px' }}>
-                                Upload an image to start recoloring
-                            </div>
-                        )}
-
-                        {cwVariations.length > 0 && (
-                            <div className="st-variations-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
-                                <div style={{ gridColumn: '1 / -1' }}>
-                                    <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text)', fontSize: '1.1rem' }}>Recent Variations</h3>
-                                </div>
-                                {cwVariations.map((v, i) => (
-                                    <div key={i} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => { setCwUrl(v.url); setCwTargetPalette([...v.targetPalette]); }}>
-                                        <img src={`${API}${v.url}`} alt={`Variation ${i}`} style={{ width: '100%', display: 'block', aspectRatio: '1/1', objectFit: 'cover' }} />
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                </div>
+                )}
             </div>
         );
     };
 
     const renderVectorPro = () => {
         return (
-            <div className="st-tool-content st-vectorpro">
-                {/* Tab bar */}
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                    <button className={`st-btn ${vpTab === 'reduce' ? 'primary' : ''}`} onClick={() => setVpTab('reduce')} style={{ flex: 1 }}>
-                        <I d="M4 6h16M4 12h10M4 18h6" s={16} /> Color Reduce
-                    </button>
-                    <button className={`st-btn ${vpTab === 'lookup' ? 'primary' : ''}`} onClick={() => setVpTab('lookup')} style={{ flex: 1 }}>
-                        <I d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" s={16} /> Pantone Lookup
-                    </button>
+            <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
+                {/* Premium Tab Bar */}
+                <div className="st-comparison-card" style={{ marginBottom: '1.5rem', overflow: 'visible' }}>
+                    <div className="st-comparison-card-head" style={{ padding: 0, border: 'none' }}>
+                        <div style={{ display: 'flex', width: '100%' }}>
+                            <button
+                                onClick={() => setVpTab('reduce')}
+                                style={{
+                                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
+                                    padding: '1rem 1.5rem', border: 'none', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700,
+                                    background: vpTab === 'reduce' ? 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.08))' : 'transparent',
+                                    color: vpTab === 'reduce' ? 'var(--primary)' : 'var(--text-muted)',
+                                    borderBottom: vpTab === 'reduce' ? '2px solid var(--primary)' : '2px solid transparent',
+                                    transition: 'all 0.25s ease'
+                                }}
+                            >
+                                <I d="M4 6h16M4 12h10M4 18h6" s={18} />
+                                Color Reduce
+                            </button>
+                            <button
+                                onClick={() => setVpTab('lookup')}
+                                style={{
+                                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
+                                    padding: '1rem 1.5rem', border: 'none', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700,
+                                    background: vpTab === 'lookup' ? 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.08))' : 'transparent',
+                                    color: vpTab === 'lookup' ? 'var(--primary)' : 'var(--text-muted)',
+                                    borderBottom: vpTab === 'lookup' ? '2px solid var(--primary)' : '2px solid transparent',
+                                    transition: 'all 0.25s ease'
+                                }}
+                            >
+                                <I d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" s={18} />
+                                Pantone Lookup
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {vpTab === 'reduce' ? (
-                    <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-                        {/* Controls */}
-                        <div style={{ flex: '1 1 280px', maxWidth: '360px', backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text)' }}>Reduce Colors</h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                                Quantize your design to a fixed number of colors for screen printing, then auto-match each to the nearest Pantone.
-                            </p>
+                    <div className="st-comparison-workspace">
+                        {/* Left Panel — Controls */}
+                        <div className="st-comparison-card" style={{ flex: '1 1 320px', maxWidth: '400px' }}>
+                            <div className="st-comparison-card-head">
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <I d="M4 6h16M4 12h10M4 18h6" s={16} />
+                                    Reduce Controls
+                                </span>
+                                <span className="st-credit-badge">
+                                    <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
+                                    10 credits
+                                </span>
+                            </div>
+                            <div className="st-comparison-card-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0, lineHeight: 1.6 }}>
+                                    Quantize your design to a fixed number of colors for screen printing, then auto-match each to the nearest Pantone.
+                                </p>
 
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                                Target Colors: <strong style={{ color: 'var(--text)' }}>{vpBrandPaletteId ? 'Brand Palette Enforced' : vpNumColors}</strong>
-                            </label>
-                            {!vpBrandPaletteId && (
-                                <input
-                                    type="range"
-                                    min={2} max={16} step={1}
-                                    value={vpNumColors}
-                                    onChange={(e) => setVpNumColors(Number(e.target.value))}
-                                    style={{ width: '100%', marginBottom: '1.5rem', accentColor: 'var(--primary)' }}
-                                />
-                            )}
-
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                                Brand Style Enforcement
-                            </label>
-                            <select
-                                className="st-input"
-                                value={vpBrandPaletteId}
-                                onChange={e => setVpBrandPaletteId(e.target.value)}
-                                style={{ width: '100%', marginBottom: '1.5rem', cursor: 'pointer' }}
-                            >
-                                <option value="">None (Auto-Extract)</option>
-                                {brandPalettes.map(p => (
-                                    <option key={p.id} value={p.id}>{p.name} ({p.colors.length} colors)</option>
-                                ))}
-                            </select>
-
-                            <button
-                                className="st-btn primary"
-                                onClick={reduceColors}
-                                disabled={!uploaded || isVpReducing}
-                                style={{ width: '100%' }}
-                            >
-                                {isVpReducing ? 'Reducing...' : `Reduce & Match (10 cr)`}
-                            </button>
-
-                            {/* Layer Export buttons â€” show after reduction */}
-                            {vpPalette.length > 0 && (
-                                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-                                    <button
-                                        className="st-btn"
-                                        onClick={() => exportLayers('zip')}
-                                        disabled={!!layerExportLoading}
-                                        style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }}
-                                    >
-                                        <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={13} />
-                                        {layerExportLoading === 'zip' ? '...' : 'Layers ZIP'}
-                                    </button>
-                                    <button
-                                        className="st-btn"
-                                        onClick={() => exportLayers('tiff')}
-                                        disabled={!!layerExportLoading}
-                                        style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }}
-                                    >
-                                        <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={13} />
-                                        {layerExportLoading === 'tiff' ? '...' : 'Layers TIFF'}
-                                    </button>
+                                <div>
+                                    <div className="st-group-title">TARGET COLORS</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
+                                        <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--primary)', minWidth: '2.5rem', textAlign: 'center' }}>
+                                            {vpBrandPaletteId ? '—' : vpNumColors}
+                                        </span>
+                                        {!vpBrandPaletteId && (
+                                            <input
+                                                type="range"
+                                                min={2} max={16} step={1}
+                                                value={vpNumColors}
+                                                onChange={(e) => setVpNumColors(Number(e.target.value))}
+                                                style={{ flex: 1, accentColor: 'var(--primary)' }}
+                                            />
+                                        )}
+                                        {vpBrandPaletteId && (
+                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Brand Palette Enforced</span>
+                                        )}
+                                    </div>
                                 </div>
-                            )}
-                            {vpPalette.length > 0 && (
-                                <div style={{ marginTop: '1.5rem' }}>
-                                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', color: 'var(--text)' }}>Matched Palette</h4>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                        {vpPalette.map((color, idx) => (
-                                            <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.5rem', backgroundColor: 'var(--bg)', borderRadius: '8px' }}>
-                                                <span style={{ width: '32px', height: '32px', borderRadius: '6px', backgroundColor: color.hex, border: '1px solid var(--border)', flexShrink: 0 }}></span>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text)' }}>{color.hex.toUpperCase()}</span>
-                                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{(color.weight * 100).toFixed(1)}%</span>
-                                                    </div>
+
+                                <div>
+                                    <div className="st-group-title">BRAND STYLE ENFORCEMENT</div>
+                                    <select
+                                        className="st-input"
+                                        value={vpBrandPaletteId}
+                                        onChange={e => setVpBrandPaletteId(e.target.value)}
+                                        style={{ width: '100%', marginTop: '0.5rem', cursor: 'pointer', padding: '0.7rem', borderRadius: '10px' }}
+                                    >
+                                        <option value="">None (Auto-Extract)</option>
+                                        {brandPalettes.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name} ({p.colors.length} colors)</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <button
+                                    className="st-extract-btn-creative"
+                                    onClick={reduceColors}
+                                    disabled={!uploaded || isVpReducing}
+                                    style={{ width: '100%' }}
+                                >
+                                    <div className={isVpReducing ? 'spin-icon' : ''}>
+                                        <I d="M4 6h16M4 12h10M4 18h6" s={18} />
+                                    </div>
+                                    {isVpReducing ? 'Reducing Colors...' : 'Reduce & Match'}
+                                </button>
+
+                                {/* Layer Export buttons */}
+                                {vpPalette.length > 0 && (
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button
+                                            className="st-btn"
+                                            onClick={() => exportLayers('zip')}
+                                            disabled={!!layerExportLoading}
+                                            style={{ flex: 1, fontSize: '0.8rem', padding: '0.6rem', borderRadius: '10px' }}
+                                        >
+                                            <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={13} />
+                                            {layerExportLoading === 'zip' ? '...' : 'Layers ZIP'}
+                                        </button>
+                                        <button
+                                            className="st-btn"
+                                            onClick={() => exportLayers('tiff')}
+                                            disabled={!!layerExportLoading}
+                                            style={{ flex: 1, fontSize: '0.8rem', padding: '0.6rem', borderRadius: '10px' }}
+                                        >
+                                            <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={13} />
+                                            {layerExportLoading === 'tiff' ? '...' : 'Layers TIFF'}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Matched Palette — Modern Grid Cards */}
+                                {vpPalette.length > 0 && (
+                                    <div>
+                                        <div className="st-group-title" style={{ marginBottom: '0.75rem' }}>MATCHED PALETTE</div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.6rem' }}>
+                                            {vpPalette.map((color, idx) => (
+                                                <div key={idx} style={{
+                                                    padding: '0.75rem', borderRadius: '12px',
+                                                    background: 'var(--bg)', border: '1px solid var(--border)',
+                                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem',
+                                                    transition: 'transform 0.2s, box-shadow 0.2s'
+                                                }}>
+                                                    <span style={{
+                                                        width: '40px', height: '40px', borderRadius: '10px',
+                                                        backgroundColor: color.hex, border: '1px solid var(--border)',
+                                                        boxShadow: `0 4px 12px ${color.hex}40`
+                                                    }}></span>
+                                                    <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text)', fontWeight: 700 }}>
+                                                        {color.hex.toUpperCase()}
+                                                    </span>
+                                                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'var(--card-bg)', padding: '2px 6px', borderRadius: '6px' }}>
+                                                        {(color.weight * 100).toFixed(1)}%
+                                                    </span>
                                                     {color.pantoneMatches && color.pantoneMatches.length > 0 && (
-                                                        <div style={{ marginTop: '0.25rem' }}>
-                                                            <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>
+                                                        <div style={{ textAlign: 'center' }}>
+                                                            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 700 }}>
                                                                 {color.pantoneMatches[0].name}
-                                                            </span>
-                                                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
-                                                                Î”E {color.pantoneMatches[0].deltaE}
-                                                            </span>
+                                                            </div>
+                                                            <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                                                                ΔE {color.pantoneMatches[0].deltaE}
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
 
-                        {/* Preview */}
-                        <div style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            {vpReducedUrl ? (
-                                <div style={{ backgroundColor: 'var(--card-bg)', padding: '1rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                                    <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text)' }}>Quantized Result ({vpNumColors} colors)</h3>
-                                    <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', backgroundColor: 'var(--bg)', borderRadius: '8px', overflow: 'hidden' }}>
+                        {/* Right Panel — Preview */}
+                        <div className="st-comparison-card" style={{ flex: '2 1 400px' }}>
+                            <div className="st-comparison-card-head">
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={16} />
+                                    {vpReducedUrl ? `Quantized Result (${vpNumColors} colors)` : 'Preview'}
+                                </span>
+                                {vpReducedUrl && (
+                                    <button onClick={(e) => forceDownload(e, `${API}${vpReducedUrl}`)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                        <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
+                                    </button>
+                                )}
+                            </div>
+                            <div className="st-comparison-card-body" style={{ position: 'relative' }}>
+                                {vpReducedUrl ? (
+                                    <div className="st-result-reveal">
                                         <img src={`${API}${vpReducedUrl}`} alt="Quantized" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                                     </div>
-                                    <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
-                                        <a href={`${API}${vpReducedUrl}`} onClick={(e) => forceDownload(e, `${API}${vpReducedUrl}`)} className="st-dl-btn">
-                                            <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={16} /> Download
-                                        </a>
+                                ) : isVpReducing ? (
+                                    <div className="st-ai-processing">
+                                        <div className="st-ai-sparkle-container">
+                                            <div className="st-ai-sparkle-icon">
+                                                <I d="M4 6h16M4 12h10M4 18h6" s={28} />
+                                            </div>
+                                            <div className="st-ai-ring" />
+                                            <div className="st-ai-ring" />
+                                            <div className="st-ai-ring" />
+                                        </div>
+                                        <span className="st-ai-phase-text">AI is reducing colors...</span>
                                     </div>
-                                </div>
-                            ) : uploaded ? (
-                                <div style={{ backgroundColor: 'var(--card-bg)', padding: '1rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                                    <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text)' }}>Original Artwork</h3>
-                                    <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', backgroundColor: 'var(--bg)', borderRadius: '8px', overflow: 'hidden' }}>
-                                        <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                ) : uploaded ? (
+                                    <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', color: 'var(--text-muted)', gap: '1rem' }}>
+                                        <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />
+                                        <p style={{ fontWeight: 600, fontSize: '0.9rem', margin: 0 }}>Upload an image to start reducing colors</p>
                                     </div>
-                                </div>
-                            ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '400px', color: 'var(--text-muted)', border: '2px dashed var(--border)', borderRadius: '16px' }}>
-                                    Upload an image to start reducing colors
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     </div>
                 ) : (
                     /* Pantone Lookup Tab */
-                    <div style={{ maxWidth: '600px' }}>
-                        <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text)' }}>Pantone Color Lookup</h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                                Enter any hex color to find the closest Pantone TCX matches using Delta-E 2000 perceptual distance.
-                            </p>
-                            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                                <input
-                                    type="color"
-                                    value={vpLookupHex}
-                                    onChange={(e) => setVpLookupHex(e.target.value)}
-                                    style={{ width: '48px', height: '40px', padding: 0, border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                                />
-                                <input
-                                    type="text"
-                                    value={vpLookupHex}
-                                    onChange={(e) => setVpLookupHex(e.target.value)}
-                                    placeholder="#ff6f61"
-                                    className="st-input"
-                                    style={{ flex: 1, fontFamily: 'monospace' }}
-                                />
-                                <button
-                                    className="st-btn primary"
-                                    onClick={() => lookupPantone(vpLookupHex)}
-                                    disabled={isVpLooking || vpLookupHex.length < 4}
-                                >
-                                    {isVpLooking ? '...' : 'Match'}
-                                </button>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <div className="st-comparison-card" style={{ maxWidth: '640px', width: '100%' }}>
+                            <div className="st-comparison-card-head">
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <I d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" s={16} />
+                                    Pantone Color Lookup
+                                </span>
+                                <span className="st-credit-badge" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+                                    <I d="M5 13l4 4L19 7" s={12} />
+                                    Free
+                                </span>
                             </div>
+                            <div className="st-comparison-card-body" style={{ padding: '1.5rem' }}>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: 0, marginBottom: '1.5rem', lineHeight: 1.6 }}>
+                                    Enter any hex color to find the closest Pantone TCX matches using Delta-E 2000 perceptual distance.
+                                </p>
 
-                            {vpLookupResults.length > 0 && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)' }}>Top Matches</h4>
-                                    {vpLookupResults.map((m, idx) => (
-                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem', backgroundColor: 'var(--bg)', borderRadius: '10px', border: idx === 0 ? '2px solid var(--primary)' : '1px solid var(--border)' }}>
-                                            <span style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: m.hex, border: '1px solid var(--border)', flexShrink: 0 }}></span>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text)' }}>{m.name}</div>
-                                                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.2rem' }}>
-                                                    <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{m.hex.toUpperCase()}</span>
-                                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>RGB({m.rgb.join(', ')})</span>
-                                                </div>
-                                            </div>
-                                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                                                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: m.deltaE < 5 ? '#22c55e' : m.deltaE < 10 ? '#eab308' : '#ef4444' }}>
-                                                    {m.deltaE}
-                                                </div>
-                                                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Î”E 2000</div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.5rem 0 0 0' }}>
-                                        Î”E {'<'} 2 = imperceptible Â· Î”E {'<'} 5 = close match Â· Î”E {'>'} 10 = different color
-                                    </p>
+                                {/* Color Input Row */}
+                                <div style={{
+                                    display: 'flex', gap: '0.75rem', marginBottom: '1.5rem',
+                                    padding: '0.75rem', background: 'var(--bg)', borderRadius: '14px', border: '1px solid var(--border)',
+                                    alignItems: 'center'
+                                }}>
+                                    <input
+                                        type="color"
+                                        value={vpLookupHex}
+                                        onChange={(e) => setVpLookupHex(e.target.value)}
+                                        style={{ width: '48px', height: '44px', padding: 0, border: 'none', borderRadius: '10px', cursor: 'pointer', flexShrink: 0 }}
+                                    />
+                                    <input
+                                        type="text"
+                                        value={vpLookupHex}
+                                        onChange={(e) => setVpLookupHex(e.target.value)}
+                                        placeholder="#ff6f61"
+                                        className="st-input"
+                                        style={{ flex: 1, fontFamily: 'monospace', fontSize: '1rem', fontWeight: 700 }}
+                                    />
+                                    <button
+                                        className="st-extract-btn-creative"
+                                        onClick={() => lookupPantone(vpLookupHex)}
+                                        disabled={isVpLooking || vpLookupHex.length < 4}
+                                        style={{ width: 'auto', padding: '0.6rem 1.5rem', whiteSpace: 'nowrap' }}
+                                    >
+                                        <I d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" s={16} />
+                                        {isVpLooking ? 'Matching...' : 'Match'}
+                                    </button>
                                 </div>
-                            )}
+
+                                {/* Results */}
+                                {vpLookupResults.length > 0 && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        <div className="st-group-title">TOP MATCHES</div>
+                                        {vpLookupResults.map((m, idx) => (
+                                            <div key={idx} style={{
+                                                display: 'flex', alignItems: 'center', gap: '1rem',
+                                                padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '14px',
+                                                border: idx === 0 ? '2px solid var(--primary)' : '1px solid var(--border)',
+                                                position: 'relative', transition: 'transform 0.2s'
+                                            }}>
+                                                {idx === 0 && (
+                                                    <div style={{
+                                                        position: 'absolute', top: '-8px', right: '12px',
+                                                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                                                        color: '#fff', fontSize: '0.6rem', fontWeight: 800,
+                                                        padding: '2px 10px', borderRadius: '8px', textTransform: 'uppercase', letterSpacing: '0.05em'
+                                                    }}>Best Match</div>
+                                                )}
+                                                <span style={{
+                                                    width: '48px', height: '48px', borderRadius: '12px',
+                                                    backgroundColor: m.hex, border: '1px solid var(--border)', flexShrink: 0,
+                                                    boxShadow: `0 4px 14px ${m.hex}40`
+                                                }}></span>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text)' }}>{m.name}</div>
+                                                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
+                                                        <span style={{
+                                                            fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-muted)',
+                                                            background: 'var(--card-bg)', padding: '2px 8px', borderRadius: '6px'
+                                                        }}>{m.hex.toUpperCase()}</span>
+                                                        <span style={{
+                                                            fontSize: '0.78rem', color: 'var(--text-muted)',
+                                                            background: 'var(--card-bg)', padding: '2px 8px', borderRadius: '6px'
+                                                        }}>RGB({m.rgb.join(', ')})</span>
+                                                    </div>
+                                                </div>
+                                                <div style={{ textAlign: 'center', flexShrink: 0, minWidth: '52px' }}>
+                                                    <div style={{
+                                                        fontSize: '1.3rem', fontWeight: 800, lineHeight: 1,
+                                                        color: m.deltaE < 5 ? '#22c55e' : m.deltaE < 10 ? '#eab308' : '#ef4444'
+                                                    }}>
+                                                        {m.deltaE}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>ΔE 2000</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <div style={{
+                                            fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0',
+                                            padding: '0.6rem 0.8rem', background: 'var(--bg)', borderRadius: '10px',
+                                            textAlign: 'center', border: '1px solid var(--border)'
+                                        }}>
+                                            ΔE {'<'} 2 = imperceptible · ΔE {'<'} 5 = close match · ΔE {'>'} 10 = different color
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -4271,100 +4440,204 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             'Block Printing': '#ec4899',
             'Discharge Printing': '#14b8a6',
         };
-        return (
-            <div className="st-tool-content" style={{ maxWidth: '1100px', margin: '0 auto' }}>
-                {/* Configuration */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-                    <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                        <div className="st-group-title">FABRIC TYPE</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginTop: '0.75rem' }}>
-                            {fabricTypes.map(f => (
-                                <button key={f.id} className={`st-btn ${printAdvisorFabric === f.id ? 'primary' : ''}`}
-                                    onClick={() => setPrintAdvisorFabric(f.id)}
-                                    style={{ flexDirection: 'column', gap: '0.25rem', padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
-                                    <span style={{ fontSize: '1.2rem' }}>{f.icon}</span>{f.label}
-                                </button>
-                            ))}
+
+        if (!preview) {
+            return (
+                <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
+                    <div
+                        className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
+                        onClick={() => fileRef.current?.click()}
+                        onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
+                        onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
+                        onDragLeave={() => setIsDrag(false)}
+                    >
+                        <div className="st-particles">
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                        </div>
+                        <div className="st-dropzone-icon-wrap">
+                            <I d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" s={36} />
+                        </div>
+                        <h2 className="st-dropzone-title">Upload artwork for print analysis</h2>
+                        <p className="st-dropzone-desc">Drag & drop or click to browse — AI will recommend optimal print methods for your design</p>
+                        <div className="st-dropzone-badges">
+                            <span className="st-dropzone-badge">PNG</span>
+                            <span className="st-dropzone-badge">JPG</span>
+                            <span className="st-dropzone-badge">TIFF</span>
                         </div>
                     </div>
-                    <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                        <div className="st-group-title">PRODUCTION VOLUME</div>
-                        <div style={{ marginTop: '0.75rem' }}>
-                            <label className="st-label">Estimated yards/meters</label>
+                </div>
+            );
+        }
+
+        return (
+            <div className="st-tool-content st-pattern-layout" style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem' }}>
+                {/* Configuration */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                    <div className="st-comparison-card">
+                        <div className="st-comparison-card-head">
+                            <span><I d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" s={16} /> Fabric Type</span>
+                        </div>
+                        <div className="st-comparison-card-body" style={{ padding: '1.25rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+                                {fabricTypes.map(f => (
+                                    <button key={f.id} className={`st-btn ${printAdvisorFabric === f.id ? 'primary' : ''}`}
+                                        onClick={() => setPrintAdvisorFabric(f.id)}
+                                        style={{
+                                            flexDirection: 'column', gap: '0.4rem', padding: '1rem 0.5rem', fontSize: '0.82rem',
+                                            borderRadius: '14px', transition: 'all 0.25s ease',
+                                            background: printAdvisorFabric === f.id ? undefined : 'var(--bg)',
+                                            border: printAdvisorFabric === f.id ? undefined : '1px solid var(--border)',
+                                            boxShadow: printAdvisorFabric === f.id ? '0 4px 16px rgba(99,102,241,0.25)' : 'none'
+                                        }}>
+                                        <span style={{ fontSize: '1.6rem', lineHeight: 1 }}>{f.icon}</span>
+                                        <span style={{ fontWeight: 600 }}>{f.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="st-comparison-card">
+                        <div className="st-comparison-card-head">
+                            <span><I d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" s={16} /> Production Volume</span>
+                        </div>
+                        <div className="st-comparison-card-body" style={{ padding: '1.25rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Estimated yards/meters</label>
                             <input type="number" value={printAdvisorVolume} onChange={e => setPrintAdvisorVolume(Math.max(1, parseInt(e.target.value) || 0))}
-                                style={{ width: '100%', padding: '0.75rem', borderRadius: '10px', border: '1px solid var(--border)', backgroundColor: 'var(--bg)', color: 'var(--text)', fontSize: '1rem' }} />
-                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                                style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid var(--border)', backgroundColor: 'var(--bg)', color: 'var(--text)', fontSize: '1.05rem', fontWeight: 600 }} />
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.85rem', flexWrap: 'wrap' }}>
                                 {[50, 200, 500, 1000, 5000, 10000].map(v => (
                                     <button key={v} className={`st-btn ${printAdvisorVolume === v ? 'primary' : ''}`}
-                                        onClick={() => setPrintAdvisorVolume(v)} style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem' }}>
+                                        onClick={() => setPrintAdvisorVolume(v)}
+                                        style={{
+                                            fontSize: '0.76rem', padding: '0.45rem 0.85rem', borderRadius: '10px',
+                                            fontWeight: 600, transition: 'all 0.2s ease',
+                                            background: printAdvisorVolume === v ? undefined : 'var(--bg)',
+                                            border: printAdvisorVolume === v ? undefined : '1px solid var(--border)'
+                                        }}>
                                         {v.toLocaleString()}
                                     </button>
                                 ))}
                             </div>
                         </div>
-                        <button className="st-btn primary" onClick={analyzePrintMethod}
-                            disabled={!uploaded || isPrintAdvisorLoading}
-                            style={{ width: '100%', marginTop: '1.25rem', padding: '0.85rem', fontWeight: 600, fontSize: '0.9rem' }}>
-                            {isPrintAdvisorLoading ? <><div className="st-spinner" style={{ width: 16, height: 16 }} /> Analyzing Pattern...</> : <><I d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" s={16} /> Analyze Print Method</>}
-                        </button>
                     </div>
                 </div>
 
+                {/* Analyze Button */}
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+                    <button className="st-extract-btn-creative" onClick={analyzePrintMethod}
+                        disabled={!uploaded || isPrintAdvisorLoading}>
+                        <div className={isPrintAdvisorLoading ? 'spin-icon' : ''}>
+                            <I d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" s={20} />
+                        </div>
+                        {isPrintAdvisorLoading ? 'Analyzing Pattern...' : 'Analyze Print Method'}
+                    </button>
+                    <span className="st-credit-badge">
+                        <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
+                        5 credits
+                    </span>
+                </div>
+
+                {/* AI Processing State */}
+                {isPrintAdvisorLoading && !printAdvisorResult && (
+                    <div className="st-comparison-card" style={{ marginBottom: '1.5rem' }}>
+                        <div className="st-comparison-card-body" style={{ padding: '3rem' }}>
+                            <div className="st-ai-processing">
+                                <div className="st-ai-sparkle-container">
+                                    <div className="st-ai-sparkle-icon">
+                                        <I d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" s={28} />
+                                    </div>
+                                    <div className="st-ai-ring" />
+                                    <div className="st-ai-ring" />
+                                    <div className="st-ai-ring" />
+                                </div>
+                                <span className="st-ai-phase-text">AI is analyzing your pattern for optimal print methods...</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Results */}
                 {printAdvisorResult && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                         {/* Pattern Analysis Summary */}
-                        <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                            <div className="st-group-title">PATTERN ANALYSIS</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginTop: '1rem' }}>
-                                {[
-                                    ['Colors', printAdvisorResult.colorCount, printAdvisorResult.colorCount <= 8 ? '#22c55e' : printAdvisorResult.colorCount <= 16 ? '#f59e0b' : '#ef4444'],
-                                    ['Detail', printAdvisorResult.detailLevel, '#3b82f6'],
-                                    ['Gradients', printAdvisorResult.hasGradients ? 'Yes' : 'No', printAdvisorResult.hasGradients ? '#f59e0b' : '#22c55e'],
-                                    ['Min Feature', `${printAdvisorResult.minFeatureSize}px`, '#a855f7'],
-                                ].map(([label, value, color]) => (
-                                    <div key={label} style={{ textAlign: 'center', padding: '1rem', borderRadius: '12px', background: `${color}15`, border: `1px solid ${color}30` }}>
-                                        <div style={{ fontSize: '1.5rem', fontWeight: 700, color }}>{value}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{label}</div>
-                                    </div>
-                                ))}
+                        <div className="st-comparison-card">
+                            <div className="st-comparison-card-head">
+                                <span><I d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" s={16} /> Pattern Analysis</span>
+                            </div>
+                            <div className="st-comparison-card-body" style={{ padding: '1.5rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+                                    {[
+                                        ['Colors', printAdvisorResult.colorCount, printAdvisorResult.colorCount <= 8 ? '#22c55e' : printAdvisorResult.colorCount <= 16 ? '#f59e0b' : '#ef4444'],
+                                        ['Detail', printAdvisorResult.detailLevel, '#3b82f6'],
+                                        ['Gradients', printAdvisorResult.hasGradients ? 'Yes' : 'No', printAdvisorResult.hasGradients ? '#f59e0b' : '#22c55e'],
+                                        ['Min Feature', `${printAdvisorResult.minFeatureSize}px`, '#a855f7'],
+                                    ].map(([label, value, color]) => (
+                                        <div key={label} style={{ textAlign: 'center', padding: '1.25rem 1rem', borderRadius: '14px', background: `${color}12`, border: `1px solid ${color}25`, transition: 'transform 0.2s ease' }}>
+                                            <div style={{ fontSize: '1.7rem', fontWeight: 800, color, letterSpacing: '-0.02em' }}>{value}</div>
+                                            <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '0.35rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
                         {/* Recommendations */}
-                        <div className="st-group-title" style={{ marginBottom: '-0.5rem' }}>RECOMMENDED PRINT METHODS</div>
+                        <div className="st-group-title" style={{ marginBottom: '-0.25rem' }}>RECOMMENDED PRINT METHODS</div>
                         {printAdvisorResult.recommendations?.map((rec, i) => (
-                            <div key={rec.method} style={{
-                                backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px',
-                                border: i === 0 ? `2px solid ${methodColors[rec.method] || '#3b82f6'}` : '1px solid var(--border)',
-                                position: 'relative'
+                            <div key={rec.method} className="st-comparison-card" style={{
+                                border: i === 0 ? `2px solid ${methodColors[rec.method] || '#3b82f6'}` : undefined,
+                                position: 'relative',
+                                overflow: 'visible'
                             }}>
-                                {i === 0 && <div style={{ position: 'absolute', top: '-10px', left: '1rem', backgroundColor: methodColors[rec.method] || '#3b82f6', color: '#fff', fontSize: '0.7rem', fontWeight: 700, padding: '2px 10px', borderRadius: '10px', textTransform: 'uppercase' }}>Best Match</div>}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                                            <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text)' }}>{rec.method}</span>
-                                            <div style={{ backgroundColor: `${methodColors[rec.method] || '#3b82f6'}20`, color: methodColors[rec.method] || '#3b82f6', padding: '2px 8px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 600 }}>
-                                                Score: {rec.score}/100
-                                            </div>
-                                        </div>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0.5rem 0', lineHeight: 1.5 }}>{rec.reasoning}</p>
-                                    </div>
-                                    <div style={{ textAlign: 'right', minWidth: '140px' }}>
-                                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: methodColors[rec.method] || '#3b82f6' }}>{rec.costEstimate}</div>
-                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>per yard est.</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Min: {rec.minOrder}</div>
-                                    </div>
-                                </div>
-                                {/* Progress bar */}
-                                <div style={{ marginTop: '0.75rem', height: '6px', borderRadius: '3px', backgroundColor: 'var(--bg)', overflow: 'hidden' }}>
-                                    <div style={{ width: `${rec.score}%`, height: '100%', borderRadius: '3px', backgroundColor: methodColors[rec.method] || '#3b82f6', transition: 'width 0.5s ease' }} />
-                                </div>
-                                {rec.filePrep && (
-                                    <div style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: '10px', backgroundColor: 'var(--bg)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                        <strong style={{ color: 'var(--text)' }}>File Prep:</strong> {rec.filePrep}
+                                {i === 0 && (
+                                    <div style={{
+                                        position: 'absolute', top: '-12px', left: '1.25rem', zIndex: 2,
+                                        background: `linear-gradient(135deg, ${methodColors[rec.method] || '#3b82f6'}, ${methodColors[rec.method] || '#3b82f6'}cc)`,
+                                        color: '#fff', fontSize: '0.7rem', fontWeight: 800, padding: '4px 14px', borderRadius: '12px',
+                                        textTransform: 'uppercase', letterSpacing: '0.08em',
+                                        boxShadow: `0 4px 12px ${methodColors[rec.method] || '#3b82f6'}40`,
+                                        display: 'flex', alignItems: 'center', gap: '4px'
+                                    }}>
+                                        <I d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" s={11} />
+                                        Best Match
                                     </div>
                                 )}
+                                <div className="st-comparison-card-head">
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: methodColors[rec.method] || '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
+                                        {rec.method}
+                                    </span>
+                                    <div style={{ backgroundColor: `${methodColors[rec.method] || '#3b82f6'}15`, color: methodColors[rec.method] || '#3b82f6', padding: '3px 10px', borderRadius: '10px', fontSize: '0.76rem', fontWeight: 700 }}>
+                                        {rec.score}/100
+                                    </div>
+                                </div>
+                                <div className="st-comparison-card-body" style={{ padding: '1.25rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1.5rem' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 0.75rem 0', lineHeight: 1.6 }}>{rec.reasoning}</p>
+                                        </div>
+                                        <div style={{ textAlign: 'right', minWidth: '130px', padding: '0.75rem 1rem', borderRadius: '12px', background: `${methodColors[rec.method] || '#3b82f6'}08`, border: `1px solid ${methodColors[rec.method] || '#3b82f6'}20` }}>
+                                            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: methodColors[rec.method] || '#3b82f6', letterSpacing: '-0.02em' }}>{rec.costEstimate}</div>
+                                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>per yard est.</div>
+                                            <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px solid var(--border)' }}>Min: {rec.minOrder}</div>
+                                        </div>
+                                    </div>
+                                    {/* Progress bar */}
+                                    <div style={{ marginTop: '0.85rem', height: '6px', borderRadius: '3px', backgroundColor: 'var(--bg)', overflow: 'hidden' }}>
+                                        <div style={{ width: `${rec.score}%`, height: '100%', borderRadius: '3px', background: `linear-gradient(90deg, ${methodColors[rec.method] || '#3b82f6'}, ${methodColors[rec.method] || '#3b82f6'}aa)`, transition: 'width 0.6s ease' }} />
+                                    </div>
+                                    {rec.filePrep && (
+                                        <div style={{ marginTop: '0.85rem', padding: '0.8rem 1rem', borderRadius: '10px', backgroundColor: 'var(--bg)', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                            <I d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" s={14} style={{ flexShrink: 0, marginTop: '1px' }} />
+                                            <span><strong style={{ color: 'var(--text)' }}>File Prep:</strong> {rec.filePrep}</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -4376,116 +4649,209 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     // ===== RENDER COLORWAY MANAGER =====
     const renderColorwayManager = () => {
         const strategies = [
-            { id: 'complementary', label: 'Complementary', desc: 'Opposite colors on the wheel' },
-            { id: 'analogous', label: 'Analogous', desc: 'Adjacent colors, harmonious' },
-            { id: 'triadic', label: 'Triadic', desc: 'Three evenly spaced colors' },
-            { id: 'monochrome', label: 'Monochrome', desc: 'Variations of a single hue' },
-            { id: 'seasonal_warm', label: 'Warm Season', desc: 'Autumn/spring warm palette' },
-            { id: 'seasonal_cool', label: 'Cool Season', desc: 'Winter/summer cool palette' },
+            { id: 'complementary', label: 'Complementary', desc: 'Opposite colors on the wheel', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z' },
+            { id: 'analogous', label: 'Analogous', desc: 'Adjacent colors, harmonious', icon: 'M4 4h16v16H4V4zm4 4v8M16 8v8M12 8v8' },
+            { id: 'triadic', label: 'Triadic', desc: 'Three evenly spaced colors', icon: 'M12 2L2 22h20L12 2z' },
+            { id: 'monochrome', label: 'Monochrome', desc: 'Variations of a single hue', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 14a5 5 0 1 1 0-10 5 5 0 0 1 0 10z' },
+            { id: 'seasonal_warm', label: 'Warm Season', desc: 'Autumn/spring warm palette', icon: 'M12 3v2m0 14v2M5.636 5.636l1.414 1.414M16.95 16.95l1.414 1.414M3 12h2m14 0h2M5.636 18.364l1.414-1.414M16.95 7.05l1.414-1.414M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z' },
+            { id: 'seasonal_cool', label: 'Cool Season', desc: 'Winter/summer cool palette', icon: 'M12 2l2 4 4-2-2 4 4 2-4 2 2 4-4-2-2 4-2-4-4 2 2-4-4-2 4-2-2-4 4 2 2-4z' },
         ];
+
+        if (!preview) {
+            return (
+                <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
+                    <div
+                        className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
+                        onClick={() => fileRef.current?.click()}
+                        onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
+                        onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
+                        onDragLeave={() => setIsDrag(false)}
+                    >
+                        <div className="st-particles">
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                        </div>
+                        <div className="st-dropzone-icon-wrap">
+                            <I d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V17a4 4 0 01-4 4H7z" s={36} />
+                        </div>
+                        <h2 className="st-dropzone-title">Upload artwork to manage colorways</h2>
+                        <p className="st-dropzone-desc">Drag & drop or click to browse — mass-generate production palettes</p>
+                        <div className="st-dropzone-badges">
+                            <span className="st-dropzone-badge">PNG</span>
+                            <span className="st-dropzone-badge">JPG</span>
+                            <span className="st-dropzone-badge">TIFF</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         return (
-            <div className="st-tool-content" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+            <div className="st-tool-content st-pattern-layout" style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem' }}>
                 {/* Palette Extraction */}
                 {cwmPalette.length === 0 ? (
-                    <div style={{ backgroundColor: 'var(--card-bg)', padding: '2.5rem', borderRadius: '16px', border: '1px solid var(--border)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎨</div>
-                        <h3 style={{ color: 'var(--text)', margin: '0 0 0.5rem 0' }}>Extract Base Palette</h3>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>Upload a pattern above, then extract its color palette to generate production colorways.</p>
-                        <button className="st-btn primary" onClick={cwmExtractPalette} disabled={!uploaded || isCwmGenerating}
-                            style={{ padding: '0.85rem 2rem', fontWeight: 600 }}>
-                            {isCwmGenerating ? <><div className="st-spinner" style={{ width: 16, height: 16 }} /> Extracting...</> : 'Extract Palette from Image'}
-                        </button>
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+                        <div className="st-comparison-card" style={{ width: '100%', maxWidth: '600px', textAlign: 'center', padding: '3rem 2rem' }}>
+                            <div className="st-dropzone-icon-wrap" style={{ margin: '0 auto 1.5rem auto' }}>
+                                <I d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V17a4 4 0 01-4 4H7z" s={36} />
+                            </div>
+                            <h3 style={{ color: 'var(--text)', margin: '0 0 0.5rem 0', fontSize: '1.5rem' }}>Extract Base Palette</h3>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '2rem' }}>AI will analyze your artwork and intelligently extract its core colors to generate production colorways.</p>
+                            <button className="st-extract-btn-creative" onClick={cwmExtractPalette} disabled={isCwmGenerating}>
+                                <div className={isCwmGenerating ? 'spin-icon' : ''}>
+                                    <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={20} />
+                                </div>
+                                {isCwmGenerating ? 'Extracting Palette...' : 'Extract Palette from Image'}
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <>
-                        {/* Base Palette + Lock Controls */}
-                        <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)', marginBottom: '1.25rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                <div className="st-group-title" style={{ margin: 0 }}>BASE PALETTE</div>
-                                <button className="st-btn" onClick={cwmExtractPalette} style={{ fontSize: '0.75rem' }}>Re-extract</button>
-                            </div>
-                            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                                {cwmPalette.map((c, i) => (
-                                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
-                                        <div style={{ width: '56px', height: '56px', borderRadius: '12px', backgroundColor: c.hex, border: '2px solid var(--border)', cursor: 'pointer', position: 'relative' }}
-                                            title={`${c.hex} (${(c.weight * 100).toFixed(1)}%)`}>
-                                            {cwmLockedColors.has(i) && (
-                                                <div style={{ position: 'absolute', top: '-6px', right: '-6px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                    <I d="M12 17v-2m-4 4h8m-4-14a4 4 0 014 4v2a2 2 0 01-2 2H10a2 2 0 01-2-2V9a4 4 0 014-4z" s={10} />
-                                                </div>
-                                            )}
-                                        </div>
-                                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{c.hex}</span>
-                                        <button className="st-btn" onClick={() => setCwmLockedColors(prev => {
-                                            const next = new Set(prev);
-                                            next.has(i) ? next.delete(i) : next.add(i);
-                                            return next;
-                                        })} style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
-                                            {cwmLockedColors.has(i) ? <><I d="M12 10V6a4 4 0 00-8 0v4m-2 0h12a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2v-6a2 2 0 012-2z" s={10} /> Locked</> : <><I d="M8 11V7a4 4 0 018 0m-2 4H6a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2v-6a2 2 0 00-2-2z" s={10} /> Lock</>}
+                        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                            {/* Left Panel: Controls */}
+                            <div style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                
+                                {/* Base Palette + Lock Controls */}
+                                <div className="st-comparison-card" style={{ padding: '1.5rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                                        <div className="st-group-title" style={{ margin: 0, fontSize: '1.1rem' }}>BASE PALETTE</div>
+                                        <button className="st-btn" onClick={cwmExtractPalette} style={{ fontSize: '0.75rem', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            <I d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" s={14} /> Re-extract
                                         </button>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))', gap: '1rem' }}>
+                                        {cwmPalette.map((c, i) => (
+                                            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                                                <div 
+                                                    style={{ 
+                                                        width: '100%', aspectRatio: '1', borderRadius: '12px', backgroundColor: c.hex, 
+                                                        border: cwmLockedColors.has(i) ? '3px solid #6366f1' : '1px solid var(--border)', 
+                                                        cursor: 'pointer', position: 'relative', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)' 
+                                                    }}
+                                                    title={`${c.hex} (${(c.weight * 100).toFixed(1)}%)`}
+                                                    onClick={() => setCwmLockedColors(prev => {
+                                                        const next = new Set(prev);
+                                                        next.has(i) ? next.delete(i) : next.add(i);
+                                                        return next;
+                                                    })}
+                                                >
+                                                    {cwmLockedColors.has(i) && (
+                                                        <div style={{ position: 'absolute', top: '-6px', right: '-6px', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                                                            <I d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" s={12} />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace', fontWeight: 600 }}>{c.hex}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: 'var(--bg)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                        <I d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" s={14} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
+                                        Click a color to lock it. Locked colors won't change during generation.
+                                    </div>
+                                </div>
 
-                        {/* Strategy Picker */}
-                        <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)', marginBottom: '1.25rem' }}>
-                            <div className="st-group-title">COLOR STRATEGY</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginTop: '0.75rem' }}>
-                                {strategies.map(s => (
-                                    <button key={s.id} className={`st-btn ${cwmStrategy === s.id ? 'primary' : ''}`}
-                                        onClick={() => setCwmStrategy(s.id)}
-                                        style={{ flexDirection: 'column', gap: '0.15rem', padding: '0.75rem', textAlign: 'left', alignItems: 'flex-start' }}>
-                                        <span style={{ fontWeight: 600, fontSize: '0.8rem' }}>{s.label}</span>
-                                        <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>{s.desc}</span>
-                                    </button>
-                                ))}
+                                {/* Strategy Picker */}
+                                <div className="st-comparison-card" style={{ padding: '1.5rem' }}>
+                                    <div className="st-group-title" style={{ fontSize: '1.1rem' }}>COLOR STRATEGY</div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginTop: '1rem' }}>
+                                        {strategies.map(s => (
+                                            <button key={s.id} className={`st-btn ${cwmStrategy === s.id ? 'primary' : ''}`}
+                                                onClick={() => setCwmStrategy(s.id)}
+                                                style={{ flexDirection: 'column', gap: '0.4rem', padding: '1rem 0.75rem', textAlign: 'left', alignItems: 'flex-start', borderRadius: '12px', border: cwmStrategy === s.id ? '2px solid transparent' : '1px solid var(--border)', background: cwmStrategy === s.id ? 'var(--primary-hover)' : 'var(--bg)' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <I d={s.icon} s={16} />
+                                                    <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>{s.label}</span>
+                                                </div>
+                                                <span style={{ fontSize: '0.7rem', opacity: cwmStrategy === s.id ? 0.9 : 0.6, lineHeight: 1.3 }}>{s.desc}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                                        <button className="st-extract-btn-creative" onClick={cwmGenerateColorways} disabled={isCwmGenerating} style={{ width: '100%', padding: '0.85rem' }}>
+                                            <div className={isCwmGenerating ? 'spin-icon' : ''}>
+                                                <I d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" s={20} />
+                                            </div>
+                                            {isCwmGenerating ? 'Generating...' : 'Generate 4 Colorways'}
+                                        </button>
+                                    </div>
+                                    {cwmColorways.length > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
+                                            <button className="st-btn" onClick={cwmExportLineCard} disabled={isCwmExporting}
+                                                style={{ padding: '0.75rem 1.5rem', width: '100%' }}>
+                                                {isCwmExporting ? 'Exporting...' : <><I d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" s={14} /> Export Line Card PDF</>}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
-                                <button className="st-btn primary" onClick={cwmGenerateColorways} disabled={isCwmGenerating}
-                                    style={{ flex: 1, padding: '0.85rem', fontWeight: 600 }}>
-                                    {isCwmGenerating ? <><div className="st-spinner" style={{ width: 16, height: 16 }} /> Generating...</> : <><I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={16} /> Generate 4 Colorways</>}
-                                </button>
-                                {cwmColorways.length > 0 && (
-                                    <button className="st-btn" onClick={cwmExportLineCard} disabled={isCwmExporting}
-                                        style={{ padding: '0.85rem 1.5rem' }}>
-                                        {isCwmExporting ? 'Exporting...' : <><I d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" s={14} /> Export Line Card PDF</>}
-                                    </button>
+
+                            {/* Right Panel: Results */}
+                            <div style={{ flex: '2 1 600px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                {isCwmGenerating ? (
+                                    <div className="st-comparison-card" style={{ height: '100%', minHeight: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                        <div className="st-ai-processing">
+                                            <div className="st-ai-sparkle-container">
+                                                <div className="st-ai-sparkle-icon">
+                                                    <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={36} />
+                                                </div>
+                                                <div className="st-ai-ring" />
+                                                <div className="st-ai-ring" />
+                                                <div className="st-ai-ring" />
+                                            </div>
+                                            <span className="st-ai-phase-text" style={{ marginTop: '1.5rem', fontSize: '1.1rem' }}>AI is calculating multi-colorway distribution...</span>
+                                        </div>
+                                    </div>
+                                ) : cwmColorways.length > 0 ? (
+                                    <div className="st-comparison-card" style={{ padding: '2rem' }}>
+                                        <div className="st-group-title" style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>GENERATED COLORWAYS</div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                                            {cwmColorways.map((cw, i) => (
+                                                <div key={i} style={{ backgroundColor: 'var(--bg)', borderRadius: '16px', border: '1px solid var(--border)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                                                    {cw.resultUrl ? (
+                                                        <div style={{ aspectRatio: '1', overflow: 'hidden', position: 'relative' }}>
+                                                            <img src={`${API}${cw.resultUrl}`} alt={`Colorway ${i + 1}`}
+                                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                            <div style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', padding: '4px 8px', borderRadius: '8px', color: '#fff', fontSize: '0.7rem', fontWeight: 600 }}>
+                                                                Colorway {i + 1}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--card-bg)' }}>
+                                                            <div className="st-spinner" />
+                                                        </div>
+                                                    )}
+                                                    <div style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                                                            {cw.colors?.map((hex, j) => (
+                                                                <div key={j} style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: hex, border: '1px solid var(--border)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)' }} title={hex} />
+                                                            ))}
+                                                        </div>
+                                                        <div style={{ marginTop: 'auto' }}>
+                                                            {cw.resultUrl && (
+                                                                <button className="st-btn" onClick={(e) => forceDownload(e, `${API}${cw.resultUrl}`)} style={{ width: '100%', padding: '0.6rem' }}>
+                                                                    <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} style={{ marginRight: '4px' }}/> Download
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="st-comparison-card" style={{ height: '100%', minHeight: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                                        <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={48} />
+                                        <p style={{ marginTop: '1rem', fontSize: '1.1rem', fontWeight: 600 }}>Ready to generate 4 new colorways</p>
+                                        <p style={{ fontSize: '0.9rem' }}>Select a strategy on the left and click Generate.</p>
+                                    </div>
                                 )}
                             </div>
                         </div>
-
-                        {/* Generated Colorways Grid */}
-                        {cwmColorways.length > 0 && (
-                            <div>
-                                <div className="st-group-title">GENERATED COLORWAYS</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem', marginTop: '0.75rem' }}>
-                                    {cwmColorways.map((cw, i) => (
-                                        <div key={i} style={{ backgroundColor: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border)', overflow: 'hidden' }}>
-                                            {cw.resultUrl && (
-                                                <div style={{ aspectRatio: '1', overflow: 'hidden' }}>
-                                                    <img src={`${API}${cw.resultUrl}`} alt={`Colorway ${i + 1}`}
-                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                </div>
-                                            )}
-                                            <div style={{ padding: '1rem' }}>
-                                                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text)', marginBottom: '0.5rem' }}>
-                                                    Colorway {i + 1} â€” {cw.strategy || cwmStrategy}
-                                                </div>
-                                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                                    {cw.colors?.map((hex, j) => (
-                                                        <div key={j} style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: hex, border: '1px solid var(--border)' }} title={hex} />
-                                                    ))}
-                                                </div>
-                                                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-                                                    {cw.resultUrl && <button className="st-btn" onClick={(e) => forceDownload(e, `${API}${cw.resultUrl}`)} style={{ fontSize: '0.75rem', flex: 1 }}>Download</button>}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
                     </>
                 )}
             </div>
@@ -4633,80 +4999,160 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 { id: 'dress', label: 'Dress', icon: 'M6.5 2h11l1 4H19l-3 14H8L5 6h.5l1-4zM12 2v4' },
                 { id: 'totebag', label: 'Tote Bag', icon: 'M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0' },
             ];
+
+            if (!preview) {
+                return (
+                    <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
+                        <div
+                            className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
+                            onClick={() => fileRef.current?.click()}
+                            onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
+                            onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
+                            onDragLeave={() => setIsDrag(false)}
+                        >
+                            <div className="st-particles">
+                                <div className="st-particle" />
+                                <div className="st-particle" />
+                                <div className="st-particle" />
+                                <div className="st-particle" />
+                                <div className="st-particle" />
+                                <div className="st-particle" />
+                            </div>
+                            <div className="st-dropzone-icon-wrap">
+                                <I d="M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" s={36} />
+                            </div>
+                            <h2 className="st-dropzone-title">Upload pattern for 3D mockup</h2>
+                            <p className="st-dropzone-desc">Drag & drop or click to browse — preview your design on realistic garments</p>
+                            <div className="st-dropzone-badges">
+                                <span className="st-dropzone-badge">PNG</span>
+                                <span className="st-dropzone-badge">JPG</span>
+                                <span className="st-dropzone-badge">TIFF</span>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
             return (
-                <div className="st-tool-content" style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', height: '100%' }}>
+                <div className="st-tool-content st-pattern-layout" style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', height: '100%', padding: '2rem' }}>
                     {/* Controls panel */}
-                    <div style={{ flex: '1 1 260px', maxWidth: '320px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                        <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text)' }}>Garment Type</h3>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                {garments.map(g => (
-                                    <button
-                                        key={g.id}
-                                        className={`st-btn ${mockup3dGarment === g.id ? 'primary' : ''}`}
-                                        onClick={() => setMockup3dGarment(g.id)}
-                                        style={{ flex: 1, flexDirection: 'column', gap: '0.3rem', padding: '0.75rem 0.5rem' }}
-                                    >
-                                        <I d={g.icon} s={20} />
-                                        <span style={{ fontSize: '0.75rem' }}>{g.label}</span>
-                                    </button>
-                                ))}
+                    <div style={{ flex: '1 1 280px', maxWidth: '340px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        {/* Garment Type Card */}
+                        <div className="st-comparison-card" style={{ overflow: 'hidden' }}>
+                            <div className="st-comparison-card-head">
+                                <I d="M20.38 3.46L16 2 12 3.5 8 2 3.62 3.46a2 2 0 00-1.34 2.23l.58 3.47c.06.37.29.68.62.84L8 12v8a1 1 0 001 1h6a1 1 0 001-1v-8l4.52-2a1 1 0 00.62-.84l.58-3.47a2 2 0 00-1.34-2.23z" s={18} />
+                                <span>Garment Type</span>
+                            </div>
+                            <div className="st-comparison-card-body" style={{ padding: '1.25rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+                                    {garments.map(g => (
+                                        <button
+                                            key={g.id}
+                                            className={`st-btn ${mockup3dGarment === g.id ? 'primary' : ''}`}
+                                            onClick={() => setMockup3dGarment(g.id)}
+                                            style={{
+                                                flexDirection: 'column', gap: '0.5rem', padding: '1rem 0.5rem',
+                                                borderRadius: '14px', transition: 'all 0.25s ease',
+                                                border: mockup3dGarment === g.id ? '2px solid transparent' : '1px solid var(--border)',
+                                                background: mockup3dGarment === g.id ? 'var(--primary-hover)' : 'var(--bg)',
+                                                boxShadow: mockup3dGarment === g.id ? '0 4px 16px rgba(99,102,241,0.18)' : 'none'
+                                            }}
+                                        >
+                                            <I d={g.icon} s={24} />
+                                            <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{g.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
-                        <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text)' }}>Pattern Tiling</h3>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                Horizontal Repeat: <strong style={{ color: 'var(--text)' }}>{mockup3dTileX}x</strong>
-                            </label>
-                            <input type="range" min={1} max={8} step={1} value={mockup3dTileX}
-                                onChange={e => setMockup3dTileX(Number(e.target.value))}
-                                style={{ width: '100%', marginBottom: '1rem', accentColor: 'var(--primary)' }}
-                            />
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                Vertical Repeat: <strong style={{ color: 'var(--text)' }}>{mockup3dTileY}x</strong>
-                            </label>
-                            <input type="range" min={1} max={8} step={1} value={mockup3dTileY}
-                                onChange={e => setMockup3dTileY(Number(e.target.value))}
-                                style={{ width: '100%', accentColor: 'var(--primary)' }}
-                            />
+                        {/* Pattern Tiling Card */}
+                        <div className="st-comparison-card" style={{ overflow: 'hidden' }}>
+                            <div className="st-comparison-card-head">
+                                <I d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" s={18} />
+                                <span>Pattern Tiling</span>
+                            </div>
+                            <div className="st-comparison-card-body" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>Horizontal Repeat</label>
+                                        <span className="st-credit-badge" style={{ fontSize: '0.8rem', fontWeight: 700 }}>{mockup3dTileX}x</span>
+                                    </div>
+                                    <input type="range" min={1} max={8} step={1} value={mockup3dTileX}
+                                        onChange={e => setMockup3dTileX(Number(e.target.value))}
+                                        style={{ width: '100%', accentColor: 'var(--primary)', height: '6px', borderRadius: '3px' }}
+                                    />
+                                </div>
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>Vertical Repeat</label>
+                                        <span className="st-credit-badge" style={{ fontSize: '0.8rem', fontWeight: 700 }}>{mockup3dTileY}x</span>
+                                    </div>
+                                    <input type="range" min={1} max={8} step={1} value={mockup3dTileY}
+                                        onChange={e => setMockup3dTileY(Number(e.target.value))}
+                                        style={{ width: '100%', accentColor: 'var(--primary)', height: '6px', borderRadius: '3px' }}
+                                    />
+                                </div>
+                            </div>
                         </div>
 
-                        <div style={{ backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text)' }}>
-                                <input type="checkbox" checked={mockup3dAutoRotate} onChange={e => setMockup3dAutoRotate(e.target.checked)}
-                                    style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
-                                />
-                                Auto-Rotate
-                            </label>
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                Drag to rotate manually Â· Scroll to zoom
-                            </p>
+                        {/* Auto-Rotate Card */}
+                        <div className="st-comparison-card" style={{ overflow: 'hidden' }}>
+                            <div className="st-comparison-card-head">
+                                <I d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" s={18} />
+                                <span>Rotation</span>
+                            </div>
+                            <div className="st-comparison-card-body" style={{ padding: '1.25rem' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text)', fontWeight: 600 }}>
+                                    <input type="checkbox" checked={mockup3dAutoRotate} onChange={e => setMockup3dAutoRotate(e.target.checked)}
+                                        style={{ accentColor: 'var(--primary)', width: '18px', height: '18px' }}
+                                    />
+                                    Auto-Rotate
+                                </label>
+                                <p style={{ margin: '0.75rem 0 0 0', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                    <I d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" s={13} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
+                                    Drag to rotate manually · Scroll to zoom
+                                </p>
+                            </div>
                         </div>
                     </div>
 
                     {/* 3D Canvas */}
-                    <div style={{ flex: '2 1 400px', backgroundColor: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border)', overflow: 'hidden', minHeight: '500px', position: 'relative' }}>
-                        {preview ? (
-                            <ReactSuspense fallback={
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
-                                    <div className="st-spinner" style={{ marginRight: '0.75rem' }} /> Loading 3D engine...
-                                </div>
-                            }>
-                                <GarmentPreview3D
-                                    patternUrl={preview}
-                                    garmentType={mockup3dGarment}
-                                    tileX={mockup3dTileX}
-                                    tileY={mockup3dTileY}
-                                    autoRotate={mockup3dAutoRotate}
-                                />
-                            </ReactSuspense>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', gap: '1rem', padding: '2rem', textAlign: 'center' }}>
-                                <I d="M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" s={48} />
-                                <p>Upload a pattern image to see it applied to a 3D garment mockup</p>
+                    <div style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column' }}>
+                        <div className="st-comparison-card" style={{ overflow: 'hidden', flex: 1, minHeight: '500px', display: 'flex', flexDirection: 'column' }}>
+                            <div className="st-comparison-card-head">
+                                <I d="M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" s={18} />
+                                <span>3D Preview</span>
+                                <span className="st-credit-badge" style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>
+                                    {garments.find(g => g.id === mockup3dGarment)?.label || 'T-Shirt'}
+                                </span>
                             </div>
-                        )}
+                            <div style={{ flex: 1, position: 'relative' }}>
+                                <ReactSuspense fallback={
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '400px' }}>
+                                        <div className="st-ai-processing">
+                                            <div className="st-ai-sparkle-container">
+                                                <div className="st-ai-sparkle-icon">
+                                                    <I d="M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" s={36} />
+                                                </div>
+                                                <div className="st-ai-ring" />
+                                                <div className="st-ai-ring" />
+                                                <div className="st-ai-ring" />
+                                            </div>
+                                            <span className="st-ai-phase-text" style={{ marginTop: '1.5rem', fontSize: '1.05rem' }}>Initializing 3D engine...</span>
+                                        </div>
+                                    </div>
+                                }>
+                                    <GarmentPreview3D
+                                        patternUrl={preview}
+                                        garmentType={mockup3dGarment}
+                                        tileX={mockup3dTileX}
+                                        tileY={mockup3dTileY}
+                                        autoRotate={mockup3dAutoRotate}
+                                    />
+                                </ReactSuspense>
+                            </div>
+                        </div>
                     </div>
                 </div>
             );
@@ -6048,33 +6494,124 @@ if (tool === 'imagelayers') {
     );
 }
             if (tool === 'vectorize' || tool === 'upscale') {
-      const resultUrl = tool === 'vectorize' ? vecUrl : upscaleUrl;
-            const loading = tool === 'vectorize' ? isVec : isUpscaling;
-            return (
-            <div className="st-compare">
-                <div className="st-compare-panel"><div className="st-compare-label">ORIGINAL</div>{preview ? <img src={preview} alt="Original" /> : <span className="st-compare-empty">Upload an image</span>}</div>
-                <div className="st-compare-divider">{loading ? <div className="st-spinner" /> : '->'}</div>
-                <div className="st-compare-panel">
-                    <div className="st-compare-label">RESULT</div>
-                    {resultUrl ? (
-                        Array.isArray(resultUrl) ? (
-                            <div style={{ display: 'flex', gap: '10px', height: '100%', alignItems: 'center' }}>
-                                {resultUrl.map((url, i) => (
-                                    <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        <img src={url.startsWith('/') ? `${API}${url}` : url} alt={`Result ${i + 1}`} style={{ width: '100%', height: 'auto', borderRadius: '8px' }} />
-                                        <a href={url} onClick={(e) => forceDownload(e, url)} className="st-dl-btn">Download</a>
-                                    </div>
-                                ))}
+                const resultUrl = tool === 'vectorize' ? vecUrl : upscaleUrl;
+                const loading = tool === 'vectorize' ? isVec : isUpscaling;
+                const toolTitle = tool === 'vectorize' ? 'vectorize' : 'upscale';
+                const toolLabel = tool === 'vectorize' ? 'Vectorize' : 'Upscale';
+                const actionFunc = tool === 'vectorize' ? vectorize : upscale;
+                const creditCost = tool === 'vectorize' ? (creditPricing.vectorize || 30) : (creditPricing.upscale || 10);
+                
+                if (!preview) {
+                    return (
+                        <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
+                            <div
+                                className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
+                                onClick={() => fileRef.current?.click()}
+                                onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
+                                onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
+                                onDragLeave={() => setIsDrag(false)}
+                            >
+                                <div className="st-particles">
+                                    <div className="st-particle" />
+                                    <div className="st-particle" />
+                                    <div className="st-particle" />
+                                    <div className="st-particle" />
+                                    <div className="st-particle" />
+                                    <div className="st-particle" />
+                                </div>
+                                <div className="st-dropzone-icon-wrap">
+                                    {tool === 'vectorize' ? <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={36} /> : <I d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" s={36} />}
+                                </div>
+                                <h2 className="st-dropzone-title">Upload artwork to {toolTitle}</h2>
+                                <p className="st-dropzone-desc">Drag & drop or click to browse — AI will process your high-fidelity asset</p>
+                                <div className="st-dropzone-badges">
+                                    <span className="st-dropzone-badge">PNG</span>
+                                    <span className="st-dropzone-badge">JPG</span>
+                                    <span className="st-dropzone-badge">TIFF</span>
+                                </div>
                             </div>
-                        ) : <>
-                            <img src={resultUrl.startsWith('/') ? `${API}${resultUrl}` : resultUrl} alt="Result" style={{ maxWidth: '100%', maxHeight: '320px', objectFit: 'contain' }} />
-                            <a href={resultUrl} onClick={(e) => forceDownload(e, resultUrl)} className="st-dl-btn" style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>Download {tool === 'vectorize' ? 'SVG' : 'PNG'}</a>
-                        </>
-                    ) : loading ? <span className="st-processing">Processing...</span> : <span className="st-compare-empty">Result appears here</span>}
-                </div>
-            </div>
-            );
-    }
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                        <div className="st-comparison-workspace">
+                            <div className="st-comparison-card">
+                                <div className="st-comparison-card-head">
+                                    <span>Original Input</span>
+                                    <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} />
+                                        Replace
+                                    </button>
+                                </div>
+                                <div className="st-comparison-card-body">
+                                    <img src={preview} alt="Original artwork" />
+                                </div>
+                            </div>
+
+                            <div className="st-comparison-action-bridge">
+                                <button className="st-extract-btn-creative" onClick={actionFunc} disabled={loading || !preview}>
+                                    <div className={loading ? 'spin-icon' : ''}>
+                                        <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={20} />
+                                    </div>
+                                    {loading ? 'Processing...' : toolLabel}
+                                </button>
+                                <span className="st-credit-badge">
+                                    <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
+                                    {creditCost} credits
+                                </span>
+                            </div>
+
+                            <div className="st-comparison-card">
+                                <div className="st-comparison-card-head">
+                                    <span>{tool === 'vectorize' ? 'Vector SVG' : 'Upscaled Result'}</span>
+                                    {resultUrl && !Array.isArray(resultUrl) && (
+                                        <button onClick={(e) => forceDownload(e, resultUrl)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="st-comparison-card-body">
+                                    {resultUrl ? (
+                                        Array.isArray(resultUrl) ? (
+                                            <div className="st-result-reveal" style={{ position: 'absolute', inset: '0', padding: '1.25rem', display: 'flex', gap: '10px' }}>
+                                                {resultUrl.map((url, i) => (
+                                                    <div key={i} style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                                                        <img src={url.startsWith('/') ? `${API}${url}` : url} alt={`Result ${i + 1}`} style={{ flex: 1, borderRadius: '10px', objectFit: 'contain' }} />
+                                                        <a href={url} onClick={(e) => forceDownload(e, url)} className="st-premium-download-btn" style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>Download</a>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="st-result-reveal">
+                                                <img src={resultUrl.startsWith('/') ? `${API}${resultUrl}` : resultUrl} alt="Result" />
+                                            </div>
+                                        )
+                                    ) : loading ? (
+                                        <div className="st-ai-processing">
+                                            <div className="st-ai-sparkle-container">
+                                                <div className="st-ai-sparkle-icon">
+                                                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
+                                                </div>
+                                                <div className="st-ai-ring" />
+                                                <div className="st-ai-ring" />
+                                                <div className="st-ai-ring" />
+                                            </div>
+                                            <span className="st-ai-phase-text">AI is {tool === 'vectorize' ? 'converting to vector' : 'enhancing resolution'}...</span>
+                                        </div>
+                                    ) : (
+                                        <div style={{ textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                                            <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />
+                                            <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>Ready to process image</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
         const allAvailableModels = [
                 { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'AI', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
                 { id: 'google/imagen-4-fast', name: 'Imagen 4 Fast', sub: 'Google', brand: 'gemini', logo: 'Gm', icon: 'M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4L12 2z' },
