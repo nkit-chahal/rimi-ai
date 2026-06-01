@@ -125,6 +125,106 @@ const ADMIN_NAV = [
     },
 ];
 
+const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
+    const canvasRef = useRef(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [brushSize, setBrushSize] = useState(30);
+
+    useEffect(() => {
+        if (!imageUrl || !canvasRef.current) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            // Draw original image as background (wait, mask should only contain white strokes on black bg, but we show the image to the user)
+            // Actually, we should draw the image as a CSS background on the canvas container, and the canvas itself should just be the mask drawing layer!
+            // This makes extracting the mask easier.
+        };
+        img.src = imageUrl;
+    }, [imageUrl]);
+
+    const startDraw = (e) => {
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.beginPath();
+        ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+        setIsDrawing(true);
+    };
+
+    const draw = (e) => {
+        if (!isDrawing) return;
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; // White stroke for the mask
+        ctx.lineWidth = brushSize;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+    };
+
+    const stopDraw = () => {
+        setIsDrawing(false);
+    };
+
+    const clearCanvas = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+
+    const saveMask = () => {
+        // Create an offscreen canvas to generate the solid black/white mask
+        const offscreen = document.createElement('canvas');
+        const c = canvasRef.current;
+        offscreen.width = c.width;
+        offscreen.height = c.height;
+        const ctx = offscreen.getContext('2d');
+        // Fill black
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+        // Draw the white strokes over it
+        ctx.drawImage(c, 0, 0);
+        
+        onComplete(offscreen.toDataURL('image/png'));
+    };
+
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#1e1e2e', padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '90vw', maxHeight: '90vh' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, color: 'white' }}>Paint Custom Mask</h3>
+                    <button onClick={onCancel} style={{ background: 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}><I d="M6 18L18 6M6 6l12 12" s={24}/></button>
+                </div>
+                <p style={{ margin: 0, color: '#a1a1aa', fontSize: '14px' }}>Brush over the area where you want the pattern to be applied.</p>
+                
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                    <label style={{ color: 'white', fontSize: '14px' }}>Brush Size: {brushSize}px</label>
+                    <input type="range" min="5" max="100" value={brushSize} onChange={e => setBrushSize(parseInt(e.target.value))} style={{ flex: 1 }} />
+                    <button onClick={clearCanvas} style={{ background: '#3f3f46', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}>Clear</button>
+                </div>
+
+                <div style={{ position: 'relative', overflow: 'auto', flex: 1, border: '1px solid #3f3f46', borderRadius: '8px', background: `url(${imageUrl})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }}>
+                    <canvas 
+                        ref={canvasRef}
+                        onMouseDown={startDraw}
+                        onMouseMove={draw}
+                        onMouseUp={stopDraw}
+                        onMouseLeave={stopDraw}
+                        style={{ cursor: 'crosshair', display: 'block', maxWidth: '100%', objectFit: 'contain' }}
+                    />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                    <button onClick={onCancel} style={{ background: 'transparent', color: 'white', border: '1px solid #52525b', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                    <button onClick={saveMask} style={{ background: '#6366f1', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Save Mask</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const emptyState = {
     user: { name: '', initials: '', plan: '', creditsUsed: 0, creditsLimit: 1, resetDays: 0 },
     activeProject: { id: 1, name: 'Loading...', heroImageUrl: '/demo_floral.png' },
@@ -485,42 +585,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [isCwRecoloring, setIsCwRecoloring] = useState(false);
     const [cwVariations, setCwVariations] = useState([]);
 
-    // ===== PRINT ADVISOR =====
-    const [printAdvisorResult, setPrintAdvisorResult] = useState(null);
-    const [isPrintAdvisorLoading, setIsPrintAdvisorLoading] = useState(false);
-    const [printAdvisorFabric, setPrintAdvisorFabric] = useState('cotton');
-    const [printAdvisorVolume, setPrintAdvisorVolume] = useState(500);
-
-    const analyzePrintMethod = async () => {
-        if (!uploaded) return;
-        setIsPrintAdvisorLoading(true);
-        setPrintAdvisorResult(null);
-        setError('');
-        try {
-            const res = await fetch(`${API}/api/print-advisor`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    filename: uploaded.filename,
-                    fabricType: printAdvisorFabric,
-                    productionVolume: printAdvisorVolume,
-                    projectId: activeProject.id,
-                    userId: user.id,
-                }),
-            });
-            const d = await res.json();
-            if (d.success) {
-                setPrintAdvisorResult(d.analysis);
-            } else {
-                throw new Error(d.error || 'Analysis failed');
-            }
-        } catch (e) {
-            setError(e.message || 'Print analysis failed');
-        } finally {
-            setIsPrintAdvisorLoading(false);
-        }
-    };
-
     // ===== COLORWAY MANAGER =====
     const [cwmPalette, setCwmPalette] = useState([]);
     const [cwmColorways, setCwmColorways] = useState([]);
@@ -622,77 +686,27 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     // ===== MAPPINGS =====
     const MAPPING_CATEGORIES = [
-        { id: 'home', label: 'Home & Living', desc: 'Bedding, upholstery, kitchen, bath', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
-        { id: 'apparel', label: 'Apparel', desc: 'Shirts, dresses, ethnic, swimwear', icon: 'M20.38 3.46L16 2 12 5.5 8 2 3.62 3.46a2 2 0 00-1.34 2.23l.58 3.47c.06.37.29.7.62.89L8 12.75V21h8v-8.25l4.52-2.7c.33-.19.56-.52.62-.89l.58-3.47a2 2 0 00-1.34-2.23z' },
-        { id: 'accessories', label: 'Bags & Accessories', desc: 'Totes, cases, hats, ties', icon: 'M20 7h-4V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v3H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 4h4v3h-4V4z' },
-        { id: 'wall_art', label: 'Wall Art & Decor', desc: 'Canvas, frames, posters, wallpaper', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
-        { id: 'fabric', label: 'Fabric Presentation', desc: 'Rolls, swatches, draped displays', icon: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z' },
-        { id: 'stationery', label: 'Stationery & Gifts', desc: 'Wrapping, notebooks, packaging', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
+        { id: 'home', label: 'Home & Decor', desc: 'Bedding and cushions', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
+        { id: 'apparel', label: 'Apparel', desc: 'T-Shirts and clothing', icon: 'M20.38 3.46L16 2 12 5.5 8 2 3.62 3.46a2 2 0 00-1.34 2.23l.58 3.47c.06.37.29.7.62.89L8 12.75V21h8v-8.25l4.52-2.7c.33-.19.56-.52.62-.89l.58-3.47a2 2 0 00-1.34-2.23z' },
+        { id: 'accessories', label: 'Accessories', desc: 'Tote bags', icon: 'M20 7h-4V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v3H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 4h4v3h-4V4z' },
+        { id: 'custom', label: 'Custom Canvas', desc: 'Brush your own mask', icon: 'M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z' },
     ];
     const MAPPING_PRODUCTS = {
         home: [
-            { id: 'bed_sheet', name: 'Bed Sheet' },
-            { id: 'pillow_cover', name: 'Pillow Cover' },
-            { id: 'pillow_lumbar', name: 'Lumbar Pillow' },
-            { id: 'comforter', name: 'Comforter' },
-            { id: 'duvet_cover', name: 'Duvet Cover' },
-            { id: 'cushion_floor', name: 'Floor Cushion' },
-            { id: 'throw_blanket', name: 'Throw Blanket' },
-            { id: 'curtain', name: 'Curtain' },
-            { id: 'shower_curtain', name: 'Shower Curtain' },
-            { id: 'tablecloth', name: 'Tablecloth' },
-            { id: 'table_runner', name: 'Table Runner' },
-            { id: 'napkin_set', name: 'Napkin Set' },
-            { id: 'apron', name: 'Kitchen Apron' },
-            { id: 'oven_mitt', name: 'Oven Mitt' },
-            { id: 'chair_upholstery', name: 'Accent Chair' },
-            { id: 'sofa_upholstery', name: 'Sofa' },
-            { id: 'ottoman', name: 'Ottoman' },
-            { id: 'headboard', name: 'Headboard' },
-            { id: 'wallpaper', name: 'Wallpaper' },
+            { id: 'bed_sheet', name: 'Bed Sheet', image: '/products/bed_sheet.png' },
+            { id: 'pillow_cover', name: 'Pillow Cover', image: '/products/pillow_cover.png' },
+            { id: 'comforter', name: 'Comforter', image: '/products/comforter.png' },
+            { id: 'cushion', name: 'Cushion', image: '/products/cushion.png' },
         ],
         apparel: [
-            { id: 'tshirt', name: 'T-Shirt' },
-            { id: 'polo', name: 'Polo Shirt' },
-            { id: 'hoodie', name: 'Hoodie' },
-            { id: 'jacket', name: 'Jacket' },
-            { id: 'tank_top', name: 'Tank Top' },
-            { id: 'dress', name: 'Dress' },
-            { id: 'skirt', name: 'Skirt' },
-            { id: 'shorts', name: 'Shorts' },
-            { id: 'kurta', name: 'Kurta' },
-            { id: 'saree', name: 'Saree' },
-            { id: 'lehenga', name: 'Lehenga' },
-            { id: 'kimono', name: 'Kimono Robe' },
-            { id: 'scarf', name: 'Scarf' },
-            { id: 'bandana', name: 'Bandana' },
-            { id: 'swimsuit', name: 'Swimsuit' },
+            { id: 'tshirt', name: 'T-Shirt', image: '/products/tshirt.png' },
         ],
         accessories: [
-            { id: 'tote_bag', name: 'Tote Bag' },
-            { id: 'backpack', name: 'Backpack' },
-            { id: 'crossbody', name: 'Crossbody Bag' },
-            { id: 'makeup_bag', name: 'Makeup Bag' },
-            { id: 'laptop_sleeve', name: 'Laptop Sleeve' },
-            { id: 'phone_case', name: 'Phone Case' },
-            { id: 'hat_bucket', name: 'Bucket Hat' },
-            { id: 'tie', name: 'Necktie' },
-            { id: 'bow_tie', name: 'Bow Tie' },
+            { id: 'tote_bag', name: 'Tote Bag', image: '/products/tote_bag.png' },
         ],
-        wall_art: [
-            { id: 'canvas_print', name: 'Canvas Print' },
-            { id: 'framed_print', name: 'Framed Print' },
-            { id: 'poster', name: 'Poster' },
-        ],
-        fabric: [
-            { id: 'fabric_roll', name: 'Fabric Roll' },
-            { id: 'fabric_swatch', name: 'Fabric Swatch' },
-            { id: 'fabric_draped', name: 'Draped Fabric' },
-        ],
-        stationery: [
-            { id: 'wrapping_paper', name: 'Wrapping Paper' },
-            { id: 'notebook', name: 'Notebook' },
-        ],
+        custom: [
+            { id: 'custom_product', name: 'Custom Product Mapping', image: null },
+        ]
     };
 
     const [mappingStep, setMappingStep] = useState(1);
@@ -703,6 +717,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [mappingResults, setMappingResults] = useState([]);
     const [isMappingGenerating, setIsMappingGenerating] = useState(false);
     const [mappingProductSearch, setMappingProductSearch] = useState('');
+
+    // Custom Mapping Editor States
+    const [mappingBackground, setMappingBackground] = useState('studio');
+    const [mappingShotStyle, setMappingShotStyle] = useState('editorial');
+    const [mappingFabricTexture, setMappingFabricTexture] = useState('cotton');
+    const [mappingCustomPrompt, setMappingCustomPrompt] = useState('');
+    const [mappingCustomReference, setMappingCustomReference] = useState(null); // The uploaded image File
+    const [mappingCustomReferencePreview, setMappingCustomReferencePreview] = useState(null); // The uploaded image URL
+    const [mappingCustomMask, setMappingCustomMask] = useState(null); // The drawn mask URL
+    const [isCanvasOpen, setIsCanvasOpen] = useState(false);
+
     const mapFileRef = useRef(null);
 
     const handleMappingUpload = (file) => {
@@ -742,6 +767,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     patternFilename: mappingPrint.filename,
                     products: Array.from(mappingSelectedProducts),
                     category: mappingCategory,
+                    customPrompt: mappingCustomPrompt,
+                    background: mappingBackground,
+                    shotStyle: mappingShotStyle,
+                    fabricTexture: mappingFabricTexture,
+                    productReferenceDataUri: mappingCustomReferencePreview,
+                    maskDataUri: mappingCustomMask,
                     projectId: activeProject.id,
                     userId: user.id,
                 }),
@@ -3064,7 +3095,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         'admin-logs': 'Activity Logs',
         'admin-credits': 'Credits & Billing',
         'colorway-manager': 'Colorway Manager',
-        'print-advisor': 'Print Method Advisor',
+
         'measurement': 'Measurement & Scale',
     }[tool] || tool;
 
@@ -3504,47 +3535,138 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     </div>
                 )}
 
-                {/* Step 3: Choose Products */}
+                {/* Step 3: Choose Products or Customizer */}
                 {mappingStep >= 1 && (
                     <div className="st-map-section">
-                        <h2 className="st-map-section-title">Choose Products</h2>
-                        <p className="st-map-section-desc">Select the products you want to map this print on</p>
+                        <h2 className="st-map-section-title">{mappingCategory === 'custom' ? 'Custom Mask & Settings' : 'Choose Products'}</h2>
+                        <p className="st-map-section-desc">{mappingCategory === 'custom' ? 'Upload a product photo, paint a mask, and adjust settings' : 'Select the products you want to map this print on'}</p>
 
-                        <div className="st-map-products-header">
-                            <div className="st-map-selected-count">{mappingSelectedProducts.size} product{mappingSelectedProducts.size !== 1 ? 's' : ''} selected</div>
-                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                <div className="st-map-products-search">
-                                    <I d="M21 21l-4.3-4.3M10 18a8 8 0 100-16 8 8 0 000 16z" s={16} />
-                                    <input placeholder="Search products..." value={mappingProductSearch} onChange={e => setMappingProductSearch(e.target.value)} />
+                        {mappingCategory !== 'custom' ? (
+                            <>
+                                <div className="st-map-products-header">
+                                    <div className="st-map-selected-count">{mappingSelectedProducts.size} product{mappingSelectedProducts.size !== 1 ? 's' : ''} selected</div>
+                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                        <div className="st-map-products-search">
+                                            <I d="M21 21l-4.3-4.3M10 18a8 8 0 100-16 8 8 0 000 16z" s={16} />
+                                            <input placeholder="Search products..." value={mappingProductSearch} onChange={e => setMappingProductSearch(e.target.value)} />
+                                        </div>
+                                        {mappingSelectedProducts.size > 0 && (
+                                            <button className="st-map-clear-btn" onClick={() => setMappingSelectedProducts(new Set())}>Clear All</button>
+                                        )}
+                                    </div>
                                 </div>
-                                {mappingSelectedProducts.size > 0 && (
-                                    <button className="st-map-clear-btn" onClick={() => setMappingSelectedProducts(new Set())}>Clear All</button>
-                                )}
+
+                                <div className="st-map-products-grid">
+                                    {filteredProducts.map(product => (
+                                        <div
+                                            key={product.id}
+                                            className={`st-map-product ${mappingSelectedProducts.has(product.id) ? 'selected' : ''}`}
+                                            onClick={() => { toggleMappingProduct(product.id); if (mappingStep < 3) setMappingStep(3); }}
+                                        >
+                                            <div className="st-map-product-check">
+                                                <I d="M5 13l4 4L19 7" s={14} />
+                                            </div>
+                                            <div className="st-map-product-icon">
+                                                <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={28} />
+                                            </div>
+                                            <div className="st-map-product-name">{product.name}</div>
+                                        </div>
+                                    ))}
+                                    {filteredProducts.length === 0 && (
+                                        <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                            No products available in this category yet.
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="st-map-customizer" style={{ background: 'var(--bg-secondary)', padding: '24px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>1. Reference Image</label>
+                                            <div 
+                                                style={{ border: '2px dashed var(--border)', borderRadius: '8px', padding: '20px', textAlign: 'center', cursor: 'pointer', background: 'var(--bg-tertiary)', position: 'relative', overflow: 'hidden' }}
+                                                onClick={() => {
+                                                    const input = document.createElement('input');
+                                                    input.type = 'file';
+                                                    input.accept = 'image/*';
+                                                    input.onchange = (e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            setMappingCustomReference(file);
+                                                            const r = new FileReader();
+                                                            r.onload = (e) => {
+                                                                setMappingCustomReferencePreview(e.target.result);
+                                                                setMappingCustomMask(null); // Reset mask
+                                                                const newSet = new Set(mappingSelectedProducts);
+                                                                newSet.add('custom_product');
+                                                                setMappingSelectedProducts(newSet);
+                                                                if (mappingStep < 3) setMappingStep(3);
+                                                            };
+                                                            r.readAsDataURL(file);
+                                                        }
+                                                    };
+                                                    input.click();
+                                                }}
+                                            >
+                                                {mappingCustomReferencePreview ? (
+                                                    <img src={mappingCustomReferencePreview} style={{ width: '100%', height: '160px', objectFit: 'contain' }} alt="Reference" />
+                                                ) : (
+                                                    <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Click to upload product image</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>2. Target Area Mask</label>
+                                            <button 
+                                                className="st-map-primary-btn" 
+                                                style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px' }}
+                                                onClick={() => { if(mappingCustomReferencePreview) setIsCanvasOpen(true); else alert('Upload reference image first'); }}
+                                            >
+                                                <I d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" s={18} />
+                                                {mappingCustomMask ? 'Edit Painted Mask' : 'Paint Masking Area'}
+                                            </button>
+                                            {mappingCustomMask && <div style={{ fontSize: '12px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}><I d="M5 13l4 4L19 7" s={14}/> Mask applied</div>}
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>3. Describe Product (AI Prompt)</label>
+                                            <textarea 
+                                                placeholder="e.g. A modern living room sofa with natural sunlight" 
+                                                style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', minHeight: '60px', resize: 'vertical' }}
+                                                value={mappingCustomPrompt}
+                                                onChange={e => setMappingCustomPrompt(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Background Environment</label>
+                                            <select value={mappingBackground} onChange={e => setMappingBackground(e.target.value)} style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
+                                                <option value="studio">Studio Lighting (Clean)</option>
+                                                <option value="lifestyle">Lifestyle / Indoor</option>
+                                                <option value="outdoor">Outdoor / Natural</option>
+                                                <option value="minimal">Minimalist</option>
+                                            </select>
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Fabric Material</label>
+                                            <select value={mappingFabricTexture} onChange={e => setMappingFabricTexture(e.target.value)} style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
+                                                <option value="cotton">Cotton / Matte</option>
+                                                <option value="silk">Silk / Satin (Glossy)</option>
+                                                <option value="linen">Linen (Textured)</option>
+                                                <option value="velvet">Velvet (Plush)</option>
+                                                <option value="canvas">Canvas / Heavy</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-
-                        <div className="st-map-products-grid">
-                            {filteredProducts.map(product => (
-                                <div
-                                    key={product.id}
-                                    className={`st-map-product ${mappingSelectedProducts.has(product.id) ? 'selected' : ''}`}
-                                    onClick={() => { toggleMappingProduct(product.id); if (mappingStep < 3) setMappingStep(3); }}
-                                >
-                                    <div className="st-map-product-check">
-                                        <I d="M5 13l4 4L19 7" s={14} />
-                                    </div>
-                                    <div className="st-map-product-icon">
-                                        <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={28} />
-                                    </div>
-                                    <div className="st-map-product-name">{product.name}</div>
-                                </div>
-                            ))}
-                            {filteredProducts.length === 0 && (
-                                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                    No products available in this category yet.
-                                </div>
-                            )}
-                        </div>
+                        )}
                     </div>
                 )}
 
@@ -3585,6 +3707,18 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         <p style={{ fontWeight: 800, color: '#111827', fontSize: '1.05rem', marginTop: '1.5rem', letterSpacing: '-0.02em' }}>Generating AI Mockups</p>
                         <p style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 500, marginTop: '0.35rem' }}>Mapping your pattern onto selected products — 30-60s per product</p>
                     </div>
+                )}
+
+                {/* Custom Canvas Modal */}
+                {isCanvasOpen && mappingCustomReferencePreview && (
+                    <CustomMappingCanvas 
+                        imageUrl={mappingCustomReferencePreview}
+                        onCancel={() => setIsCanvasOpen(false)}
+                        onComplete={(maskUrl) => {
+                            setMappingCustomMask(maskUrl);
+                            setIsCanvasOpen(false);
+                        }}
+                    />
                 )}
 
                 {/* Footer */}
@@ -4584,256 +4718,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         );
     };
 
-    // ===== RENDER PRINT ADVISOR =====
-    const renderPrintAdvisor = () => {
-        const fabricTypes = [
-            { id: 'cotton', label: 'Cotton', icon: '🌿' },
-            { id: 'polyester', label: 'Polyester', icon: '🧵' },
-            { id: 'silk', label: 'Silk', icon: '✨' },
-            { id: 'linen', label: 'Linen', icon: '🌾' },
-            { id: 'nylon', label: 'Nylon', icon: '🔗' },
-            { id: 'rayon', label: 'Rayon', icon: '💧' },
-        ];
-        const methodColors = {
-            'Screen Printing': '#22c55e',
-            'Digital Printing': '#3b82f6',
-            'Rotary Printing': '#f59e0b',
-            'Sublimation': '#a855f7',
-            'Block Printing': '#ec4899',
-            'Discharge Printing': '#14b8a6',
-        };
-
-        if (!preview) {
-            return (
-                <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
-                    <div
-                        className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
-                        onClick={() => fileRef.current?.click()}
-                        onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                        onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                        onDragLeave={() => setIsDrag(false)}
-                    >
-                        <div className="st-particles">
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                        </div>
-                        <div className="st-dropzone-icon-wrap">
-                            <I d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" s={36} />
-                        </div>
-                        <h2 className="st-dropzone-title">Upload artwork for print analysis</h2>
-                        <p className="st-dropzone-desc">Drag & drop or click to browse — AI will recommend optimal print methods for your design</p>
-                        <div className="st-dropzone-badges">
-                            <span className="st-dropzone-badge">PNG</span>
-                            <span className="st-dropzone-badge">JPG</span>
-                            <span className="st-dropzone-badge">TIFF</span>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        return (
-            <div className="st-tool-content st-pattern-layout" style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem' }}>
-                {/* Configuration */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-                    <div className="st-comparison-card">
-                        <div className="st-comparison-card-head">
-                            <span><I d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" s={16} /> Fabric Type</span>
-                        </div>
-                        <div className="st-comparison-card-body" style={{ padding: '1.25rem' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
-                                {fabricTypes.map(f => (
-                                    <button key={f.id} className={`st-btn ${printAdvisorFabric === f.id ? 'primary' : ''}`}
-                                        onClick={() => setPrintAdvisorFabric(f.id)}
-                                        style={{
-                                            flexDirection: 'column', gap: '0.4rem', padding: '1rem 0.5rem', fontSize: '0.82rem',
-                                            borderRadius: '14px', transition: 'all 0.25s ease',
-                                            background: printAdvisorFabric === f.id ? undefined : 'var(--bg)',
-                                            border: printAdvisorFabric === f.id ? undefined : '1px solid var(--border)',
-                                            boxShadow: printAdvisorFabric === f.id ? '0 4px 16px rgba(99,102,241,0.25)' : 'none'
-                                        }}>
-                                        <span style={{ fontSize: '1.6rem', lineHeight: 1 }}>{f.icon}</span>
-                                        <span style={{ fontWeight: 600 }}>{f.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                    <div className="st-comparison-card">
-                        <div className="st-comparison-card-head">
-                            <span><I d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" s={16} /> Production Volume</span>
-                        </div>
-                        <div className="st-comparison-card-body" style={{ padding: '1.25rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>Estimated yards/meters</label>
-                            <input type="number" value={printAdvisorVolume} onChange={e => setPrintAdvisorVolume(Math.max(1, parseInt(e.target.value) || 0))}
-                                style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid var(--border)', backgroundColor: 'var(--bg)', color: 'var(--text)', fontSize: '1.05rem', fontWeight: 600 }} />
-                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.85rem', flexWrap: 'wrap' }}>
-                                {[50, 200, 500, 1000, 5000, 10000].map(v => (
-                                    <button key={v} className={`st-btn ${printAdvisorVolume === v ? 'primary' : ''}`}
-                                        onClick={() => setPrintAdvisorVolume(v)}
-                                        style={{
-                                            fontSize: '0.76rem', padding: '0.45rem 0.85rem', borderRadius: '10px',
-                                            fontWeight: 600, transition: 'all 0.2s ease',
-                                            background: printAdvisorVolume === v ? undefined : 'var(--bg)',
-                                            border: printAdvisorVolume === v ? undefined : '1px solid var(--border)'
-                                        }}>
-                                        {v.toLocaleString()}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Analyze Button */}
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-                    <button className="st-extract-btn-creative" onClick={analyzePrintMethod}
-                        disabled={!uploaded || isPrintAdvisorLoading}>
-                        <div className={isPrintAdvisorLoading ? 'spin-icon' : ''}>
-                            <I d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" s={20} />
-                        </div>
-                        {isPrintAdvisorLoading ? 'Analyzing Pattern...' : 'Analyze Print Method'}
-                    </button>
-                    <span className="st-credit-badge">
-                        <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                        5 credits
-                    </span>
-                </div>
-
-                {/* AI Processing State */}
-                {isPrintAdvisorLoading && !printAdvisorResult && (
-                    <div className="st-comparison-card" style={{ marginBottom: '1.5rem' }}>
-                        <div className="st-comparison-card-body" style={{ padding: '3rem' }}>
-                            <div className="st-ai-processing">
-                                <div className="st-ai-sparkle-container">
-                                    <div className="st-ai-sparkle-icon">
-                                        <I d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" s={28} />
-                                    </div>
-                                    <div className="st-ai-ring" />
-                                    <div className="st-ai-ring" />
-                                    <div className="st-ai-ring" />
-                                </div>
-                                <span className="st-ai-phase-text">AI is analyzing your pattern for optimal print methods...</span>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Results */}
-                {printAdvisorResult && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        {/* Pattern Analysis Summary */}
-                        <div className="st-comparison-card">
-                            <div className="st-comparison-card-head">
-                                <span><I d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" s={16} /> Pattern Analysis</span>
-                            </div>
-                            <div className="st-comparison-card-body" style={{ padding: '1.5rem' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
-                                    {[
-                                        ['Colors', printAdvisorResult.colorCount, printAdvisorResult.colorCount <= 8 ? '#22c55e' : printAdvisorResult.colorCount <= 16 ? '#f59e0b' : '#ef4444'],
-                                        ['Detail', printAdvisorResult.detailLevel, '#3b82f6'],
-                                        ['Gradients', printAdvisorResult.hasGradients ? 'Yes' : 'No', printAdvisorResult.hasGradients ? '#f59e0b' : '#22c55e'],
-                                        ['Min Feature', `${printAdvisorResult.minFeatureSize}px`, '#a855f7'],
-                                    ].map(([label, value, color]) => (
-                                        <div key={label} style={{ textAlign: 'center', padding: '1.25rem 1rem', borderRadius: '14px', background: `${color}12`, border: `1px solid ${color}25`, transition: 'transform 0.2s ease' }}>
-                                            <div style={{ fontSize: '1.7rem', fontWeight: 800, color, letterSpacing: '-0.02em' }}>{value}</div>
-                                            <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '0.35rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Recommendations */}
-                        <div className="st-group-title" style={{ marginBottom: '-0.25rem' }}>RECOMMENDED PRINT METHODS</div>
-                        {printAdvisorResult.recommendations?.map((rec, i) => (
-                            <div key={rec.method} className="st-comparison-card" style={{
-                                border: i === 0 ? `2px solid ${methodColors[rec.method] || '#3b82f6'}` : undefined,
-                                position: 'relative',
-                                overflow: 'visible'
-                            }}>
-                                {i === 0 && (
-                                    <div style={{
-                                        position: 'absolute', top: '-12px', left: '1.25rem', zIndex: 2,
-                                        background: `linear-gradient(135deg, ${methodColors[rec.method] || '#3b82f6'}, ${methodColors[rec.method] || '#3b82f6'}cc)`,
-                                        color: '#fff', fontSize: '0.7rem', fontWeight: 800, padding: '4px 14px', borderRadius: '12px',
-                                        textTransform: 'uppercase', letterSpacing: '0.08em',
-                                        boxShadow: `0 4px 12px ${methodColors[rec.method] || '#3b82f6'}40`,
-                                        display: 'flex', alignItems: 'center', gap: '4px'
-                                    }}>
-                                        <I d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" s={11} />
-                                        Best Match
-                                    </div>
-                                )}
-                                <div className="st-comparison-card-head">
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: methodColors[rec.method] || '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
-                                        {rec.method}
-                                    </span>
-                                    <div style={{ backgroundColor: `${methodColors[rec.method] || '#3b82f6'}15`, color: methodColors[rec.method] || '#3b82f6', padding: '3px 10px', borderRadius: '10px', fontSize: '0.76rem', fontWeight: 700 }}>
-                                        {rec.score}/100
-                                    </div>
-                                </div>
-                                <div className="st-comparison-card-body" style={{ padding: '1.25rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1.5rem' }}>
-                                        <div style={{ flex: 1 }}>
-                                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 0.75rem 0', lineHeight: 1.6 }}>{rec.reasoning}</p>
-                                        </div>
-                                        <div style={{ textAlign: 'right', minWidth: '130px', padding: '0.75rem 1rem', borderRadius: '12px', background: `${methodColors[rec.method] || '#3b82f6'}08`, border: `1px solid ${methodColors[rec.method] || '#3b82f6'}20` }}>
-                                            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: methodColors[rec.method] || '#3b82f6', letterSpacing: '-0.02em' }}>{rec.costEstimate}</div>
-                                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>per yard est.</div>
-                                            <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px solid var(--border)' }}>Min: {rec.minOrder}</div>
-                                        </div>
-                                    </div>
-                                    {/* Progress bar */}
-                                    <div style={{ marginTop: '0.85rem', height: '6px', borderRadius: '3px', backgroundColor: 'var(--bg)', overflow: 'hidden' }}>
-                                        <div style={{ width: `${rec.score}%`, height: '100%', borderRadius: '3px', background: `linear-gradient(90deg, ${methodColors[rec.method] || '#3b82f6'}, ${methodColors[rec.method] || '#3b82f6'}aa)`, transition: 'width 0.6s ease' }} />
-                                    </div>
-                                    {rec.filePrep && (
-                                        <div style={{ marginTop: '0.85rem', padding: '0.8rem 1rem', borderRadius: '10px', backgroundColor: 'var(--bg)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem', fontWeight: 700, color: 'var(--text)', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                                <I d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" s={14} />
-                                                File Preparation
-                                            </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem', marginBottom: '0.6rem' }}>
-                                                {rec.filePrep.colorMode && (
-                                                    <div style={{ padding: '0.5rem 0.6rem', borderRadius: '8px', background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                                                        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>Color Mode</div>
-                                                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)' }}>{rec.filePrep.colorMode}</div>
-                                                    </div>
-                                                )}
-                                                {rec.filePrep.fileFormat && (
-                                                    <div style={{ padding: '0.5rem 0.6rem', borderRadius: '8px', background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                                                        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>Format</div>
-                                                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)' }}>{rec.filePrep.fileFormat}</div>
-                                                    </div>
-                                                )}
-                                                {rec.filePrep.resolution && (
-                                                    <div style={{ padding: '0.5rem 0.6rem', borderRadius: '8px', background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-                                                        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>Resolution</div>
-                                                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)' }}>{rec.filePrep.resolution}</div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            {rec.filePrep.notes && (
-                                                <p style={{ margin: 0, fontSize: '0.78rem', lineHeight: 1.55, color: 'var(--text-muted)' }}>
-                                                    <strong style={{ color: 'var(--text)' }}>Notes:</strong> {rec.filePrep.notes}
-                                                </p>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
-    };
 
     // ===== RENDER COLORWAY MANAGER =====
     const renderColorwayManager = () => {
@@ -5179,7 +5063,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         if (tool === 'mappings') return renderMappings();
         if (tool === 'colorways') return renderColorways();
         if (tool === 'vectorpro') return renderVectorPro();
-        if (tool === 'print-advisor') return renderPrintAdvisor();
+
         if (tool === 'colorway-manager') return renderColorwayManager();
         if (tool === 'measurement') return renderMeasurement();
         if (tool === 'mockup3d') {
@@ -7521,12 +7405,12 @@ if (tool === 'imagelayers') {
                             </button>
                         </div>
                     </header>
-                    <div className={`st-workspace ${tool === 'pattern' || tool === 'seamless' || tool === 'inspire' || tool === 'library' || tool === 'exports' || tool === 'mappings' || tool === 'print-advisor' || tool === 'colorway-manager' || tool === 'measurement' || tool.startsWith('admin') ? 'full-width' : ''}`}>
+                    <div className={`st-workspace ${tool === 'pattern' || tool === 'seamless' || tool === 'inspire' || tool === 'library' || tool === 'exports' || tool === 'mappings' || tool === 'colorway-manager' || tool === 'measurement' || tool.startsWith('admin') ? 'full-width' : ''}`}>
                         <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
                             <div className="st-page-head">
                                 <div>
                                     <h1 className="st-title">{toolLabel} {tool === 'library' && <span className="st-pro-badge">Pro</span>}</h1>
-                                    {tool !== 'inspire' && <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Create, refine, and perfect repeat patterns with AI precision.' : tool === 'exports' ? 'View and download your recently exported assets.' : tool === 'print-advisor' ? 'Analyze your pattern and get production-ready print method recommendations.' : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.' : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.' : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.' : 'Upload artwork and generate print-ready assets.'}</p>}
+                                    {tool !== 'inspire' && <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Create, refine, and perfect repeat patterns with AI precision.' : tool === 'exports' ? 'View and download your recently exported assets.' : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.' : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.' : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.' : 'Upload artwork and generate print-ready assets.'}</p>}
                                 </div>
                             </div>
                             {isLoadingState && <div className="st-error">Loading SQLite-backed studio state...</div>}

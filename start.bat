@@ -1,7 +1,7 @@
 @echo off
-title RIM AI — Starting Services
+title RIM AI - Starting Services
 echo ==================================================
-echo   RIM AI — Starting Backend + Frontend
+echo   RIM AI - Starting Backend + Frontend
 echo ==================================================
 
 :: Start Flask backend in conda env (new window)
