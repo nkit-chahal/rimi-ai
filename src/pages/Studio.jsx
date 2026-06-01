@@ -402,6 +402,20 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [isEnh, setIsEnh] = useState(false);
     const [enhUrl, setEnhUrl] = useState(null);
 
+    // Multi-model extraction
+    const EXTRACT_MODEL_DEFS = [
+        { id: 'openai/gpt-image-2', name: 'GPT Image', color: '#10b981', icon: 'M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z' },
+        { id: 'google/imagen-4-ultra', name: 'Imagen 4', color: '#3b82f6', icon: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM12 8v4l3 3' },
+        { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', color: '#a855f7', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
+        { id: 'bytedance/seedream-4.5', name: 'SeDream', color: '#f59e0b', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
+    ];
+    const [extractResults, setExtractResults] = useState(EXTRACT_MODEL_DEFS.map(m => ({ ...m, loading: false, url: null, error: null, duration: 0 })));
+    const [extractGalleryOpen, setExtractGalleryOpen] = useState(false);
+    const [extractGalleryIndex, setExtractGalleryIndex] = useState(0);
+    const [extractChatMessages, setExtractChatMessages] = useState({});
+    const [extractChatInput, setExtractChatInput] = useState('');
+    const [isExtractEditing, setIsExtractEditing] = useState(false);
+
     const [vecEngine, setVecEngine] = useState('api');
     const [vecColors, setVecColors] = useState(32);
     const [isVec, setIsVec] = useState(false);
@@ -2719,6 +2733,104 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         };
 
         addBgTask('pattern', 'Design Extraction', safeFilename || 'design.png', trigger);
+    };
+
+    const extractDesignMulti = async () => {
+        const activeUrl = preview || activeProject.heroImageUrl;
+        if (!uploaded && !activeUrl) {
+            setError('Upload an image first');
+            return;
+        }
+
+        let safeFilename = uploaded?.filename;
+        let safeUrl = !uploaded ? activeUrl : null;
+        if (!safeFilename && safeUrl && !safeUrl.startsWith('http')) {
+            safeFilename = safeUrl.split('/').pop();
+            safeUrl = null;
+        }
+
+        // Set all 4 models to loading
+        setExtractResults(prev => prev.map(m => ({ ...m, loading: true, url: null, error: null, duration: 0 })));
+        setExtractChatMessages({});
+        setError('');
+
+        try {
+            const r = await fetch(`${API}/api/extract-design-multi`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, projectId: activeProject.id, userId: currentUser?.id })
+            });
+            const d = await r.json();
+            if (d.success) {
+                setExtractResults(prev => prev.map(m => {
+                    const result = d.results.find(r => r.modelId === m.id);
+                    if (result) {
+                        return { ...m, loading: false, url: result.resultUrl, error: result.error, duration: result.duration };
+                    }
+                    return { ...m, loading: false };
+                }));
+                updateCreditsFromResponse(d);
+            } else {
+                setExtractResults(prev => prev.map(m => ({ ...m, loading: false, error: d.error || 'Failed' })));
+                setError(d.error || 'Extraction failed');
+            }
+        } catch (err) {
+            setExtractResults(prev => prev.map(m => ({ ...m, loading: false, error: err.message })));
+            setError('Network error during extraction');
+        }
+    };
+
+    const sendExtractEdit = async () => {
+        const model = extractResults[extractGalleryIndex];
+        if (!model?.url || !extractChatInput.trim() || isExtractEditing) return;
+
+        const userMsg = extractChatInput.trim();
+        setExtractChatInput('');
+        setIsExtractEditing(true);
+
+        // Add user message to chat
+        setExtractChatMessages(prev => ({
+            ...prev,
+            [model.id]: [...(prev[model.id] || []), { role: 'user', content: userMsg }]
+        }));
+
+        try {
+            const r = await fetch(`${API}/api/extract-edit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    imageUrl: model.url,
+                    prompt: userMsg,
+                    modelId: model.id,
+                    projectId: activeProject.id,
+                    userId: currentUser?.id
+                })
+            });
+            const d = await r.json();
+            if (d.success) {
+                // Add AI response with image
+                setExtractChatMessages(prev => ({
+                    ...prev,
+                    [model.id]: [...(prev[model.id] || []), { role: 'ai', content: 'Updated pattern:', imageUrl: d.resultUrl }]
+                }));
+                // Update the model's result URL
+                setExtractResults(prev => prev.map((m, i) =>
+                    i === extractGalleryIndex ? { ...m, url: d.resultUrl } : m
+                ));
+                updateCreditsFromResponse(d);
+            } else {
+                setExtractChatMessages(prev => ({
+                    ...prev,
+                    [model.id]: [...(prev[model.id] || []), { role: 'ai', content: `Error: ${d.error || 'Edit failed'}` }]
+                }));
+            }
+        } catch (err) {
+            setExtractChatMessages(prev => ({
+                ...prev,
+                [model.id]: [...(prev[model.id] || []), { role: 'ai', content: `Error: ${err.message}` }]
+            }));
+        }
+        setIsExtractEditing(false);
     };
 
     const vectorize = async () => {
@@ -5732,10 +5844,13 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             );
         }
         if (tool === 'pattern') {
-            const loading = isEnh;
-            
+            const anyLoading = extractResults.some(m => m.loading);
+            const anyResults = extractResults.some(m => m.url);
+            const completedResults = extractResults.filter(m => m.url);
+            const galleryModel = extractResults[extractGalleryIndex];
+            const galleryChats = extractChatMessages[galleryModel?.id] || [];
+
             if (!preview) {
-                // CREATIVE EMPTY STATE — Animated Gradient Dropzone with Particles
                 return (
                     <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
                         <div
@@ -5745,135 +5860,267 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
                             onDragLeave={() => setIsDrag(false)}
                         >
-                            {/* Floating Particles */}
                             <div className="st-particles">
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
+                                <div className="st-particle" /><div className="st-particle" /><div className="st-particle" />
+                                <div className="st-particle" /><div className="st-particle" /><div className="st-particle" />
                             </div>
-                            
-                            {/* Pulsing Icon */}
                             <div className="st-dropzone-icon-wrap">
                                 <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={36} />
                             </div>
-                            
                             <h2 className="st-dropzone-title">Upload artwork to extract</h2>
-                            <p className="st-dropzone-desc">Drag & drop or click to browse — AI will isolate repeating pattern elements</p>
-                            
-                            {/* Format Badges */}
+                            <p className="st-dropzone-desc">Drag & drop or click — 4 AI models will compete to extract the best pattern</p>
                             <div className="st-dropzone-badges">
                                 <span className="st-dropzone-badge">PNG</span>
                                 <span className="st-dropzone-badge">JPG</span>
                                 <span className="st-dropzone-badge">TIFF</span>
-                                <span className="st-dropzone-badge">Up to 50MB</span>
+                                <span className="st-dropzone-badge">4 AI Models</span>
                             </div>
                         </div>
                     </div>
                 );
             }
 
-            // CREATIVE WORKSPACE — Comparison Cards with AI Processing
             return (
-                <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                    <div className="st-comparison-workspace">
-                        
-                        {/* Original Card */}
-                        <div className="st-comparison-card">
+                <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1, gap: '1.5rem' }}>
+                    {/* Top: Original Image + Extract Button */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                        <div className="st-comparison-card" style={{ flex: '0 0 220px', overflow: 'hidden' }}>
                             <div className="st-comparison-card-head">
                                 <span>Original Input</span>
-                                <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} />
-                                    Replace
+                                <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" s={12} /> Replace
                                 </button>
                             </div>
-                            <div className="st-comparison-card-body">
-                                <img src={preview} alt="Original artwork" />
+                            <div className="st-comparison-card-body" style={{ aspectRatio: '1', padding: 0 }}>
+                                <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             </div>
                         </div>
 
-                        {/* Central Action Bridge */}
-                        <div className="st-comparison-action-bridge">
-                            <button className="st-extract-btn-creative" onClick={extractDesign} disabled={loading || !preview}>
-                                <div className={loading ? 'spin-icon' : ''}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                            <button className="st-extract-btn-creative" onClick={extractDesignMulti} disabled={anyLoading || !preview}>
+                                <div className={anyLoading ? 'spin-icon' : ''}>
                                     <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={20} />
                                 </div>
-                                {loading ? 'Extracting...' : 'Extract'}
+                                {anyLoading ? 'Extracting with 4 AI...' : 'Extract with 4 AI Models'}
                             </button>
                             <span className="st-credit-badge">
                                 <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                                {creditPricing.extract || 50} credits
+                                ~200 credits (4 models)
                             </span>
                         </div>
 
-                        {/* Result Card */}
-                        <div className="st-comparison-card">
-                            <div className="st-comparison-card-head">
-                                <span>Extracted Pattern</span>
-                                {enhUrl && !Array.isArray(enhUrl) && (
-                                    <button onClick={(e) => forceDownload(e, enhUrl)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                        <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
-                                    </button>
-                                )}
+                        {anyResults && (
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                <span style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', padding: '4px 10px', borderRadius: '8px', fontWeight: 700 }}>
+                                    {completedResults.length}/4 complete
+                                </span>
                             </div>
-                            <div className="st-comparison-card-body">
-                                {enhUrl ? (
-                                    Array.isArray(enhUrl) ? (
-                                        <div className="st-result-reveal" style={{ position: 'absolute', inset: '0', padding: '1.25rem', display: 'flex', gap: '10px' }}>
-                                            {enhUrl.map((url, i) => (
-                                                <div key={i} style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                                                    <img src={url.startsWith('/') ? `${API}${url}` : url} alt={`Result ${i + 1}`} style={{ flex: 1, borderRadius: '10px', objectFit: 'contain' }} />
-                                                    <a href={url} onClick={(e) => forceDownload(e, url)} className="st-premium-download-btn" style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>Download</a>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="st-result-reveal">
-                                            <img src={enhUrl.startsWith('/') ? `${API}${enhUrl}` : enhUrl} alt="Result" />
-                                        </div>
-                                    )
-                                ) : loading ? (
-                                    // AI Sparkle Processing Animation
-                                    <div className="st-ai-processing">
-                                        <div className="st-ai-sparkle-container">
-                                            <div className="st-ai-sparkle-icon">
-                                                <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
-                                            </div>
-                                            <div className="st-ai-ring" />
-                                            <div className="st-ai-ring" />
-                                            <div className="st-ai-ring" />
-                                        </div>
-                                        <span className="st-ai-phase-text">AI is extracting pattern elements...</span>
-                                    </div>
-                                ) : (
-                                    <div style={{ textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-                                        <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />
-                                        <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>Ready to extract repeating pattern</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
+                        )}
                     </div>
 
-                    {/* Quick Actions Toolbar */}
-                    {enhUrl && (
-                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem' }}>
+                    {/* 4 Model Cards Grid */}
+                    <div className="st-extract-grid">
+                        {extractResults.map((model, idx) => (
+                            <div
+                                key={model.id}
+                                className={`st-extract-model-card ${model.loading ? 'loading' : ''} ${model.url ? 'completed' : ''} ${model.error && !model.url ? 'error' : ''}`}
+                                onClick={() => {
+                                    if (model.url) {
+                                        setExtractGalleryIndex(idx);
+                                        setExtractGalleryOpen(true);
+                                    }
+                                }}
+                            >
+                                <div className="st-extract-model-header">
+                                    <span className={`st-model-dot ${model.loading ? 'loading' : ''}`} style={{ backgroundColor: model.color }} />
+                                    <I d={model.icon} s={15} />
+                                    {model.name}
+                                    {model.loading && (
+                                        <span className="st-model-status" style={{ background: `${model.color}18`, color: model.color }}>Processing...</span>
+                                    )}
+                                    {model.url && (
+                                        <span className="st-model-status" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+                                            {model.duration}s
+                                        </span>
+                                    )}
+                                    {model.error && !model.url && (
+                                        <span className="st-model-status" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>Failed</span>
+                                    )}
+                                </div>
+                                <div className="st-extract-model-body">
+                                    {model.url ? (
+                                        <>
+                                            <img src={`${API}${model.url}`} alt={model.name} />
+                                            <div className="st-extract-overlay">
+                                                <I d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" s={18} />
+                                                <I d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" s={18} />
+                                                View & Edit
+                                            </div>
+                                        </>
+                                    ) : model.loading ? (
+                                        <div className="st-ai-processing" style={{ transform: 'scale(0.7)' }}>
+                                            <div className="st-ai-sparkle-container">
+                                                <div className="st-ai-sparkle-icon" style={{ color: model.color }}>
+                                                    <I d={model.icon} s={24} />
+                                                </div>
+                                                <div className="st-ai-ring" style={{ borderColor: `${model.color}40` }} />
+                                                <div className="st-ai-ring" style={{ borderColor: `${model.color}25` }} />
+                                                <div className="st-ai-ring" style={{ borderColor: `${model.color}15` }} />
+                                            </div>
+                                        </div>
+                                    ) : model.error ? (
+                                        <div style={{ textAlign: 'center', color: '#ef4444', padding: '1.5rem', fontSize: '0.8rem' }}>
+                                            <I d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" s={28} />
+                                            <p style={{ marginTop: '0.5rem' }}>Failed</p>
+                                        </div>
+                                    ) : (
+                                        <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                                            <I d={model.icon} s={32} />
+                                            <p style={{ marginTop: '0.5rem', fontWeight: 600 }}>Ready</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Quick Actions */}
+                    {anyResults && (
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
                             <div className="st-quick-actions">
-                                <button className="st-quick-action-btn primary" onClick={(e) => forceDownload(e, Array.isArray(enhUrl) ? enhUrl[0] : enhUrl)}>
-                                    <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} />
-                                    Download
+                                <button className="st-quick-action-btn primary" onClick={() => { if (completedResults[0]) { setExtractGalleryIndex(extractResults.indexOf(completedResults[0])); setExtractGalleryOpen(true); }}}>
+                                    <I d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" s={14} /> Open Gallery
                                 </button>
-                                <button className="st-quick-action-btn" onClick={() => { setTool('seamless'); }}>
-                                    <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={14} />
-                                    Send to Seamless
+                                <button className="st-quick-action-btn" onClick={(e) => { if (completedResults[0]) forceDownload(e, `${API}${completedResults[0].url}`); }}>
+                                    <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download Best
                                 </button>
-                                <button className="st-quick-action-btn" onClick={() => { setTool('repeat'); }}>
-                                    <I d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" s={14} />
-                                    Send to Repeat
+                                <button className="st-quick-action-btn" onClick={() => { if (completedResults[0]) { setEnhUrl(completedResults[0].url); setTool('seamless'); }}}>
+                                    <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={14} /> Send to Seamless
                                 </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ===== GALLERY LIGHTBOX OVERLAY ===== */}
+                    {extractGalleryOpen && galleryModel && (
+                        <div className="st-extract-gallery-overlay" onClick={() => setExtractGalleryOpen(false)} onKeyDown={(e) => {
+                            if (e.key === 'Escape') setExtractGalleryOpen(false);
+                            if (e.key === 'ArrowLeft') setExtractGalleryIndex(p => (p - 1 + extractResults.length) % extractResults.length);
+                            if (e.key === 'ArrowRight') setExtractGalleryIndex(p => (p + 1) % extractResults.length);
+                        }} tabIndex={0} ref={el => el?.focus()}>
+                            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                {/* Header */}
+                                <div className="st-extract-gallery-header">
+                                    <div className="st-gallery-model-name">
+                                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: galleryModel.color, display: 'inline-block' }} />
+                                        <I d={galleryModel.icon} s={18} />
+                                        {galleryModel.name}
+                                        <span className="st-gallery-model-badge" style={{ background: `${galleryModel.color}20`, color: galleryModel.color }}>
+                                            {galleryModel.duration}s
+                                        </span>
+                                    </div>
+                                    <div className="st-gallery-actions">
+                                        {galleryModel.url && (
+                                            <>
+                                                <button onClick={(e) => forceDownload(e, `${API}${galleryModel.url}`)}>
+                                                    <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
+                                                </button>
+                                                <button onClick={() => { setEnhUrl(galleryModel.url); setTool('seamless'); setExtractGalleryOpen(false); }}>
+                                                    <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={14} /> Seamless
+                                                </button>
+                                                <button onClick={() => { setEnhUrl(galleryModel.url); setTool('repeat'); setExtractGalleryOpen(false); }}>
+                                                    <I d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" s={14} /> Repeat
+                                                </button>
+                                            </>
+                                        )}
+                                        <button className="st-gallery-close" onClick={() => setExtractGalleryOpen(false)}>✕</button>
+                                    </div>
+                                </div>
+
+                                {/* Main Image */}
+                                <div className="st-extract-gallery-main">
+                                    <button className="st-extract-gallery-nav prev" onClick={() => setExtractGalleryIndex(p => (p - 1 + extractResults.length) % extractResults.length)}>
+                                        <I d="M15 19l-7-7 7-7" s={22} />
+                                    </button>
+                                    {galleryModel.url ? (
+                                        <img src={`${API}${galleryModel.url}`} alt={galleryModel.name} key={galleryModel.url} />
+                                    ) : galleryModel.loading ? (
+                                        <div className="st-ai-processing">
+                                            <div className="st-ai-sparkle-container">
+                                                <div className="st-ai-sparkle-icon" style={{ color: galleryModel.color }}><I d={galleryModel.icon} s={36} /></div>
+                                                <div className="st-ai-ring" /><div className="st-ai-ring" /><div className="st-ai-ring" />
+                                            </div>
+                                            <span className="st-ai-phase-text" style={{ color: '#fff' }}>Generating with {galleryModel.name}...</span>
+                                        </div>
+                                    ) : (
+                                        <div style={{ color: '#fff', textAlign: 'center' }}>
+                                            <I d="M12 9v2m0 4h.01" s={48} />
+                                            <p>{galleryModel.error || 'No result yet'}</p>
+                                        </div>
+                                    )}
+                                    <button className="st-extract-gallery-nav next" onClick={() => setExtractGalleryIndex(p => (p + 1) % extractResults.length)}>
+                                        <I d="M9 5l7 7-7 7" s={22} />
+                                    </button>
+                                </div>
+
+                                {/* Dots */}
+                                <div className="st-extract-gallery-dots">
+                                    {extractResults.map((m, i) => (
+                                        <button
+                                            key={m.id}
+                                            className={`st-extract-gallery-dot ${i === extractGalleryIndex ? 'active' : ''}`}
+                                            style={i === extractGalleryIndex ? { background: m.color, boxShadow: `0 0 10px ${m.color}80` } : {}}
+                                            onClick={() => setExtractGalleryIndex(i)}
+                                            title={m.name}
+                                        />
+                                    ))}
+                                </div>
+
+                                {/* Chat Panel */}
+                                {galleryModel.url && (
+                                    <div className="st-extract-chat">
+                                        <div className="st-extract-chat-header">
+                                            <I d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" s={14} />
+                                            Chat with {galleryModel.name}
+                                        </div>
+                                        <div className="st-extract-chat-messages">
+                                            {galleryChats.length === 0 && (
+                                                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.78rem', textAlign: 'center', padding: '0.5rem' }}>
+                                                    Ask {galleryModel.name} to edit this pattern...
+                                                </div>
+                                            )}
+                                            {galleryChats.map((msg, i) => (
+                                                <div key={i} className={`st-extract-chat-bubble ${msg.role}`}>
+                                                    {msg.content}
+                                                    {msg.imageUrl && (
+                                                        <img src={`${API}${msg.imageUrl}`} alt="Edit result" onClick={() => {
+                                                            setExtractResults(prev => prev.map((m, idx) =>
+                                                                idx === extractGalleryIndex ? { ...m, url: msg.imageUrl } : m
+                                                            ));
+                                                        }} />
+                                                    )}
+                                                </div>
+                                            ))}
+                                            {isExtractEditing && (
+                                                <div className="st-extract-chat-bubble ai" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <div className="st-spinner" style={{ width: 14, height: 14 }} /> Editing with {galleryModel.name}...
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="st-extract-chat-input-bar">
+                                            <input
+                                                value={extractChatInput}
+                                                onChange={e => setExtractChatInput(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendExtractEdit(); }}}
+                                                placeholder={`e.g. "Make flowers smaller" or "Change to blue tones"`}
+                                                disabled={isExtractEditing}
+                                            />
+                                            <button className="st-extract-chat-send" onClick={sendExtractEdit} disabled={isExtractEditing || !extractChatInput.trim()}>
+                                                <I d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" s={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

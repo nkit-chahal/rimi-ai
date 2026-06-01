@@ -3,6 +3,7 @@ import os
 import uuid
 import base64
 import time
+import concurrent.futures
 import requests as http_requests
 from flask import Blueprint, request, jsonify
 
@@ -114,6 +115,235 @@ def extract_design():
     except Exception as e:
         print(f"  [Extract Design] Error: {e}")
         return jsonify({'error': f'Failed to extract design: {str(e)}'}), 500
+
+
+EXTRACT_MODELS = [
+    {
+        'id': 'openai/gpt-image-2',
+        'name': 'GPT Image',
+        'prompt': 'A perfectly flat, 2D seamless repeating pattern tile of the exact fabric design, motif, and colors seen in the input image. Extract the design out of the outfit. High resolution, perfectly flat texture.',
+        'input_key': 'input_images',
+        'input_list': True,
+        'cost_per_image': 0.128,
+    },
+    {
+        'id': 'google/imagen-4-ultra',
+        'name': 'Imagen 4',
+        'prompt': 'Isolate and recreate the fabric pattern from this image as a clean, flat 2D textile tile. Precise color matching, seamless repeating pattern, high resolution.',
+        'input_key': 'image',
+        'input_list': False,
+        'cost_per_image': 0.06,
+    },
+    {
+        'id': 'black-forest-labs/flux-2-pro',
+        'name': 'Flux 2 Pro',
+        'prompt': 'Generate a perfectly flat seamless 2D repeating pattern tile matching the motifs, textures, and colors from the input image. Clean textile design, high resolution.',
+        'input_key': 'image',
+        'input_list': False,
+        'cost_per_image': 0.09,
+    },
+    {
+        'id': 'bytedance/seedream-4.5',
+        'name': 'SeDream',
+        'prompt': 'Create a high-resolution flat 2D seamless repeating fabric pattern tile based on the design visible in this image. Extract the pattern elements and colors faithfully.',
+        'input_key': 'image',
+        'input_list': False,
+        'cost_per_image': 0.04,
+    },
+]
+
+
+def _run_single_extract(model_cfg, data_uri, project_id, filename):
+    """Run a single model extraction. Returns dict with result or error."""
+    model_id = model_cfg['id']
+    try:
+        print(f"  [Extract Multi] Starting {model_id}...")
+        replicate_input = {
+            "prompt": model_cfg['prompt'],
+            "aspect_ratio": "1:1",
+        }
+        if model_cfg['input_list']:
+            replicate_input[model_cfg['input_key']] = [data_uri]
+        else:
+            replicate_input[model_cfg['input_key']] = data_uri
+
+        start_time = time.time()
+        output = replicate.run(model_id, input=replicate_input)
+        duration = time.time() - start_time
+
+        credits_used = max(5, int(round(duration * 10)))
+        cost_usd = model_cfg['cost_per_image']
+        log_replicate_call(project_id, model_id, duration, credits_used, cost_usd)
+
+        image_urls = [str(url) for url in output] if isinstance(output, list) else [str(output)]
+        url = image_urls[0]
+
+        # Download locally
+        resp = http_requests.get(url, timeout=90)
+        resp.raise_for_status()
+        local_uuid = uuid.uuid4().hex
+        local_filename = f"extracted_{model_id.split('/')[-1]}_{local_uuid}.png"
+        local_filepath = os.path.join(RESULTS_DIR, local_filename)
+        with open(local_filepath, 'wb') as f:
+            f.write(resp.content)
+        local_url = f"/results/{local_filename}"
+        log_export(project_id, local_filename, filename, "Extract Design Multi", {"model": model_id})
+
+        print(f"  [Extract Multi] {model_id} done in {duration:.1f}s")
+        return {
+            'modelId': model_id,
+            'modelName': model_cfg['name'],
+            'resultUrl': local_url,
+            'duration': round(duration, 1),
+            'creditsUsed': credits_used,
+            'error': None,
+        }
+    except Exception as e:
+        print(f"  [Extract Multi] {model_id} FAILED: {e}")
+        return {
+            'modelId': model_id,
+            'modelName': model_cfg['name'],
+            'resultUrl': None,
+            'duration': 0,
+            'creditsUsed': 0,
+            'error': str(e),
+        }
+
+
+@bp.route('/api/extract-design-multi', methods=['POST'])
+def extract_design_multi():
+    data = request.get_json()
+    filename = data.get('filename', '')
+    if not filename:
+        return jsonify({'error': 'Filename is required'}), 400
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+
+    project_id = int(data.get('projectId', 1))
+    user_id = data.get('userId') or data.get('user_id')
+    if user_id:
+        try: user_id = int(user_id)
+        except ValueError: user_id = None
+
+    ok, remaining, limit, used = check_credits(user_id)
+    if not ok:
+        return jsonify({'error': 'Insufficient AI credits.', 'creditsUsed': used, 'creditsLimit': limit}), 403
+
+    # Read and encode image once
+    with open(filepath, "rb") as img_file:
+        image_bytes = img_file.read()
+        encoded_string = base64.b64encode(image_bytes).decode('utf-8')
+        mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"
+        data_uri = f"data:{mime_type};base64,{encoded_string}"
+
+    print(f"  [Extract Multi] Launching 4 models in parallel for {filename}...")
+
+    # Run all 4 models in parallel
+    results = []
+    total_credits = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {
+            executor.submit(_run_single_extract, m, data_uri, project_id, filename): m
+            for m in EXTRACT_MODELS
+        }
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            results.append(result)
+            total_credits += result.get('creditsUsed', 0)
+
+    # Sort results in original model order
+    model_order = {m['id']: i for i, m in enumerate(EXTRACT_MODELS)}
+    results.sort(key=lambda r: model_order.get(r['modelId'], 99))
+
+    successful = sum(1 for r in results if r['resultUrl'])
+    print(f"  [Extract Multi] Complete! {successful}/4 models succeeded. Total credits: {total_credits}")
+
+    if total_credits > 0:
+        record_activity(project_id, 'generation', successful, total_credits, user_id=user_id)
+
+    updated_credits = get_updated_credits(user_id)
+    return jsonify({'success': True, 'results': results, 'totalCredits': total_credits, **updated_credits})
+
+
+@bp.route('/api/extract-edit', methods=['POST'])
+def extract_edit():
+    """Edit an extracted pattern result using the same model that generated it."""
+    data = request.get_json()
+    image_url = data.get('imageUrl', '')
+    prompt = data.get('prompt', '')
+    model_id = data.get('modelId', 'openai/gpt-image-2')
+    project_id = int(data.get('projectId', 1))
+    user_id = data.get('userId') or data.get('user_id')
+
+    if not prompt:
+        return jsonify({'error': 'Prompt is required'}), 400
+    if not image_url:
+        return jsonify({'error': 'Image URL is required'}), 400
+
+    if user_id:
+        try: user_id = int(user_id)
+        except ValueError: user_id = None
+
+    ok, remaining, limit, used = check_credits(user_id)
+    if not ok:
+        return jsonify({'error': 'Insufficient AI credits.', 'creditsUsed': used, 'creditsLimit': limit}), 403
+
+    try:
+        # Load the existing result image
+        if image_url.startswith('/results/'):
+            local_path = os.path.join(RESULTS_DIR, image_url.split('/')[-1])
+            with open(local_path, 'rb') as f:
+                image_bytes = f.read()
+        else:
+            resp = http_requests.get(image_url, timeout=60)
+            resp.raise_for_status()
+            image_bytes = resp.content
+
+        encoded = base64.b64encode(image_bytes).decode('utf-8')
+        data_uri = f"data:image/png;base64,{encoded}"
+
+        # Find model config
+        model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
+
+        edit_prompt = f"Edit this pattern tile: {prompt}. Keep it as a flat 2D seamless repeating pattern tile, high resolution."
+
+        replicate_input = {"prompt": edit_prompt, "aspect_ratio": "1:1"}
+        if model_cfg['input_list']:
+            replicate_input[model_cfg['input_key']] = [data_uri]
+        else:
+            replicate_input[model_cfg['input_key']] = data_uri
+
+        print(f"  [Extract Edit] Editing with {model_id}: {prompt[:80]}...")
+        start_time = time.time()
+        output = replicate.run(model_id, input=replicate_input)
+        duration = time.time() - start_time
+
+        credits_used = max(5, int(round(duration * 10)))
+        cost_usd = model_cfg['cost_per_image']
+        log_replicate_call(project_id, model_id, duration, credits_used, cost_usd)
+
+        image_urls = [str(url) for url in output] if isinstance(output, list) else [str(output)]
+        url = image_urls[0]
+
+        resp = http_requests.get(url, timeout=90)
+        resp.raise_for_status()
+        local_uuid = uuid.uuid4().hex
+        local_filename = f"extract_edit_{local_uuid}.png"
+        local_filepath = os.path.join(RESULTS_DIR, local_filename)
+        with open(local_filepath, 'wb') as f:
+            f.write(resp.content)
+        local_url = f"/results/{local_filename}"
+
+        record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
+        updated_credits = get_updated_credits(user_id)
+
+        print(f"  [Extract Edit] Done in {duration:.1f}s")
+        return jsonify({'success': True, 'resultUrl': local_url, 'modelId': model_id, **updated_credits})
+
+    except Exception as e:
+        print(f"  [Extract Edit] Error: {e}")
+        return jsonify({'error': f'Edit failed: {str(e)}'}), 500
 
 
 @bp.route('/api/generate-inspirations', methods=['POST'])
