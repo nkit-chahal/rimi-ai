@@ -97,7 +97,7 @@ const NAV = [
             { id: 'imagelayers', label: 'Image Layers', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' },
             { id: 'colorways', label: 'Colorways', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z' },
             { id: 'colorway-manager', label: 'Colorway Manager', icon: 'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83' },
-            { id: 'print-advisor', label: 'Print Advisor', icon: 'M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z' },
+
             { id: 'vectorpro', label: 'Vector Pro', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485' },
             { id: 'mockup3d', label: '3D Mockup', icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.3 7l8.7 5 8.7-5M12 22V12' },
         ],
@@ -138,7 +138,7 @@ const emptyState = {
 
 export default function Studio({ onBack, currentUser, currentToken, onLogout }) {
     const adminTools = ['admin-dashboard', 'admin-users', 'admin-projects', 'admin-logs', 'admin-credits'];
-    const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'imagelayers', 'colorways', 'colorway-manager', 'print-advisor', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports'];
+    const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports'];
     const isAdmin = currentUser?.role === 'admin';
     const [tool, _setTool] = useState(() => {
         const hash = window.location.hash.replace('#', '');
