@@ -5890,172 +5890,221 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             }
 
             return (
-                <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1, gap: '1.5rem' }}>
-                    {/* Top: Original Image + Extract Button */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-                        <div className="st-comparison-card" style={{ flex: '0 0 220px', overflow: 'hidden' }}>
-                            <div className="st-comparison-card-head">
-                                <span>Original Input</span>
-                                <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" s={12} /> Replace
+                <div style={{ padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column', flex: 1, gap: '1.25rem', overflowY: 'auto' }}>
+
+                    {/* === TOP CARD: Source + AI Models === */}
+                    <div style={{
+                        background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb',
+                        padding: '1.5rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    }}>
+                        {/* Source Pattern */}
+                        <div style={{ flex: '0 0 200px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1f2937' }}>Source Pattern</span>
+                                <button onClick={() => fileRef.current?.click()} style={{
+                                    background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer',
+                                    fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px',
+                                }}>
+                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" s={12} />
+                                    Replace
                                 </button>
                             </div>
-                            <div className="st-comparison-card-body" style={{ aspectRatio: '1', padding: 0 }}>
-                                <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e5e7eb', aspectRatio: '1' }}>
+                                <img src={preview} alt="Source" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                {uploaded && <span style={{ fontSize: '0.7rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '3px', background: '#f3f4f6', padding: '3px 8px', borderRadius: '6px' }}>
+                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16" s={10} />
+                                    {uploaded.filename?.split('.').pop()?.toUpperCase() || 'IMG'}
+                                </span>}
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                            {/* Model Toggles */}
-                            <div style={{
-                                display: 'flex', flexDirection: 'column', gap: '5px',
-                                background: 'rgba(0,0,0,0.04)', borderRadius: '14px',
-                                border: '1px solid rgba(0,0,0,0.08)',
-                                padding: '10px 14px', minWidth: '260px',
-                            }}>
-                                <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(0,0,0,0.4)', marginBottom: '2px' }}>
-                                    AI Models
+                        {/* AI Models Selection */}
+                        <div style={{ flex: 1, minWidth: '300px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                <div>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1f2937' }}>AI Models</span>
+                                    <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '2px 0 0' }}>Select which models to use for extraction.</p>
                                 </div>
+                                <button
+                                    onClick={() => {
+                                        const allOn = EXTRACT_MODEL_DEFS.every(m => enabledModels[m.id]);
+                                        const next = EXTRACT_MODEL_DEFS.reduce((acc, m) => ({ ...acc, [m.id]: !allOn }), {});
+                                        setEnabledModels(next);
+                                    }}
+                                    disabled={anyLoading}
+                                    style={{
+                                        background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer',
+                                        fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px',
+                                    }}
+                                >
+                                    {EXTRACT_MODEL_DEFS.every(m => enabledModels[m.id]) ? 'Deselect All' : 'Select All'}
+                                    <I d="M5 13l4 4L19 7" s={14} />
+                                </button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
                                 {EXTRACT_MODEL_DEFS.map(m => {
                                     const on = enabledModels[m.id];
+                                    const descriptions = {
+                                        'openai/gpt-image-2': { desc: 'Great for balanced creativity and pattern coherence.', tag: 'High Quality', tagColor: '#6366f1' },
+                                        'google/imagen-4-ultra': { desc: 'Excellent for detail recreation and color accuracy.', tag: 'Photorealistic', tagColor: '#3b82f6' },
+                                        'black-forest-labs/flux-2-pro': { desc: 'Outstanding for artistic style and intricate patterns.', tag: 'Creative', tagColor: '#a855f7' },
+                                        'bytedance/seedream-4.5': { desc: 'Strong with texture preservation and soft details.', tag: 'Textured', tagColor: '#f59e0b' },
+                                    };
+                                    const info = descriptions[m.id] || { desc: '', tag: '', tagColor: '#888' };
                                     return (
                                         <div
                                             key={m.id}
                                             onClick={() => !anyLoading && setEnabledModels(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
                                             style={{
-                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                                padding: '6px 8px', borderRadius: '10px', cursor: anyLoading ? 'not-allowed' : 'pointer',
-                                                background: on ? `${m.color}10` : 'transparent',
-                                                transition: 'all 0.25s ease',
-                                                opacity: anyLoading ? 0.5 : 1,
+                                                border: on ? `2px solid ${m.color}` : '2px solid #e5e7eb',
+                                                borderRadius: '14px', padding: '14px 12px', cursor: anyLoading ? 'not-allowed' : 'pointer',
+                                                background: on ? `${m.color}08` : '#fafafa',
+                                                transition: 'all 0.25s ease', position: 'relative',
+                                                opacity: anyLoading ? 0.6 : 1,
                                             }}
                                         >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <div style={{
-                                                    width: '26px', height: '26px', borderRadius: '8px',
-                                                    background: on ? `${m.color}20` : 'rgba(0,0,0,0.06)',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    transition: 'all 0.25s ease',
-                                                    color: on ? m.color : 'rgba(0,0,0,0.25)',
-                                                }}>
-                                                    <I d={m.icon} s={14} />
-                                                </div>
-                                                <span style={{
-                                                    fontSize: '0.82rem', fontWeight: 600,
-                                                    color: on ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.35)',
-                                                    transition: 'color 0.25s ease',
-                                                }}>{m.name}</span>
-                                            </div>
-                                            {/* Toggle Switch */}
+                                            {/* Checkbox */}
                                             <div style={{
-                                                width: '38px', height: '22px', borderRadius: '12px',
-                                                background: on ? m.color : 'rgba(0,0,0,0.15)',
-                                                position: 'relative', transition: 'background 0.3s ease',
-                                                flexShrink: 0,
-                                                boxShadow: on ? `0 0 10px ${m.color}35` : 'inset 0 1px 2px rgba(0,0,0,0.1)',
+                                                position: 'absolute', top: '10px', right: '10px',
+                                                width: '20px', height: '20px', borderRadius: '50%',
+                                                background: on ? m.color : '#e5e7eb',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                transition: 'all 0.2s ease',
                                             }}>
-                                                <div style={{
-                                                    width: '18px', height: '18px', borderRadius: '50%',
-                                                    background: '#fff',
-                                                    position: 'absolute', top: '2px',
-                                                    left: on ? '18px' : '2px',
-                                                    transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                    boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-                                                }} />
+                                                {on && <I d="M5 13l4 4L19 7" s={12} style={{ color: '#fff' }} />}
                                             </div>
+                                            {/* Icon */}
+                                            <div style={{
+                                                width: '40px', height: '40px', borderRadius: '12px',
+                                                background: `${m.color}15`, color: m.color,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                marginBottom: '10px',
+                                            }}>
+                                                <I d={m.icon} s={22} />
+                                            </div>
+                                            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>{m.name}</div>
+                                            <div style={{ fontSize: '0.68rem', color: '#6b7280', lineHeight: 1.4, marginBottom: '8px', minHeight: '2.8em' }}>{info.desc}</div>
+                                            <span style={{
+                                                fontSize: '0.65rem', fontWeight: 600, padding: '3px 8px', borderRadius: '6px',
+                                                background: `${info.tagColor}12`, color: info.tagColor,
+                                                border: `1px solid ${info.tagColor}25`,
+                                            }}>{info.tag}</span>
                                         </div>
                                     );
                                 })}
                             </div>
-
-                            <button className="st-extract-btn-creative" onClick={extractDesignMulti} disabled={anyLoading || !preview || activeModelCount === 0}>
-                                <div className={anyLoading ? 'spin-icon' : ''}>
-                                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={20} />
-                                </div>
-                                {anyLoading ? `Extracting with ${activeModelCount} AI...` : activeModelCount === 0 ? 'Select models above' : `Extract with ${activeModelCount} AI Model${activeModelCount > 1 ? 's' : ''}`}
-                            </button>
-                            <span className="st-credit-badge">
-                                <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                                ~{activeModelCount * creditsPerModel} credits ({activeModelCount} model{activeModelCount !== 1 ? 's' : ''})
-                            </span>
                         </div>
-
-                        {anyResults && (
-                            <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                <span style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', padding: '4px 10px', borderRadius: '8px', fontWeight: 700 }}>
-                                    {completedResults.length}/{activeModelCount} complete
-                                </span>
-                            </div>
-                        )}
                     </div>
 
-                    {/* 4 Model Cards Grid */}
-                    <div className="st-extract-grid">
-                        {visibleResults.map((model) => {
-                            const originalIdx = extractResults.findIndex(m => m.id === model.id);
-                            return (
-                            <div
-                                key={model.id}
-                                className={`st-extract-model-card ${model.loading ? 'loading' : ''} ${model.url ? 'completed' : ''} ${model.error && !model.url && model.error !== 'disabled' ? 'error' : ''}`}
-                                onClick={() => {
-                                    if (model.url) {
-                                        setExtractGalleryIndex(originalIdx);
-                                        setExtractGalleryOpen(true);
-                                    }
-                                }}
-                            >
-                                <div className="st-extract-model-header">
-                                    <span className={`st-model-dot ${model.loading ? 'loading' : ''}`} style={{ backgroundColor: model.color }} />
-                                    <I d={model.icon} s={15} />
-                                    {model.name}
-                                    {model.loading && (
-                                        <span className="st-model-status" style={{ background: `${model.color}18`, color: model.color }}>Processing...</span>
-                                    )}
-                                    {model.url && (
-                                        <span className="st-model-status" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
-                                            {model.duration}s
-                                        </span>
-                                    )}
-                                    {model.error && !model.url && (
-                                        <span className="st-model-status" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>Failed</span>
-                                    )}
-                                </div>
-                                <div className="st-extract-model-body">
-                                    {model.url ? (
-                                        <>
-                                            <img src={`${API}${model.url}`} alt={model.name} />
-                                            <div className="st-extract-overlay">
-                                                <I d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" s={18} />
-                                                <I d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" s={18} />
-                                                View & Edit
-                                            </div>
-                                        </>
-                                    ) : model.loading ? (
-                                        <div className="st-ai-processing" style={{ transform: 'scale(0.7)' }}>
-                                            <div className="st-ai-sparkle-container">
-                                                <div className="st-ai-sparkle-icon" style={{ color: model.color }}>
-                                                    <I d={model.icon} s={24} />
-                                                </div>
-                                                <div className="st-ai-ring" style={{ borderColor: `${model.color}40` }} />
-                                                <div className="st-ai-ring" style={{ borderColor: `${model.color}25` }} />
-                                                <div className="st-ai-ring" style={{ borderColor: `${model.color}15` }} />
-                                            </div>
-                                        </div>
-                                    ) : model.error ? (
-                                        <div style={{ textAlign: 'center', color: '#ef4444', padding: '1.5rem', fontSize: '0.8rem' }}>
-                                            <I d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" s={28} />
-                                            <p style={{ marginTop: '0.5rem' }}>Failed</p>
-                                        </div>
-                                    ) : (
-                                        <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                                            <I d={model.icon} s={32} />
-                                            <p style={{ marginTop: '0.5rem', fontWeight: 600 }}>Ready</p>
-                                        </div>
-                                    )}
-                                </div>
+                    {/* === EXTRACT BUTTON === */}
+                    <button
+                        className="st-extract-btn-creative"
+                        onClick={extractDesignMulti}
+                        disabled={anyLoading || !preview || activeModelCount === 0}
+                        style={{
+                            width: '100%', padding: '16px 24px', borderRadius: '14px',
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
+                            <div className={anyLoading ? 'spin-icon' : ''}>
+                                <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={20} />
                             </div>
-                        );
-                        })}
+                            {anyLoading ? `Extracting with ${activeModelCount} AI...` : activeModelCount === 0 ? 'Select Models Above' : `Extract Pattern with AI`}
+                            {!anyLoading && <span style={{ fontSize: '1rem' }}>→</span>}
+                        </div>
+                        <span style={{ fontSize: '0.72rem', opacity: 0.8, fontWeight: 500 }}>
+                            {activeModelCount} model{activeModelCount !== 1 ? 's' : ''} selected · ~{activeModelCount * creditsPerModel} credits
+                        </span>
+                    </button>
+
+                    {/* === EXTRACTION RESULTS === */}
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#1f2937', margin: 0 }}>Extraction Results</h3>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#f3f4f6', color: '#6b7280', padding: '2px 8px', borderRadius: '8px' }}>
+                                    {activeModelCount}
+                                </span>
+                                {anyResults && (
+                                    <span style={{ fontSize: '0.7rem', fontWeight: 600, background: 'rgba(34,197,94,0.1)', color: '#22c55e', padding: '2px 8px', borderRadius: '8px' }}>
+                                        {completedResults.length}/{activeModelCount} complete
+                                    </span>
+                                )}
+                            </div>
+                            <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Compare outputs from each AI model side by side.</span>
+                        </div>
+                        <div className="st-extract-grid">
+                            {visibleResults.map((model) => {
+                                const originalIdx = extractResults.findIndex(m => m.id === model.id);
+                                return (
+                                    <div
+                                        key={model.id}
+                                        className={`st-extract-model-card ${model.loading ? 'loading' : ''} ${model.url ? 'completed' : ''} ${model.error && !model.url && model.error !== 'disabled' ? 'error' : ''}`}
+                                        onClick={() => {
+                                            if (model.url) {
+                                                setExtractGalleryIndex(originalIdx);
+                                                setExtractGalleryOpen(true);
+                                            }
+                                        }}
+                                    >
+                                        <div className="st-extract-model-header">
+                                            <span className={`st-model-dot ${model.loading ? 'loading' : ''}`} style={{ backgroundColor: model.color }} />
+                                            <I d={model.icon} s={15} />
+                                            {model.name}
+                                            {model.loading && (
+                                                <span className="st-model-status" style={{ background: `${model.color}18`, color: model.color }}>Processing...</span>
+                                            )}
+                                            {model.url && (
+                                                <span className="st-model-status" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+                                                    {model.duration}s
+                                                </span>
+                                            )}
+                                            {model.error && !model.url && model.error !== 'disabled' && (
+                                                <span className="st-model-status" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>Failed</span>
+                                            )}
+                                        </div>
+                                        <div className="st-extract-model-body">
+                                            {model.url ? (
+                                                <>
+                                                    <img src={`${API}${model.url}`} alt={model.name} />
+                                                    <div className="st-extract-overlay">
+                                                        <I d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" s={18} />
+                                                        <I d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" s={18} />
+                                                        View & Edit
+                                                    </div>
+                                                </>
+                                            ) : model.loading ? (
+                                                <div className="st-ai-processing" style={{ transform: 'scale(0.7)' }}>
+                                                    <div className="st-ai-sparkle-container">
+                                                        <div className="st-ai-sparkle-icon" style={{ color: model.color }}>
+                                                            <I d={model.icon} s={24} />
+                                                        </div>
+                                                        <div className="st-ai-ring" style={{ borderColor: `${model.color}40` }} />
+                                                        <div className="st-ai-ring" style={{ borderColor: `${model.color}25` }} />
+                                                        <div className="st-ai-ring" style={{ borderColor: `${model.color}15` }} />
+                                                    </div>
+                                                </div>
+                                            ) : model.error && model.error !== 'disabled' ? (
+                                                <div style={{ textAlign: 'center', color: '#ef4444', padding: '1.5rem', fontSize: '0.8rem' }}>
+                                                    <I d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" s={28} />
+                                                    <p style={{ marginTop: '0.5rem' }}>Failed</p>
+                                                </div>
+                                            ) : (
+                                                <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: '0.78rem', padding: '1.5rem 0.5rem' }}>
+                                                    <I d={model.icon} s={32} />
+                                                    <p style={{ marginTop: '0.5rem', fontWeight: 600, color: '#6b7280' }}>Ready to generate</p>
+                                                    <p style={{ fontSize: '0.68rem', color: '#9ca3af', marginTop: '2px' }}>Click extract to see results</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     {/* Quick Actions */}
