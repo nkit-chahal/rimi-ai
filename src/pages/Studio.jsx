@@ -3505,7 +3505,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 </div>
 
                 {/* Step 1: Upload Print */}
-                {mappingStep >= 1 && (
+                {mappingStep === 1 && (
                     <div className="st-map-section">
                         <h2 className="st-map-section-title">Upload Your Print</h2>
                         <p className="st-map-section-desc">Upload a high quality print or pattern</p>
@@ -3563,7 +3563,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 )}
 
                 {/* Step 2: Select Category */}
-                {mappingStep >= 1 && (
+                {mappingStep === 2 && (
                     <div className="st-map-section">
                         <h2 className="st-map-section-title">Select Category</h2>
                         <p className="st-map-section-desc">Choose the category that best fits your print</p>
@@ -3572,7 +3572,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                 <div
                                     key={cat.id}
                                     className={`st-map-category ${mappingCategory === cat.id ? 'active' : ''}`}
-                                    onClick={() => { setMappingCategory(cat.id); setMappingSelectedProducts(new Set()); if (mappingStep < 2) setMappingStep(2); }}
+                                    onClick={() => { setMappingCategory(cat.id); setMappingSelectedProducts(new Set()); }}
                                 >
                                     <div className="st-map-category-icon"><I d={cat.icon} s={22} /></div>
                                     <div className="st-map-category-name">{cat.label}</div>
@@ -3585,7 +3585,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 )}
 
                 {/* Step 3: Choose Products or Customizer */}
-                {mappingStep >= 1 && (
+                {mappingStep === 3 && (
                     <div className="st-map-section">
                         <h2 className="st-map-section-title">{mappingCategory === 'custom' ? 'Custom Mask & Settings' : 'Choose Products'}</h2>
                         <p className="st-map-section-desc">{mappingCategory === 'custom' ? 'Upload a product photo, paint a mask, and adjust settings' : 'Select the products you want to map this print on'}</p>
@@ -3610,7 +3610,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                         <div
                                             key={product.id}
                                             className={`st-map-product ${mappingSelectedProducts.has(product.id) ? 'selected' : ''}`}
-                                            onClick={() => { toggleMappingProduct(product.id); if (mappingStep < 3) setMappingStep(3); }}
+                                            onClick={() => { toggleMappingProduct(product.id); }}
                                             style={{ overflow: 'hidden' }}
                                         >
                                             <div className="st-map-product-check">
@@ -3658,7 +3658,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                                                 const newSet = new Set(mappingSelectedProducts);
                                                                 newSet.add('custom_product');
                                                                 setMappingSelectedProducts(newSet);
-                                                                if (mappingStep < 3) setMappingStep(3);
                                                             };
                                                             r.readAsDataURL(file);
                                                         }
@@ -3727,41 +3726,51 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 )}
 
                 {/* Step 4: Map & Preview (results) */}
-                {mappingStep >= 4 && mappingResults.length > 0 && (
+                {mappingStep === 4 && (
                     <div className="st-map-section">
                         <h2 className="st-map-section-title">Map Your Print</h2>
                         <p className="st-map-section-desc">AI-generated product mockups with your pattern</p>
-                        <div className="st-map-results">
-                            <div className="st-map-results-grid">
-                                {mappingResults.map((result, idx) => (
-                                    <div key={idx} className="st-map-result-card">
-                                        <img src={`${API}${result.mockupUrl}`} alt={result.productType} />
-                                        <div className="st-map-result-info">
-                                            <span className="st-map-result-name">{result.productType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
-                                            <a className="st-map-result-dl" href={`${API}${result.mockupUrl}`} download onClick={(e) => forceDownload(e, `${API}${result.mockupUrl}`)}>
-                                                <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
-                                            </a>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
 
-                {/* Loading state */}
-                {isMappingGenerating && (
-                    <div className="st-map-section" style={{ textAlign: 'center', padding: '3.5rem 2rem' }}>
-                        <div className="st-ai-processing" style={{ margin: '0 auto' }}>
-                            <div className="st-ai-sparkle-container">
-                                <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
-                                <div className="st-ai-ring" />
-                                <div className="st-ai-ring" />
-                                <div className="st-ai-ring" />
+                        {/* Loading state */}
+                        {isMappingGenerating && (
+                            <div style={{ textAlign: 'center', padding: '3.5rem 2rem' }}>
+                                <div className="st-ai-processing" style={{ margin: '0 auto' }}>
+                                    <div className="st-ai-sparkle-container">
+                                        <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
+                                        <div className="st-ai-ring" />
+                                        <div className="st-ai-ring" />
+                                        <div className="st-ai-ring" />
+                                    </div>
+                                </div>
+                                <p style={{ fontWeight: 800, color: '#111827', fontSize: '1.05rem', marginTop: '1.5rem', letterSpacing: '-0.02em' }}>Generating AI Mockups</p>
+                                <p style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 500, marginTop: '0.35rem' }}>Mapping your pattern onto selected products — 30-60s per product</p>
                             </div>
-                        </div>
-                        <p style={{ fontWeight: 800, color: '#111827', fontSize: '1.05rem', marginTop: '1.5rem', letterSpacing: '-0.02em' }}>Generating AI Mockups</p>
-                        <p style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 500, marginTop: '0.35rem' }}>Mapping your pattern onto selected products — 30-60s per product</p>
+                        )}
+
+                        {mappingResults.length > 0 && (
+                            <div className="st-map-results">
+                                <div className="st-map-results-grid">
+                                    {mappingResults.map((result, idx) => (
+                                        <div key={idx} className="st-map-result-card">
+                                            <img src={`${API}${result.mockupUrl}`} alt={result.productType} />
+                                            <div className="st-map-result-info">
+                                                <span className="st-map-result-name">{result.productType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                                                <a className="st-map-result-dl" href={`${API}${result.mockupUrl}`} download onClick={(e) => forceDownload(e, `${API}${result.mockupUrl}`)}>
+                                                    <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
+                                                </a>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {!isMappingGenerating && mappingResults.length === 0 && (
+                            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
+                                <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" s={40} />
+                                <p style={{ marginTop: '1rem', fontWeight: 600, color: '#6b7280' }}>Click "Generate Mockups" to create your product mockups</p>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -3777,30 +3786,48 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     />
                 )}
 
-                {/* Footer */}
+                {/* Footer with Back / Next navigation */}
                 <div className="st-map-footer">
                     <div className="st-map-footer-left">
+                        {mappingStep > 1 && (
+                            <button onClick={() => setMappingStep(s => s - 1)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <I d="M19 12H5M12 19l-7-7 7-7" s={16} /> Back
+                            </button>
+                        )}
                         <button onClick={() => {
                             setMappingStep(1);
                             setMappingPrint(null);
                             setMappingPrintPreview(null);
                             setMappingSelectedProducts(new Set());
                             setMappingResults([]);
-                        }}>Reset</button>
+                        }} style={{ color: '#9ca3af' }}>Reset</button>
                     </div>
                     <div className="st-map-footer-right">
-
-                        <button
-                            className="st-map-primary-btn"
-                            disabled={!mappingPrint || mappingSelectedProducts.size === 0 || isMappingGenerating}
-                            onClick={generateMockups}
-                        >
-                            {isMappingGenerating ? (
-                                <><div className="st-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Generating...</>
-                            ) : (
-                                <>Map & Preview <I d="M5 12h14M12 5l7 7-7 7" s={16} /></>
-                            )}
-                        </button>
+                        {mappingStep < 4 ? (
+                            <button
+                                className="st-map-primary-btn"
+                                disabled={
+                                    (mappingStep === 1 && !mappingPrint) ||
+                                    (mappingStep === 2 && !mappingCategory) ||
+                                    (mappingStep === 3 && mappingSelectedProducts.size === 0)
+                                }
+                                onClick={() => setMappingStep(s => s + 1)}
+                            >
+                                {mappingStep === 3 ? 'Continue to Generate' : 'Next Step'} <I d="M5 12h14M12 5l7 7-7 7" s={16} />
+                            </button>
+                        ) : (
+                            <button
+                                className="st-map-primary-btn"
+                                disabled={!mappingPrint || mappingSelectedProducts.size === 0 || isMappingGenerating}
+                                onClick={generateMockups}
+                            >
+                                {isMappingGenerating ? (
+                                    <><div className="st-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Generating...</>
+                                ) : (
+                                    <><I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} /> Generate Mockups ({mappingSelectedProducts.size})</>
+                                )}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
