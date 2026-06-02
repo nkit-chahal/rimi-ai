@@ -2529,9 +2529,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             ctx.fillStyle = '#fbfaf7';
             ctx.fillRect(0, 0, c.width, c.height);
             ctx.save();
-            ctx.translate(c.width / 2, c.width / 2);
+            ctx.translate(c.width / 2, c.height / 2);
             ctx.rotate((controls.rotation * Math.PI) / 180);
-            ctx.translate(-c.width / 2, -c.width / 2);
+            ctx.translate(-c.width / 2, -c.height / 2);
             const drawW = tw * (controls.scale / 100);
             const drawH = th * (controls.scale / 100);
 
@@ -3132,6 +3132,482 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const toolLabel = {
         dashboard: 'Pipeline Studio',
         pattern: 'Pattern Extraction Studio',
+        seamless: 'Make Seamless',
+        repeat: 'Repeat Set',
+        mappings: 'Create New Mapping',
+        inspire: 'Inspirations',
+        vectorize: 'Vectorize',
+        upscale: 'Super Resolution',
+        library: 'Brand Library',
+        exports: 'Exports',
+        'admin-users': 'User Management',
+        'admin-logs': 'Activity Logs',
+        'admin-credits': 'Credits & Billing',
+        'colorway-manager': 'Colorway Manager',
+
+        'measurement': 'Measurement & Scale',
+    }[tool] || tool;
+
+    const metrics = [
+        ['Versions', state.metrics.versions, state.metrics.versionsDelta],
+        ['Exports', state.metrics.exports, state.metrics.exportsDelta],
+        ['AI Generations', state.metrics.aiGenerations, state.metrics.aiGenerationsDelta],
+        ['Credits Used', state.metrics.creditsUsed, state.metrics.creditsDelta],
+    ];
+
+    const renderVariations = (isSidebar = false) => {
+        if (state.variations.length === 0) return null;
+        return (
+            <section className={`st-variations ${isSidebar ? 'st-side-variations' : ''}`}>
+                <div className="st-section-title">Pattern Variations</div>
+                <div className="st-variation-row">
+                    {state.variations.map((v) => (
+                        <button
+                            key={v.id}
+                            className={`st-variation ${v.isSelected ? 'active' : ''}`}
+                            onClick={() => {
+                                setState(s => ({
+                                    ...s,
+                                    variations: s.variations.map(item => ({ ...item, isSelected: item.id === v.id })),
+                                    activeProject: { ...s.activeProject, heroImageUrl: v.imageUrl }
+                                }));
+                                setUploads(p => ({ ...p, [tool]: { file: null, url: v.imageUrl } }));
+                            }}
+                        >
+                            <img src={v.imageUrl} alt="" />
+                            <span>{v.name}</span>
+                        </button>
+                    ))}
+                    <button className="st-generate-more"><span>+</span><small>Generate More</small></button>
+                </div>
+            </section>
+        );
+    };
+
+    const renderControls = () => {
+        if (tool === 'repeat') {
+            // Industry-standard repeat sizes (inches)
+            const repeatPresets = [
+                { w: 1, h: 1, label: '1×1″', cat: 'Ditsy' },
+                { w: 2, h: 2, label: '2×2″', cat: 'Ditsy' },
+                { w: 4, h: 4, label: '4×4″', cat: 'Small' },
+                { w: 6, h: 6, label: '6×6″', cat: 'Small' },
+                { w: 8, h: 8, label: '8×8″', cat: 'Medium' },
+                { w: 12, h: 12, label: '12×12″', cat: 'Medium' },
+                { w: 18, h: 18, label: '18×18″', cat: 'Large' },
+                { w: 24, h: 24, label: '24×24″', cat: 'Large' },
+                { w: 36, h: 36, label: '36×36″', cat: 'Engineered' },
+                { w: 48, h: 48, label: '48×48″', cat: 'Engineered' },
+            ];
+            const fabricWidths = [36, 44, 45, 54, 58, 60];
+            const rptW = controls.repeatWidth || 12;
+            const rptH = controls.repeatHeight || 12;
+            const fabW = controls.fabricWidth || 54;
+            const dpi = controls.exportDpi || 300;
+
+            // Centralized auto-grid calculation
+            const calcGrid = (fw, tw) => Math.max(2, Math.min(8, Math.ceil(fw / tw)));
+            const setRepeat = (patch) => {
+                const nextW = patch.repeatWidth ?? rptW;
+                const nextFab = patch.fabricWidth ?? fabW;
+                updateControls({ ...patch, gridSize: calcGrid(nextFab, nextW) });
+            };
+
+            // Derived calculations (always precise, always reactive)
+            const autoGrid = calcGrid(fabW, rptW);
+            const repeatsAcross = fabW / rptW;
+            const tilePxW = Math.round(rptW * dpi);
+            const tilePxH = Math.round(rptH * dpi);
+            const sheetPxW = tilePxW * autoGrid;
+            const sheetPxH = tilePxH * autoGrid;
+            const coverage = ((Math.floor(repeatsAcross) * rptW) / fabW * 100);
+
+            const isCustomSize = !repeatPresets.some(p => p.w === rptW && p.h === rptH);
+            const catColors = { Ditsy: '#10b981', Small: '#3b82f6', Medium: '#8b5cf6', Large: '#f59e0b', Engineered: '#ef4444' };
+            const activeCat = repeatPresets.find(p => p.w === rptW && p.h === rptH)?.cat || '';
+
+            return (
+                <div className="st-ctrl">
+                    <div className="st-settings-group">
+                        <div className="st-group-title">REPEAT DIMENSIONS</div>
+
+                        {/* Industry Category Tags */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '0.75rem' }}>
+                            {['Ditsy', 'Small', 'Medium', 'Large', 'Engineered'].map(cat => (
+                                <button key={cat} onClick={() => {
+                                    const p = repeatPresets.find(r => r.cat === cat);
+                                    if (p) setRepeat({ repeatWidth: p.w, repeatHeight: p.h });
+                                }}
+                                style={{
+                                    padding: '3px 10px', borderRadius: '999px', border: `1px solid ${activeCat === cat ? catColors[cat] : 'rgba(0,0,0,0.06)'}`,
+                                    background: activeCat === cat ? `${catColors[cat]}12` : 'transparent',
+                                    color: activeCat === cat ? catColors[cat] : '#64748b',
+                                    fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s ease', textTransform: 'uppercase', letterSpacing: '0.03em'
+                                }}>{cat}</button>
+                            ))}
+                        </div>
+
+                        {/* Preset Size Grid */}
+                        <label className="st-label">Tile Size (inches)</label>
+                        <div className="st-btn-row" style={{ flexWrap: 'wrap', gap: '6px' }}>
+                            {repeatPresets.map(p => (
+                                <button key={p.label}
+                                    className={`st-grid-btn ${rptW === p.w && rptH === p.h ? 'active' : ''}`}
+                                    onClick={() => setRepeat({ repeatWidth: p.w, repeatHeight: p.h })}
+                                    style={{ fontSize: '0.75rem', padding: '0.35rem 0.6rem', minWidth: 'auto' }}
+                                >{p.label}</button>
+                            ))}
+                            <button
+                                className={`st-grid-btn ${isCustomSize ? 'active' : ''}`}
+                                onClick={() => {}}
+                                style={{ fontSize: '0.75rem', padding: '0.35rem 0.6rem' }}
+                            >Custom</button>
+                        </div>
+
+                        {/* Custom Width × Height */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '6px', alignItems: 'center', marginTop: '0.75rem' }}>
+                            <div>
+                                <label className="st-label-sm" style={{ marginBottom: '2px' }}>Width</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <input type="number" min="0.5" max="72" step="0.5" value={rptW}
+                                        onChange={e => setRepeat({ repeatWidth: parseFloat(e.target.value) || 1 })}
+                                        className="st-select" style={{ width: '100%', textAlign: 'center', fontSize: '0.85rem', fontWeight: 700 }} />
+                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>″</span>
+                                </div>
+                            </div>
+                            <span style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 600, paddingTop: '16px' }}>×</span>
+                            <div>
+                                <label className="st-label-sm" style={{ marginBottom: '2px' }}>Height</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <input type="number" min="0.5" max="72" step="0.5" value={rptH}
+                                        onChange={e => setRepeat({ repeatHeight: parseFloat(e.target.value) || 1 })}
+                                        className="st-select" style={{ width: '100%', textAlign: 'center', fontSize: '0.85rem', fontWeight: 700 }} />
+                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>″</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="st-settings-group">
+                        <div className="st-group-title">FABRIC & LAYOUT</div>
+
+                        {/* Fabric Width */}
+                        <label className="st-label">Fabric Width</label>
+                        <div className="st-btn-row" style={{ gap: '4px', flexWrap: 'wrap' }}>
+                            {fabricWidths.map(fw => (
+                                <button key={fw}
+                                    className={`st-grid-btn ${fabW === fw ? 'active' : ''}`}
+                                    onClick={() => setRepeat({ fabricWidth: fw })}
+                                    style={{ fontSize: '0.75rem', padding: '0.35rem 0.5rem', minWidth: 'auto' }}
+                                >{fw}″</button>
+                            ))}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '0.5rem' }}>
+                            <input type="number" min="12" max="120" step="1" value={fabW}
+                                onChange={e => setRepeat({ fabricWidth: parseFloat(e.target.value) || 54 })}
+                                className="st-select" style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', fontWeight: 700 }} />
+                            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>inches</span>
+                        </div>
+
+                        {/* Auto-calculated info — fully reactive */}
+                        <div style={{ marginTop: '0.75rem', padding: '0.65rem 0.75rem', borderRadius: '10px', background: 'rgba(139, 92, 246, 0.04)', border: '1px solid rgba(139, 92, 246, 0.08)', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Repeats across</span>
+                                <span style={{ fontSize: '0.88rem', color: '#4f46e5', fontWeight: 800 }}>{Math.floor(repeatsAcross)}× <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 500 }}>({repeatsAcross.toFixed(2)})</span></span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Coverage</span>
+                                <span style={{ fontSize: '0.78rem', color: coverage >= 99.9 ? '#10b981' : '#f59e0b', fontWeight: 700 }}>{coverage.toFixed(1)}%</span>
+                            </div>
+                            <div style={{ height: '1px', background: 'rgba(0,0,0,0.04)', margin: '2px 0' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Grid preview</span>
+                                <span style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 700 }}>{autoGrid}×{autoGrid} tiles</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Single tile ({dpi} DPI)</span>
+                                <span style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 700 }}>{tilePxW}×{tilePxH} px</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Total sheet</span>
+                                <span style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 700 }}>{sheetPxW}×{sheetPxH} px</span>
+                            </div>
+                        </div>
+
+                        <label className="st-label" style={{ marginTop: '0.75rem' }}>Scale</label>
+                        <div className="st-scale-row">
+                            <button onClick={() => updateControls({ scale: Math.max(50, controls.scale - 10) })}>-</button>
+                            <span style={{ flex: 1, textAlign: 'center' }}>{controls.scale}%</span>
+                            <button onClick={() => updateControls({ scale: Math.min(200, controls.scale + 10) })}>+</button>
+                        </div>
+
+                        <label className="st-label">Rotation</label>
+                        <div className="st-scale-row">
+                            <button onClick={() => updateControls({ rotation: (controls.rotation - 15 + 360) % 360 })}>0&deg;</button>
+                            <span style={{ flex: 1, textAlign: 'center' }}>{controls.rotation}&deg;</span>
+                            <button onClick={() => updateControls({ rotation: (controls.rotation + 15) % 360 })}>+</button>
+                        </div>
+
+                        <label className="st-label">Mirror</label>
+                        <div className="st-btn-row">
+                            <button className={`st-sym-btn ${controls.repeatType === 'block' ? 'active' : ''}`} onClick={() => updateControls({ repeatType: 'block' })} title="None"><I d="M3 3h18v18H3z" s={14} /></button>
+                            <button className={`st-sym-btn ${controls.repeatType === 'mirror' ? 'active' : ''}`} onClick={() => updateControls({ repeatType: 'mirror' })} title="Horizontal"><I d="M12 3v18M8 8l-4 4 4 4M16 8l4 4-4 4" s={14} /></button>
+                            <button className={`st-sym-btn ${controls.repeatType === 'half_drop' ? 'active' : ''}`} onClick={() => updateControls({ repeatType: 'half_drop' })} title="Half Drop"><I d="M3 12h18M8 8l4-4 4 4M8 16l4 4 4-4" s={14} /></button>
+                            <button className={`st-sym-btn ${controls.repeatType === 'half_brick' ? 'active' : ''}`} onClick={() => updateControls({ repeatType: 'half_brick' })} title="Half Brick"><I d="M3 3h7v7H3zM14 3h7v7h-7zM8.5 10h7v7h-7zM3 17h7v7H3zM14 17h7v7h-7z" s={14} /></button>
+                        </div>
+                    </div>
+                    <div className="st-settings-group">
+                        <div className="st-group-title">EXPORT OPTIONS</div>
+                        <div className="st-export-grid">
+                            <div><label className="st-label-sm">Format</label><select value={controls.exportFormat} onChange={(e) => updateControls({ exportFormat: e.target.value })} className="st-select"><option>PNG</option><option>JPG</option><option>TIFF</option></select></div>
+                            <div><label className="st-label-sm">Resolution</label><select value={controls.exportDpi} onChange={(e) => updateControls({ exportDpi: +e.target.value })} className="st-select"><option value={72}>72 DPI</option><option value={150}>150 DPI</option><option value={300}>300 DPI</option><option value={600}>600 DPI</option></select></div>
+                        </div>
+                    </div>
+                    <button className="st-export-btn" onClick={() => createRepeat()} disabled={isRepeat || (!uploaded && !preview)}>{isRepeat ? 'Processing...' : 'Export Repeat Set'}</button>
+                    {renderVariations(true)}
+                    {tool === 'inspire' && (
+                        <div className="st-chat-container">
+                            <div className="st-chat-search">
+                                <input type="text" placeholder="Describe your pattern..." />
+                                <button className="st-chat-send"><I d="M5 12h14M12 5l7 7-7 7" s={16} /></button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        if (tool === 'vectorize') return (
+            <div className="st-ctrl st-vectorize-ctrl">
+                <div className="st-vectorize-card">
+                    <div className="st-vectorize-card-head">
+                        <span>Vector Output</span>
+                        <strong>SVG</strong>
+                    </div>
+                    <label className="st-label">Engine</label>
+                    <div className="st-vectorize-segment">
+                        <button className={vecEngine === 'api' ? 'active' : ''} onClick={() => setVecEngine('api')}>Cloud API</button>
+                        <button className={vecEngine === 'local' ? 'active' : ''} onClick={() => setVecEngine('local')}>Local</button>
+                    </div>
+                    {vecEngine === 'local' && (
+                        <div className="st-vectorize-slider">
+                            <div>
+                                <label className="st-label">Color Detail</label>
+                                <strong>{vecColors}</strong>
+                            </div>
+                            <input type="range" min="2" max="256" value={vecColors} onChange={(e) => setVecColors(Number(e.target.value))} />
+                        </div>
+                    )}
+                    <button className="st-export-btn" onClick={vectorize} disabled={isVec || (!uploaded && !preview && !activeProject?.heroImageUrl)}>
+                        {isVec ? 'Vectorizing...' : 'Vectorize Image'}
+                    </button>
+                </div>
+            </div>
+        );
+        if (tool === 'upscale') return (
+            <div className="st-ctrl">
+                <label className="st-label">Resolution Factor</label>
+                <div className="st-btn-row">
+                    <button className={`st-grid-btn ${upscaleFactor === 'x2' ? 'active' : ''}`} onClick={() => setUpscaleFactor('x2')}>2x</button>
+                    <button className={`st-grid-btn ${upscaleFactor === 'x4' ? 'active' : ''}`} onClick={() => setUpscaleFactor('x4')}>4x</button>
+                </div>
+                <button className="st-export-btn" onClick={upscale} disabled={isUpscaling || !uploaded}>
+                    {isUpscaling ? 'Upscaling...' : 'Enhance Resolution'}
+                </button>
+            </div>
+        );
+        if (tool === 'imagelayers') return (
+            <div className="st-ctrl">
+                <div className="st-qwen-side-card">
+                    <div className="st-qwen-eyebrow">Qwen model stack</div>
+                    <strong>Layered decomposition + Qwen layer editing</strong>
+                    <p>Qwen-native layer decomposition and isolated natural-language edits power this workspace.</p>
+                </div>
+                <div className="st-settings-group">
+                    <div className="st-group-title">QWEN DEMO ACTIONS</div>
+                    <div className="st-qwen-demo-grid compact">
+                        {qwenLayerDemoActions.map((demo) => (
+                            <button
+                                key={demo.label}
+                                className={`st-qwen-demo-card ${editType === demo.type ? 'active' : ''}`}
+                                onClick={() => applyQwenLayerDemo(demo)}
+                            >
+                                <I d={demo.icon} s={14} />
+                                <span>{demo.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="st-settings-group">
+                    <div className="st-group-title">LAYER SETTINGS</div>
+                    <label className="st-label">Number of Layers</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <input type="range" min="2" max="10" value={imageLayersNumLayers} onChange={(e) => setImageLayersNumLayers(+e.target.value)} className="st-range" style={{ flex: 1 }} />
+                        <span style={{ fontWeight: 600, fontSize: '1rem', color: '#6366f1', minWidth: '24px', textAlign: 'center' }}>{imageLayersNumLayers}</span>
+                    </div>
+                    <div className="st-range-labels"><span>2 layers</span><span>10 layers</span></div>
+                </div>
+                <div className="st-settings-group" style={{ marginTop: '0.75rem' }}>
+                    <label className="st-label">Description</label>
+                    <input
+                        type="text"
+                        value={imageLayersDescription}
+                        onChange={(e) => setImageLayersDescription(e.target.value)}
+                        placeholder="'auto' for AI caption, or describe the image"
+                        style={{ width: '100%', padding: '0.5rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontFamily: 'inherit', background: '#f8fafc' }}
+                    />
+                    <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.25rem' }}>Use "auto" to let AI describe the image, or provide your own description for better results.</p>
+                </div>
+                <div className="st-qwen-side-features">
+                    <span><I d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" s={13} /> Variable layer count</span>
+                    <span><I d="M4 4h16v16H4zM9 9h6v6H9z" s={13} /> Recursive decomposition</span>
+                    <span><I d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" s={13} /> Recolor, revise, replace</span>
+                    <span><I d="M5 9l7-7 7 7M5 15l7 7 7-7" s={13} /> Move and resize layers</span>
+                </div>
+                <button className="st-export-btn" onClick={generateImageLayers} disabled={isImageLayering || !uploaded} style={{ marginTop: '1rem' }}>
+                    {isImageLayering ? 'Qwen Decomposing...' : `Qwen Decompose into ${imageLayersNumLayers} Layers`}
+                </button>
+                <p className="st-generate-hint"><I d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" s={12} /> Uses ~{creditPricing.imageLayers || 100} credits</p>
+            </div>
+        );
+        if (tool === 'seamless') return null;
+        if (tool === 'pattern') return null;
+    };
+
+    // ===== MAPPINGS RENDER =====
+    const renderMappings = () => {
+        const STEPS = ['Upload Print', 'Select Category', 'Choose Products', 'Map & Preview'];
+        const currentProducts = MAPPING_PRODUCTS[mappingCategory] || [];
+        const filteredProducts = mappingProductSearch
+            ? currentProducts.filter(p => p.name.toLowerCase().includes(mappingProductSearch.toLowerCase()))
+            : currentProducts;
+
+        return (
+            <div className="st-map-wizard">
+                {/* Step indicator */}
+                <div className="st-map-steps">
+                    {STEPS.map((label, i) => (
+                        <React.Fragment key={i}>
+                            <div
+                                className={`st-map-step ${mappingStep === i + 1 ? 'active' : ''} ${mappingStep > i + 1 ? 'completed' : ''}`}
+                                onClick={() => { if (i + 1 < mappingStep || (i + 1 === 2 && mappingPrint)) setMappingStep(i + 1); }}
+                            >
+                                <div className="st-map-step-num">
+                                    {mappingStep > i + 1 ? <I d="M5 13l4 4L19 7" s={14} /> : i + 1}
+                                </div>
+                                <span className="st-map-step-label">{label}</span>
+                            </div>
+                            {i < STEPS.length - 1 && (
+                                <div className={`st-map-step-line ${mappingStep > i + 1 ? 'done' : ''}`} />
+                            )}
+                        </React.Fragment>
+                    ))}
+                </div>
+
+                {/* Step 1: Upload Print */}
+                {mappingStep === 1 && (
+                    <div className="st-map-section">
+                        <h2 className="st-map-section-title">Upload Your Print</h2>
+                        <p className="st-map-section-desc">Upload a high quality print or pattern</p>
+                        <div className="st-map-upload-row">
+                            <div
+                                className={`st-map-upload-zone ${mappingPrintPreview ? 'has-image' : ''}`}
+                                onClick={() => !mappingPrintPreview && mapFileRef.current?.click()}
+                                onDrop={(e) => { e.preventDefault(); handleMappingUpload(e.dataTransfer.files[0]); }}
+                                onDragOver={(e) => e.preventDefault()}
+                            >
+                                {mappingPrintPreview ? (
+                                    <>
+                                        <div className="st-map-upload-icon" style={{ background: '#dcfce7', color: '#16a34a' }}>
+                                            <I d="M5 13l4 4L19 7" s={24} />
+                                        </div>
+                                        <h3>Print uploaded successfully!</h3>
+                                        <p>{mappingPrint?.file?.name || 'pattern.png'}</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="st-map-upload-icon">
+                                            <I d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" s={24} />
+                                        </div>
+                                        <h3>Drag & drop your image here</h3>
+                                        <p>or</p>
+                                        <button className="st-map-upload-btn" type="button">Upload Image</button>
+                                        <p className="st-map-upload-formats">Supports: PNG, JPG, SVG (Max 50MB)</p>
+                                    </>
+                                )}
+                            </div>
+                            <input ref={mapFileRef} type="file" accept=".jpg,.jpeg,.png,.webp,.svg" hidden onChange={(e) => handleMappingUpload(e.target.files[0])} />
+
+                            <div className="st-map-print-preview">
+                                <div className="st-map-print-preview-title">Print Preview</div>
+                                {mappingPrintPreview ? (
+                                    <>
+                                        <img className="st-map-print-img" src={mappingPrintPreview} alt="Print Preview" />
+                                        <div className="st-map-print-info">
+                                            <div className="st-map-print-name">
+                                                Print Name
+                                                <span>{mappingPrint?.file?.name || 'pattern.png'}</span>
+                                            </div>
+                                            <button className="st-map-replace-btn" onClick={() => mapFileRef.current?.click()}>Replace</button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="st-map-print-empty">
+                                        <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={32} />
+                                        <span>Upload a print to preview</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Step 2: Select Category */}
+                {mappingStep === 2 && (
+                    <div className="st-map-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '360px' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                            <h2 className="st-map-section-title" style={{ fontSize: '1.15rem' }}>What are you creating?</h2>
+                            <p className="st-map-section-desc" style={{ margin: 0 }}>Choose a product category to see available mockup templates</p>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', width: '100%', maxWidth: '720px' }}>
+                            {MAPPING_CATEGORIES.map(cat => {
+                                const active = mappingCategory === cat.id;
+                                const productCount = (MAPPING_PRODUCTS[cat.id] || []).length;
+                                return (
+                                    <div
+                                        key={cat.id}
+                                        onClick={() => { setMappingCategory(cat.id); setMappingSelectedProducts(new Set()); }}
+                                        style={{
+                                            border: active ? `2px solid ${cat.color}` : '2px solid #e5e7eb',
+                                            borderRadius: '16px', padding: '20px 16px', cursor: 'pointer',
+                                            background: active ? `${cat.color}08` : '#fff',
+                                            transition: 'all 0.25s ease', position: 'relative',
+                                            textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                                            boxShadow: active ? `0 4px 20px ${cat.color}15` : '0 1px 3px rgba(0,0,0,0.04)',
+                                        }}
+                                    >
+                                        {active && (
+                                            <div style={{ position: 'absolute', top: '10px', right: '10px', width: '22px', height: '22px', borderRadius: '50%', background: cat.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <I d="M5 13l4 4L19 7" s={12} style={{ color: '#fff' }} />
+                                            </div>
+                                        )}
+                                        <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: active ? `${cat.color}18` : '#f3f4f6', color: active ? cat.color : '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px', transition: 'all 0.25s ease' }}>
+                                            <I d={cat.icon} s={24} />
+                                        </div>
+                                        <div style={{ fontSize: '0.88rem', fontWeight: 750, color: '#1f2937', marginBottom: '4px' }}>{cat.label}</div>
+                                        <div style={{ fontSize: '0.7rem', color: '#6b7280', lineHeight: 1.4, marginBottom: '10px' }}>{cat.desc}</div>
+                                        <span style={{ fontSize: '0.65rem', fontWeight: 600, padding: '3px 10px', borderRadius: '8px', background: active ? `${cat.color}12` : '#f3f4f6', color: active ? cat.color : '#9ca3af' }}>
+                                            {cat.id === 'custom' ? 'Unlimited' : `${productCount} products`}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Step 3: Choose Products or Customizer */}
+                {mappingStep === 3 && (
                     <div className="st-map-section">
                         <h2 className="st-map-section-title">{mappingCategory === 'custom' ? 'Custom Mask & Settings' : 'Choose Products'}</h2>
                         <p className="st-map-section-desc">{mappingCategory === 'custom' ? 'Upload a product photo, paint a mask, and adjust settings' : 'Select the products you want to map this print on'}</p>
