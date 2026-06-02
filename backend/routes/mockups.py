@@ -105,9 +105,16 @@ def _generate_single_mockup(
     if product_type == "custom_product" and product_reference_data_uri:
         input_images.append(product_reference_data_uri)
 
-    # 2. Construct Prompt
+    # 2. Construct Prompt — with strong pattern enforcement
     base_prompt = PRODUCT_PROMPTS.get(product_type, PRODUCT_PROMPTS['custom_product'])
-    prompt = f"{base_prompt} The item must clearly feature the exact printed pattern from the reference image. The material is {fabric_texture}. Show realistic fabric texture, natural draping, and soft shadows."
+    prompt = (
+        f"CRITICAL: You MUST use the exact pattern/print from the attached reference image as the fabric design. "
+        f"Do NOT generate a plain or solid-colored product. The entire surface of the product must be covered with "
+        f"the provided pattern, repeated seamlessly across the fabric. "
+        f"{base_prompt} "
+        f"The fabric material is {fabric_texture} with realistic texture and natural draping. "
+        f"The pattern from the reference image must be clearly visible and recognizable on every part of the product surface."
+    )
     
     bg_p = {
         "studio": "Premium studio background.",
@@ -126,6 +133,7 @@ def _generate_single_mockup(
 
     # 3. Call GPT-Image-2
     print(f"  [Mockup] Running {MODEL_ID} for '{product_type}'...")
+    print(f"  [Mockup] Prompt: {prompt[:200]}...")
     result_url = None
     credits_used = 0
 
@@ -139,6 +147,7 @@ def _generate_single_mockup(
                     "input_images": input_images,
                     "aspect_ratio": "1:1",
                     "output_format": "png",
+                    "quality": "high",
                 }
             )
             duration = time.time() - t0
