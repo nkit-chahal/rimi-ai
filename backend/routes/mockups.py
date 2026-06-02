@@ -20,7 +20,7 @@ from auth import (
 
 bp = Blueprint('mockups', __name__)
 
-MODEL_ID = "black-forest-labs/flux-fill-pro"
+MODEL_ID = "openai/gpt-image-2"
 MAX_RETRIES = 3
 RETRY_BACKOFF_SECONDS = 5
 
@@ -86,38 +86,6 @@ def _parse_user_id(data: dict) -> int | None:
     except (ValueError, TypeError):
         return None
 
-def _create_auto_mask(product_img: Image.Image) -> Image.Image:
-    """Detect white/light fabric area in template and return a mask."""
-    product_arr = np.array(product_img)
-    r, g, b = product_arr[:,:,0], product_arr[:,:,1], product_arr[:,:,2]
-    brightness = (r.astype(float) + g.astype(float) + b.astype(float)) / 3.0
-    saturation = np.max(product_arr, axis=2).astype(float) - np.min(product_arr, axis=2).astype(float)
-    
-    fabric_mask = (brightness > 200) & (saturation < 40)
-    fabric_mask = ndimage.binary_fill_holes(fabric_mask)
-    fabric_mask = ndimage.binary_dilation(fabric_mask, iterations=3)
-    fabric_mask = ndimage.binary_erosion(fabric_mask, iterations=3)
-    
-    return Image.fromarray((fabric_mask * 255).astype(np.uint8), mode='L')
-
-def _tile_pattern(pattern_img: Image.Image, pw: int, ph: int) -> Image.Image:
-    tile_w, tile_h = pattern_img.size
-    tile_scale = max(1, min(pw, ph) // max(tile_w, tile_h))
-    if tile_scale < 1: tile_scale = 1
-    scaled_tile = pattern_img.resize((tile_w * tile_scale, tile_h * tile_scale), Image.Resampling.LANCZOS)
-    stw, sth = scaled_tile.size
-    
-    tiled = Image.new('RGB', (pw, ph))
-    for y in range(0, ph, sth):
-        for x in range(0, pw, stw):
-            tiled.paste(scaled_tile, (x, y))
-    return tiled
-
-def _data_uri_to_img(uri: str) -> Image.Image:
-    if "," in uri:
-        uri = uri.split(",")[1]
-    return Image.open(BytesIO(base64.b64decode(uri)))
-
 def _generate_single_mockup(
     pattern_img: Image.Image,
     product_type: str,
@@ -130,34 +98,16 @@ def _generate_single_mockup(
     mask_data_uri: str | None = None,
 ) -> tuple[str, int]:
     
-    # 1. Resolve product template and mask
-    if product_type == "custom_product" and product_reference_data_uri and mask_data_uri:
-        product_img = _data_uri_to_img(product_reference_data_uri).convert("RGB")
-        mask_img = _data_uri_to_img(mask_data_uri).convert("L")
-    else:
-        # Load built-in template
-        template_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            'public', 'products', f'{product_type}.png'
-        )
-        if not os.path.exists(template_path):
-            raise FileNotFoundError(f"Template not found for: {product_type}")
-        product_img = Image.open(template_path).convert("RGB")
-        mask_img = _create_auto_mask(product_img)
+    # 1. Convert the source pattern to data URI to pass as a reference
+    pattern_uri = _image_to_data_uri(pattern_img)
+    input_images = [pattern_uri]
 
-    pw, ph = product_img.size
-    
-    # 2. Tile and Composite
-    tiled = _tile_pattern(pattern_img, pw, ph)
-    composite = product_img.copy()
-    composite.paste(tiled, mask=mask_img)
+    if product_type == "custom_product" and product_reference_data_uri:
+        input_images.append(product_reference_data_uri)
 
-    composite_uri = _image_to_data_uri(composite)
-    final_mask_uri = _image_to_data_uri(mask_img)
-
-    # 3. Construct Prompt
+    # 2. Construct Prompt
     base_prompt = PRODUCT_PROMPTS.get(product_type, PRODUCT_PROMPTS['custom_product'])
-    prompt = f"{base_prompt} The item is made of {fabric_texture} fabric featuring this exact printed pattern. Show realistic fabric texture, natural draping, and soft shadows."
+    prompt = f"{base_prompt} The item must clearly feature the exact printed pattern from the reference image. The material is {fabric_texture}. Show realistic fabric texture, natural draping, and soft shadows."
     
     bg_p = {
         "studio": "Premium studio background.",
@@ -174,7 +124,7 @@ def _generate_single_mockup(
     if custom_prompt.strip():
         prompt += f" User art direction: {custom_prompt.strip()}"
 
-    # 4. Call Flux Fill Pro
+    # 3. Call GPT-Image-2
     print(f"  [Mockup] Running {MODEL_ID} for '{product_type}'...")
     result_url = None
     credits_used = 0
@@ -185,20 +135,22 @@ def _generate_single_mockup(
             output = replicate.run(
                 MODEL_ID,
                 input={
-                    "image": composite_uri,
-                    "mask": final_mask_uri,
                     "prompt": prompt,
+                    "input_images": input_images,
+                    "aspect_ratio": "1:1",
                     "output_format": "png",
-                    "steps": 30,
-                    "guidance": 30,
                 }
             )
             duration = time.time() - t0
-            credits_used = max(10, int(round(duration * 12)))
+            credits_used = max(20, int(round(duration * 8)))
             cost_usd = duration * 0.00115
             log_replicate_call(project_id, MODEL_ID, duration, credits_used, cost_usd)
 
-            result_url = str(output)
+            if isinstance(output, list) and len(output) > 0:
+                result_url = str(output[0])
+            else:
+                result_url = str(output)
+            
             print(f"  [Mockup] Done ({duration:.1f}s): {result_url[:80]}...")
             break
         except Exception as exc:
@@ -208,6 +160,10 @@ def _generate_single_mockup(
             else:
                 raise
 
+    if not result_url:
+        raise RuntimeError("Model returned no output.")
+
+    # 4. Download and save
     resp = http_requests.get(result_url, timeout=120)
     resp.raise_for_status()
 
