@@ -5906,33 +5906,66 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                            {/* Model Toggle Chips */}
-                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                                {EXTRACT_MODEL_DEFS.map(m => (
-                                    <button
-                                        key={m.id}
-                                        onClick={() => setEnabledModels(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
-                                        disabled={anyLoading}
-                                        style={{
-                                            display: 'flex', alignItems: 'center', gap: '6px',
-                                            padding: '6px 12px', borderRadius: '20px',
-                                            border: `1.5px solid ${enabledModels[m.id] ? m.color : 'rgba(255,255,255,0.1)'}`,
-                                            background: enabledModels[m.id] ? `${m.color}15` : 'rgba(255,255,255,0.03)',
-                                            color: enabledModels[m.id] ? m.color : 'rgba(255,255,255,0.3)',
-                                            cursor: anyLoading ? 'not-allowed' : 'pointer',
-                                            fontSize: '0.78rem', fontWeight: 600,
-                                            transition: 'all 0.2s ease',
-                                            opacity: anyLoading ? 0.5 : 1,
-                                        }}
-                                    >
-                                        <span style={{
-                                            width: '8px', height: '8px', borderRadius: '50%',
-                                            background: enabledModels[m.id] ? m.color : 'rgba(255,255,255,0.15)',
-                                            transition: 'all 0.2s ease'
-                                        }} />
-                                        {m.name}
-                                    </button>
-                                ))}
+                            {/* Model Toggles */}
+                            <div style={{
+                                display: 'flex', flexDirection: 'column', gap: '6px',
+                                background: 'rgba(255,255,255,0.03)', borderRadius: '14px',
+                                border: '1px solid rgba(255,255,255,0.06)',
+                                padding: '10px 14px', minWidth: '260px',
+                            }}>
+                                <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.35)', marginBottom: '2px' }}>
+                                    AI Models
+                                </div>
+                                {EXTRACT_MODEL_DEFS.map(m => {
+                                    const on = enabledModels[m.id];
+                                    return (
+                                        <div
+                                            key={m.id}
+                                            onClick={() => !anyLoading && setEnabledModels(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                                            style={{
+                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                padding: '7px 8px', borderRadius: '10px', cursor: anyLoading ? 'not-allowed' : 'pointer',
+                                                background: on ? `${m.color}08` : 'transparent',
+                                                transition: 'all 0.25s ease',
+                                                opacity: anyLoading ? 0.5 : 1,
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div style={{
+                                                    width: '26px', height: '26px', borderRadius: '8px',
+                                                    background: on ? `${m.color}20` : 'rgba(255,255,255,0.04)',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    transition: 'all 0.25s ease',
+                                                    color: on ? m.color : 'rgba(255,255,255,0.2)',
+                                                }}>
+                                                    <I d={m.icon} s={14} />
+                                                </div>
+                                                <span style={{
+                                                    fontSize: '0.82rem', fontWeight: 600,
+                                                    color: on ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)',
+                                                    transition: 'color 0.25s ease',
+                                                }}>{m.name}</span>
+                                            </div>
+                                            {/* Toggle Switch */}
+                                            <div style={{
+                                                width: '36px', height: '20px', borderRadius: '12px',
+                                                background: on ? m.color : 'rgba(255,255,255,0.1)',
+                                                position: 'relative', transition: 'background 0.3s ease',
+                                                flexShrink: 0,
+                                                boxShadow: on ? `0 0 8px ${m.color}40` : 'none',
+                                            }}>
+                                                <div style={{
+                                                    width: '16px', height: '16px', borderRadius: '50%',
+                                                    background: '#fff',
+                                                    position: 'absolute', top: '2px',
+                                                    left: on ? '18px' : '2px',
+                                                    transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                                }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
 
                             <button className="st-extract-btn-creative" onClick={extractDesignMulti} disabled={anyLoading || !preview || activeModelCount === 0}>
