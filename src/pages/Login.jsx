@@ -7,7 +7,7 @@ export default function Login({ onLogin, onGoToLanding }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [autofillTrigger, setAutofillTrigger] = useState(false);
+
 
   const handleLogin = async (e) => {
     if (e) e.preventDefault();
@@ -38,25 +38,6 @@ export default function Login({ onLogin, onGoToLanding }) {
       setError('Unable to connect to server. Please try again.');
       setIsLoading(false);
     }
-  };
-
-  const loadDemo = (type) => {
-    setError('');
-    setAutofillTrigger(true);
-    if (type === 'admin') {
-      setEmail('admin@rimi.ai');
-      setPassword('admin123');
-    } else {
-      setEmail('business@rimi.ai');
-      setPassword('password123');
-    }
-    
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    document.documentElement.scrollTop = 0;
-
-    setTimeout(() => {
-      setAutofillTrigger(false);
-    }, 600);
   };
 
   return (
@@ -96,7 +77,7 @@ export default function Login({ onLogin, onGoToLanding }) {
 
             <div className="login-field">
               <label htmlFor="email">Work Email</label>
-              <div className={`login-input-wrapper ${autofillTrigger ? 'autofill-animate' : ''}`}>
+              <div className="login-input-wrapper">
                 <input
                   type="email"
                   id="email"
@@ -114,7 +95,7 @@ export default function Login({ onLogin, onGoToLanding }) {
                 <label htmlFor="password">Password</label>
                 <a href="#forgot" className="login-forgot" onClick={(e) => e.preventDefault()}>Forgot?</a>
               </div>
-              <div className={`login-input-wrapper ${autofillTrigger ? 'autofill-animate' : ''}`}>
+              <div className="login-input-wrapper">
                 <input
                   type="password"
                   id="password"
@@ -136,39 +117,6 @@ export default function Login({ onLogin, onGoToLanding }) {
             </button>
           </form>
 
-          {/* Quick-auth selectors */}
-          <div className="login-quick-auth">
-            <div className="login-quick-divider">
-              <span>Quick Login</span>
-            </div>
-            <div className="login-quick-buttons">
-              <button
-                type="button"
-                className="login-demo-btn business"
-                onClick={() => loadDemo('business')}
-                title="Log in as Business User (Standard Role)"
-              >
-                <div className="demo-icon">BD</div>
-                <div className="demo-text">
-                  <strong>Business User</strong>
-                  <span>Design tools access</span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                className="login-demo-btn admin"
-                onClick={() => loadDemo('admin')}
-                title="Log in as System Administrator (Supervisor Role)"
-              >
-                <div className="demo-icon admin-icon">SA</div>
-                <div className="demo-text">
-                  <strong>Supervisor Admin</strong>
-                  <span>Full control panel</span>
-                </div>
-              </button>
-            </div>
-          </div>
         </div>
 
         <div className="login-footer">

@@ -249,38 +249,20 @@ def init_db():
     except Exception as e:
         print(f"Error during auto-migration: {e}")
 
-    # Seed users
+    # Seed default accounts (only if users table is empty)
     user_count = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
     if user_count == 0:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
-        reset_at = now + timedelta(days=12)
+        reset_at = (now + timedelta(days=30)).isoformat()
         conn.execute(
-            "INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (1, 'admin@rim.ai', 'admin123', 'Admin User', 'AU', 'admin', 'Enterprise Admin', 0, 1000000, ?)",
-            (reset_at.isoformat(),)
+            "INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (1, 'admin@rimiai.pro', 'Admin@123', 'Admin', 'AD', 'admin', 'Enterprise', 0, 1000000, ?)",
+            (reset_at,)
         )
         conn.execute(
-            "INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (2, 'user@rim.ai', 'user123', 'Normal User', 'NU', 'user', 'Business Pro', 8450, 50000, ?)",
-            (reset_at.isoformat(),)
+            "INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (2, 'user@rimiai.pro', 'User@123', 'User', 'US', 'user', 'Business Pro', 0, 50000, ?)",
+            (reset_at,)
         )
         conn.commit()
-        print("Seeded database with pre-approved admin and normal user accounts.")
+        print("Seeded database with admin and user accounts.")
 
-    # Seed demo projects
-    project_count = conn.execute("SELECT COUNT(*) AS c FROM projects").fetchone()["c"]
-    if project_count == 0:
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        project_rows = [
-            (1, "Spring Bloom Collection", "In Progress", "/demo_floral.png", "/demo_floral.png", now - timedelta(hours=2)),
-            (2, "Botanical Dreams", "Completed", "/demo_botanical.png", "/demo_botanical.png", now - timedelta(days=1)),
-            (3, "Heritage Archive", "Draft", "/demo_geometric.png", "/demo_geometric.png", now - timedelta(days=3)),
-        ]
-        conn.executemany(
-            "INSERT INTO projects (id, name, status, thumbnail_url, hero_image_url, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            [(pid, name, status, thumb, hero, ts.isoformat()) for pid, name, status, thumb, hero, ts in project_rows],
-        )
-        conn.execute("INSERT INTO project_metrics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (1, 24, 12, 18, 8, 52, 24, 1250, 15))
-        conn.execute("INSERT INTO pattern_health VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (1, 92, "Excellent", 1, 1, 1, 1, "Great job. Your pattern is print-ready."))
-        conn.execute("INSERT INTO project_controls VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (1, 2, 100, 0, "block", 1, 1, 0, "PNG", 300, 8, 8, 12, now.isoformat()))
-        conn.execute("INSERT INTO suggestions (project_id, body, created_at) VALUES (?, ?, ?)", (1, "Try increasing contrast in the floral elements for better print definition.", now.isoformat()))
-        conn.commit()
     conn.close()
