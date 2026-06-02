@@ -22,7 +22,17 @@ def get_studio_state(project_id=1, user_id=None):
         user = dict(user_row)
 
     projects = rows_to_dicts(conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall())
-    project = dict(conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone() or projects[0])
+    if not projects:
+        # Auto-create a default project when the database is empty
+        now_iso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        conn.execute(
+            "INSERT INTO projects (id, name, status, thumbnail_url, hero_image_url, updated_at) VALUES (1, 'My First Project', 'Draft', '', '', ?)",
+            (now_iso,)
+        )
+        conn.commit()
+        projects = rows_to_dicts(conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall())
+    project_row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    project = dict(project_row) if project_row else projects[0]
     variations = rows_to_dicts(conn.execute("SELECT * FROM pattern_variations WHERE project_id = ? ORDER BY id", (project["id"],)).fetchall())
     metrics_row = conn.execute("SELECT * FROM project_metrics WHERE project_id = ?", (project["id"],)).fetchone()
     if not metrics_row:
