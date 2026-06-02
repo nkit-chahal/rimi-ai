@@ -266,6 +266,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const [bgTasks, setBgTasks] = useState([]);
     const [showBgTasksDropdown, setShowBgTasksDropdown] = useState(false);
+    const [isSidebarHidden, setIsSidebarHidden] = useState(false);
 
     const addBgTask = (type, label, filename, triggerFn) => {
         const taskId = Date.now().toString();
@@ -711,6 +712,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             { id: 'duvet_cover', name: 'Duvet Cover', image: '/products/duvet_cover.png' },
             { id: 'sofa_upholstery', name: 'Sofa Upholstery', image: '/products/sofa_upholstery.png' },
             { id: 'wallpaper', name: 'Wallpaper', image: '/products/wallpaper.png' },
+            { id: 'rug', name: 'Area Rug', image: '/products/rug.png' },
+            { id: 'shower_curtain', name: 'Shower Curtain', image: '/products/shower_curtain.png' },
+            { id: 'bath_towel', name: 'Bath Towel', image: '/products/bath_towel.png' },
+            { id: 'lamp_shade', name: 'Lamp Shade', image: '/products/lamp_shade.png' },
         ],
         apparel: [
             { id: 'tshirt', name: 'T-Shirt', image: '/products/tshirt.png' },
@@ -718,12 +723,16 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             { id: 'dress', name: 'Dress', image: '/products/dress.png' },
             { id: 'saree', name: 'Saree', image: '/products/saree.png' },
             { id: 'kimono', name: 'Kimono', image: '/products/kimono.png' },
+            { id: 'leggings', name: 'Leggings', image: '/products/leggings.png' },
+            { id: 'skirt', name: 'Skirt', image: '/products/skirt.png' },
         ],
         accessories: [
             { id: 'tote_bag', name: 'Tote Bag', image: '/products/tote_bag.png' },
             { id: 'backpack', name: 'Backpack', image: '/products/backpack.png' },
             { id: 'phone_case', name: 'Phone Case', image: '/products/phone_case.png' },
             { id: 'scarf', name: 'Scarf', image: '/products/scarf.png' },
+            { id: 'umbrella', name: 'Umbrella', image: '/products/umbrella.png' },
+            { id: 'socks', name: 'Socks', image: '/products/socks.png' },
         ],
         custom: [
             { id: 'custom_product', name: 'Custom Product Mapping', image: null },
@@ -3122,7 +3131,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const toolLabel = {
         dashboard: 'Pipeline Studio',
-        pattern: 'Pattern Extraction',
+        pattern: 'Pattern Extraction Studio',
         seamless: 'Make Seamless',
         repeat: 'Repeat Set',
         mappings: 'Create New Mapping',
@@ -5890,16 +5899,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             }
 
             return (
-                <div style={{ padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column', flex: 1, gap: '1.25rem', overflowY: 'auto' }}>
+                <div className="st-pattern-extract-page">
 
                     {/* === TOP CARD: Source + AI Models === */}
-                    <div style={{
-                        background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb',
-                        padding: '1.5rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                    }}>
+                    <div className="st-pattern-extract-top">
                         {/* Source Pattern */}
-                        <div style={{ flex: '0 0 200px' }}>
+                        <div className="st-pattern-source-card">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                                 <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1f2937' }}>Source Pattern</span>
                                 <button onClick={() => fileRef.current?.click()} style={{
@@ -5922,7 +5927,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         </div>
 
                         {/* AI Models Selection */}
-                        <div style={{ flex: 1, minWidth: '300px' }}>
+                        <div className="st-pattern-models-panel">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                                 <div>
                                     <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1f2937' }}>AI Models</span>
@@ -5944,7 +5949,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                     <I d="M5 13l4 4L19 7" s={14} />
                                 </button>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
+                            <div className="st-pattern-model-grid">
                                 {EXTRACT_MODEL_DEFS.map(m => {
                                     const on = enabledModels[m.id];
                                     const descriptions = {
@@ -5957,12 +5962,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                     return (
                                         <div
                                             key={m.id}
+                                            className="st-pattern-model-select-card"
                                             onClick={() => !anyLoading && setEnabledModels(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
                                             style={{
                                                 border: on ? `2px solid ${m.color}` : '2px solid #e5e7eb',
-                                                borderRadius: '14px', padding: '14px 12px', cursor: anyLoading ? 'not-allowed' : 'pointer',
+                                                cursor: anyLoading ? 'not-allowed' : 'pointer',
                                                 background: on ? `${m.color}08` : '#fafafa',
-                                                transition: 'all 0.25s ease', position: 'relative',
                                                 opacity: anyLoading ? 0.6 : 1,
                                             }}
                                         >
@@ -6004,10 +6009,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         className="st-extract-btn-creative"
                         onClick={extractDesignMulti}
                         disabled={anyLoading || !preview || activeModelCount === 0}
-                        style={{
-                            width: '100%', padding: '16px 24px', borderRadius: '14px',
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
-                        }}
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
                             <div className={anyLoading ? 'spin-icon' : ''}>
@@ -6022,8 +6023,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     </button>
 
                     {/* === EXTRACTION RESULTS === */}
-                    <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                    <div className="st-pattern-results-section">
+                        <div className="st-pattern-results-head">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#1f2937', margin: 0 }}>Extraction Results</h3>
                                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#f3f4f6', color: '#6b7280', padding: '2px 8px', borderRadius: '8px' }}>
@@ -7290,10 +7291,21 @@ if (tool === 'imagelayers') {
             ];
 
             return (
-            <div className="studio">
-                <aside className="st-sidebar">
+            <div className={`studio ${isSidebarHidden ? 'sidebar-hidden' : ''}`}>
+                {!isSidebarHidden && <aside className="st-sidebar">
                     <div className="st-sidebar-top">
-                        <div className="st-logo" onClick={() => { setTool(user.role === 'admin' ? 'admin-dashboard' : 'dashboard'); setError(''); }} style={{ cursor: 'pointer' }}><span className="ln-logo-badge">RI</span> RIM AI</div>
+                        <div className="st-sidebar-head">
+                            <div className="st-logo" onClick={() => { setTool(user.role === 'admin' ? 'admin-dashboard' : 'dashboard'); setError(''); }} style={{ cursor: 'pointer' }}><span className="ln-logo-badge">RI</span> RIM AI</div>
+                            <button
+                                className="st-sidebar-toggle"
+                                type="button"
+                                aria-label="Hide sidebar"
+                                title="Hide sidebar"
+                                onClick={() => setIsSidebarHidden(true)}
+                            >
+                                <I d="M3 3h18v18H3zM9 3v18M15 9l-3 3 3 3" s={17} />
+                            </button>
+                        </div>
 
                         {user.role === 'admin' ? (
                             <>
@@ -7362,9 +7374,20 @@ if (tool === 'imagelayers') {
                             </div>
                         )}
                     </div>
-                </aside>
+                </aside>}
                 <div className="st-main">
-                    <header className="st-topbar">
+                    <header className={`st-topbar ${isSidebarHidden ? 'sidebar-toggle-visible' : ''}`}>
+                        {isSidebarHidden && (
+                            <button
+                                className="st-sidebar-toggle topbar"
+                                type="button"
+                                aria-label="Show sidebar"
+                                title="Show sidebar"
+                                onClick={() => setIsSidebarHidden(false)}
+                            >
+                                <I d="M3 3h18v18H3zM9 3v18M12 9l3 3-3 3" s={17} />
+                            </button>
+                        )}
                         <select className="st-project-select" value={activeProject.id} onChange={(e) => loadStudioState(+e.target.value)}>
                             {state.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
@@ -7572,7 +7595,7 @@ if (tool === 'imagelayers') {
                             <div className="st-page-head">
                                 <div>
                                     <h1 className="st-title">{toolLabel} {tool === 'library' && <span className="st-pro-badge">Pro</span>}</h1>
-                                    {tool !== 'inspire' && <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Create, refine, and perfect repeat patterns with AI precision.' : tool === 'exports' ? 'View and download your recently exported assets.' : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.' : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.' : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.' : 'Upload artwork and generate print-ready assets.'}</p>}
+                                    {tool !== 'inspire' && <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Extract clean, seamless patterns using the power of multiple AI models.' : tool === 'exports' ? 'View and download your recently exported assets.' : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.' : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.' : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.' : 'Upload artwork and generate print-ready assets.'}</p>}
                                 </div>
                             </div>
 
