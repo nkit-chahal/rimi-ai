@@ -5908,12 +5908,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
                             {/* Model Toggles */}
                             <div style={{
-                                display: 'flex', flexDirection: 'column', gap: '6px',
-                                background: 'rgba(255,255,255,0.03)', borderRadius: '14px',
-                                border: '1px solid rgba(255,255,255,0.06)',
+                                display: 'flex', flexDirection: 'column', gap: '5px',
+                                background: 'rgba(0,0,0,0.04)', borderRadius: '14px',
+                                border: '1px solid rgba(0,0,0,0.08)',
                                 padding: '10px 14px', minWidth: '260px',
                             }}>
-                                <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.35)', marginBottom: '2px' }}>
+                                <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(0,0,0,0.4)', marginBottom: '2px' }}>
                                     AI Models
                                 </div>
                                 {EXTRACT_MODEL_DEFS.map(m => {
@@ -5924,8 +5924,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                             onClick={() => !anyLoading && setEnabledModels(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
                                             style={{
                                                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                                padding: '7px 8px', borderRadius: '10px', cursor: anyLoading ? 'not-allowed' : 'pointer',
-                                                background: on ? `${m.color}08` : 'transparent',
+                                                padding: '6px 8px', borderRadius: '10px', cursor: anyLoading ? 'not-allowed' : 'pointer',
+                                                background: on ? `${m.color}10` : 'transparent',
                                                 transition: 'all 0.25s ease',
                                                 opacity: anyLoading ? 0.5 : 1,
                                             }}
@@ -5933,34 +5933,34 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <div style={{
                                                     width: '26px', height: '26px', borderRadius: '8px',
-                                                    background: on ? `${m.color}20` : 'rgba(255,255,255,0.04)',
+                                                    background: on ? `${m.color}20` : 'rgba(0,0,0,0.06)',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                     transition: 'all 0.25s ease',
-                                                    color: on ? m.color : 'rgba(255,255,255,0.2)',
+                                                    color: on ? m.color : 'rgba(0,0,0,0.25)',
                                                 }}>
                                                     <I d={m.icon} s={14} />
                                                 </div>
                                                 <span style={{
                                                     fontSize: '0.82rem', fontWeight: 600,
-                                                    color: on ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)',
+                                                    color: on ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.35)',
                                                     transition: 'color 0.25s ease',
                                                 }}>{m.name}</span>
                                             </div>
                                             {/* Toggle Switch */}
                                             <div style={{
-                                                width: '36px', height: '20px', borderRadius: '12px',
-                                                background: on ? m.color : 'rgba(255,255,255,0.1)',
+                                                width: '38px', height: '22px', borderRadius: '12px',
+                                                background: on ? m.color : 'rgba(0,0,0,0.15)',
                                                 position: 'relative', transition: 'background 0.3s ease',
                                                 flexShrink: 0,
-                                                boxShadow: on ? `0 0 8px ${m.color}40` : 'none',
+                                                boxShadow: on ? `0 0 10px ${m.color}35` : 'inset 0 1px 2px rgba(0,0,0,0.1)',
                                             }}>
                                                 <div style={{
-                                                    width: '16px', height: '16px', borderRadius: '50%',
+                                                    width: '18px', height: '18px', borderRadius: '50%',
                                                     background: '#fff',
                                                     position: 'absolute', top: '2px',
                                                     left: on ? '18px' : '2px',
                                                     transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                                    boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
                                                 }} />
                                             </div>
                                         </div>
