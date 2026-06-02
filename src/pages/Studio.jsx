@@ -7205,7 +7205,7 @@ if (tool === 'imagelayers') {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 <div className="st-credits-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={14} />
-                                    AI Credits <span className="st-plan">{user.plan}</span>
+                                    Credits
                                 </div>
                                 <div className="st-credits-text strong">{(user.creditsLimit - user.creditsUsed).toLocaleString()} <span>/ {user.creditsLimit.toLocaleString()}</span></div>
                                 <div className="st-credits-bar"><div className="st-credits-fill" style={{ width: `${creditPercent}%` }} /></div>
