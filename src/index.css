@@ -8315,9 +8315,10 @@ input[type=range]::-moz-range-track {
 /* ========= UPLOAD ZONE — animated gradient border ========= */
 .st-map-upload-row {
   display: grid;
-  grid-template-columns: minmax(240px, 0.58fr) minmax(420px, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 1.25rem;
   align-items: stretch;
+  max-height: 280px;
 }
 .st-map-upload-row.uploaded {
   grid-template-columns: 180px minmax(260px, 430px) minmax(520px, 1fr);
@@ -8334,7 +8335,8 @@ input[type=range]::-moz-range-track {
   text-align: center;
   cursor: pointer;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  min-height: 240px;
+  min-height: 180px;
+  max-height: 260px;
   background:
     linear-gradient(#fafbff, #fafbff) padding-box,
     linear-gradient(135deg, rgba(139,92,246,0.3), rgba(59,130,246,0.2), rgba(139,92,246,0.3)) border-box;
@@ -8342,7 +8344,8 @@ input[type=range]::-moz-range-track {
   overflow: hidden;
 }
 .st-map-upload-zone.has-image {
-  min-height: 168px;
+  min-height: 160px;
+  max-height: 260px;
   padding: 0.9rem;
 }
 .st-map-upload-zone::before {
@@ -8462,7 +8465,8 @@ input[type=range]::-moz-range-track {
   flex-direction: column;
   box-shadow: 0 4px 20px rgba(139, 92, 246, 0.04);
   transition: all 0.3s ease;
-  min-height: 240px;
+  min-height: 180px;
+  max-height: 280px;
 }
 .st-map-upload-row.uploaded .st-map-print-preview {
   min-height: 168px;
@@ -8480,10 +8484,11 @@ input[type=range]::-moz-range-track {
 }
 .st-map-print-img {
   width: 100%;
-  aspect-ratio: 16/9;
+  max-height: 180px;
   object-fit: contain;
   background: #f8fafc;
   display: block;
+  flex: 1;
 }
 .st-map-upload-row.uploaded .st-map-print-img {
   aspect-ratio: 5 / 3;
@@ -8559,10 +8564,11 @@ input[type=range]::-moz-range-track {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 3rem;
+  padding: 2rem;
   color: #9ca3af;
   gap: 0.75rem;
-  min-height: 230px;
+  min-height: 140px;
+  flex: 1;
 }
 
 /* ========= CATEGORIES — gradient glass cards ========= */
