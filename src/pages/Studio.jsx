@@ -2489,11 +2489,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     body: JSON.stringify(controls),
                 });
                 const d = await r.json();
-                if (d.success) setState(prev => ({
-                    ...prev,
-                    ...d.state,
-                    controls: { ...prev.controls, ...d.state.controls }
-                }));
+                if (d.success && d.state) {
+                    // Update everything EXCEPT controls to avoid infinite loop
+                    const { controls: _ignore, ...rest } = d.state;
+                    setState(prev => ({ ...prev, ...rest }));
+                }
             } catch {
                 setError('Control changes are local only because the SQLite API is offline.');
             }
