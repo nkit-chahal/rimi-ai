@@ -2463,7 +2463,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             setActiveProjectId(d.state.activeProject.id);
             window.setTimeout(() => { hasLoadedControls.current = true; }, 0);
         } catch {
-            setError('Backend is not connected. Start Flask on port 3001 so dashboard data can sync from SQLite.');
+            console.warn('Backend is not connected.');
         } finally {
             setIsLoadingState(false);
         }
@@ -2495,7 +2495,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     setState(prev => ({ ...prev, ...rest }));
                 }
             } catch {
-                setError('Control changes are local only because the SQLite API is offline.');
+                console.warn('Control sync failed.');
             }
         }, 350);
         return () => window.clearTimeout(id);
@@ -7437,7 +7437,7 @@ if (tool === 'imagelayers') {
                                     {tool !== 'inspire' && <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Create, refine, and perfect repeat patterns with AI precision.' : tool === 'exports' ? 'View and download your recently exported assets.' : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.' : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.' : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.' : 'Upload artwork and generate print-ready assets.'}</p>}
                                 </div>
                             </div>
-                            {isLoadingState && <div className="st-error">Loading SQLite-backed studio state...</div>}
+
                             {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && !tool.startsWith('admin')) && (
                                 <div
                                     className={`st-upload ${isDrag ? 'dragging' : ''} ${preview ? 'has-image' : ''}`}
@@ -7455,7 +7455,7 @@ if (tool === 'imagelayers') {
                             )}
                             <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0], 'tool')} />
                             {renderCanvas()}
-                            {error && <div className="st-error">{error}</div>}
+
 
                         </main>
                         {tool !== 'library' && tool !== 'exports' && tool !== 'mappings' && tool !== 'pattern' && tool !== 'seamless' && !tool.startsWith('admin') && (
