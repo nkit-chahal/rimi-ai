@@ -510,6 +510,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         { id: 'bytedance/seedream-4.5', name: 'SeDream', color: '#f59e0b', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
     ];
     const [extractResults, setExtractResults] = useState(EXTRACT_MODEL_DEFS.map(m => ({ ...m, loading: false, url: null, error: null, duration: 0 })));
+    const [enabledModels, setEnabledModels] = useState(() => EXTRACT_MODEL_DEFS.reduce((acc, m) => ({ ...acc, [m.id]: true }), {}));
+    const activeModels = EXTRACT_MODEL_DEFS.filter(m => enabledModels[m.id]);
+    const activeModelCount = activeModels.length;
+    const creditsPerModel = 50;
     const [extractGalleryOpen, setExtractGalleryOpen] = useState(false);
     const [extractGalleryIndex, setExtractGalleryIndex] = useState(0);
     const [extractChatMessages, setExtractChatMessages] = useState({});
@@ -2834,10 +2838,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const extractDesignMulti = async () => {
         const activeUrl = preview || activeProject.heroImageUrl;
-        if (!uploaded && !activeUrl) {
-            setError('Upload an image first');
-            return;
-        }
+        if (!uploaded && !activeUrl) { setError('Upload an image first'); return; }
 
         let safeFilename = uploaded?.filename;
         let safeUrl = !uploaded ? activeUrl : null;
@@ -2846,35 +2847,57 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             safeUrl = null;
         }
 
-        // Set all 4 models to loading
-        setExtractResults(prev => prev.map(m => ({ ...m, loading: true, url: null, error: null, duration: 0 })));
+        const modelsToRun = EXTRACT_MODEL_DEFS.filter(m => enabledModels[m.id]);
+        if (modelsToRun.length === 0) return;
+
+        // Reset only enabled models to loading, clear disabled ones
+        setExtractResults(EXTRACT_MODEL_DEFS.map(m => ({
+            ...m,
+            loading: enabledModels[m.id],
+            url: null,
+            error: enabledModels[m.id] ? null : 'disabled',
+            duration: 0
+        })));
         setExtractChatMessages({});
         setError('');
 
-        try {
-            const r = await fetch(`${API}/api/extract-design-multi`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, projectId: activeProject.id, userId: currentUser?.id })
-            });
-            const d = await r.json();
-            if (d.success) {
-                setExtractResults(prev => prev.map(m => {
-                    const result = d.results.find(r => r.modelId === m.id);
-                    if (result) {
-                        return { ...m, loading: false, url: result.resultUrl, error: result.error, duration: result.duration };
-                    }
-                    return { ...m, loading: false };
-                }));
-                updateCreditsFromResponse(d);
-            } else {
-                setExtractResults(prev => prev.map(m => ({ ...m, loading: false, error: d.error || 'Failed' })));
-                setError(d.error || 'Extraction failed');
+        // Fire individual requests per model so results stream in
+        modelsToRun.forEach(async (modelDef) => {
+            try {
+                const r = await fetch(`${API}/api/extract-design-single`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: safeFilename,
+                        imageUrl: safeUrl,
+                        projectId: activeProject.id,
+                        userId: currentUser?.id,
+                        modelId: modelDef.id
+                    })
+                });
+                const d = await r.json();
+                if (d.success) {
+                    setExtractResults(prev => prev.map(m =>
+                        m.id === modelDef.id
+                            ? { ...m, loading: false, url: d.resultUrl, error: d.error, duration: d.duration }
+                            : m
+                    ));
+                    updateCreditsFromResponse(d);
+                } else {
+                    setExtractResults(prev => prev.map(m =>
+                        m.id === modelDef.id
+                            ? { ...m, loading: false, error: d.error || 'Failed' }
+                            : m
+                    ));
+                }
+            } catch (err) {
+                setExtractResults(prev => prev.map(m =>
+                    m.id === modelDef.id
+                        ? { ...m, loading: false, error: err.message }
+                        : m
+                ));
             }
-        } catch (err) {
-            setExtractResults(prev => prev.map(m => ({ ...m, loading: false, error: err.message })));
-            setError('Network error during extraction');
-        }
+        });
     };
 
     const sendExtractEdit = async () => {
@@ -5831,7 +5854,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         if (tool === 'pattern') {
             const anyLoading = extractResults.some(m => m.loading);
             const anyResults = extractResults.some(m => m.url);
-            const completedResults = extractResults.filter(m => m.url);
+            const visibleResults = extractResults.filter(m => enabledModels[m.id]);
+            const completedResults = visibleResults.filter(m => m.url);
             const galleryModel = extractResults[extractGalleryIndex];
             const galleryChats = extractChatMessages[galleryModel?.id] || [];
 
@@ -5882,22 +5906,51 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                            <button className="st-extract-btn-creative" onClick={extractDesignMulti} disabled={anyLoading || !preview}>
+                            {/* Model Toggle Chips */}
+                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                {EXTRACT_MODEL_DEFS.map(m => (
+                                    <button
+                                        key={m.id}
+                                        onClick={() => setEnabledModels(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                                        disabled={anyLoading}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: '6px',
+                                            padding: '6px 12px', borderRadius: '20px',
+                                            border: `1.5px solid ${enabledModels[m.id] ? m.color : 'rgba(255,255,255,0.1)'}`,
+                                            background: enabledModels[m.id] ? `${m.color}15` : 'rgba(255,255,255,0.03)',
+                                            color: enabledModels[m.id] ? m.color : 'rgba(255,255,255,0.3)',
+                                            cursor: anyLoading ? 'not-allowed' : 'pointer',
+                                            fontSize: '0.78rem', fontWeight: 600,
+                                            transition: 'all 0.2s ease',
+                                            opacity: anyLoading ? 0.5 : 1,
+                                        }}
+                                    >
+                                        <span style={{
+                                            width: '8px', height: '8px', borderRadius: '50%',
+                                            background: enabledModels[m.id] ? m.color : 'rgba(255,255,255,0.15)',
+                                            transition: 'all 0.2s ease'
+                                        }} />
+                                        {m.name}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <button className="st-extract-btn-creative" onClick={extractDesignMulti} disabled={anyLoading || !preview || activeModelCount === 0}>
                                 <div className={anyLoading ? 'spin-icon' : ''}>
                                     <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={20} />
                                 </div>
-                                {anyLoading ? 'Extracting with 4 AI...' : 'Extract with 4 AI Models'}
+                                {anyLoading ? `Extracting with ${activeModelCount} AI...` : activeModelCount === 0 ? 'Select models above' : `Extract with ${activeModelCount} AI Model${activeModelCount > 1 ? 's' : ''}`}
                             </button>
                             <span className="st-credit-badge">
                                 <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                                ~200 credits (4 models)
+                                ~{activeModelCount * creditsPerModel} credits ({activeModelCount} model{activeModelCount !== 1 ? 's' : ''})
                             </span>
                         </div>
 
                         {anyResults && (
                             <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                 <span style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', padding: '4px 10px', borderRadius: '8px', fontWeight: 700 }}>
-                                    {completedResults.length}/4 complete
+                                    {completedResults.length}/{activeModelCount} complete
                                 </span>
                             </div>
                         )}
@@ -5905,13 +5958,15 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
                     {/* 4 Model Cards Grid */}
                     <div className="st-extract-grid">
-                        {extractResults.map((model, idx) => (
+                        {visibleResults.map((model) => {
+                            const originalIdx = extractResults.findIndex(m => m.id === model.id);
+                            return (
                             <div
                                 key={model.id}
-                                className={`st-extract-model-card ${model.loading ? 'loading' : ''} ${model.url ? 'completed' : ''} ${model.error && !model.url ? 'error' : ''}`}
+                                className={`st-extract-model-card ${model.loading ? 'loading' : ''} ${model.url ? 'completed' : ''} ${model.error && !model.url && model.error !== 'disabled' ? 'error' : ''}`}
                                 onClick={() => {
                                     if (model.url) {
-                                        setExtractGalleryIndex(idx);
+                                        setExtractGalleryIndex(originalIdx);
                                         setExtractGalleryOpen(true);
                                     }
                                 }}
@@ -5966,7 +6021,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                     )}
                                 </div>
                             </div>
-                        ))}
+                        );
+                        })}
                     </div>
 
                     {/* Quick Actions */}

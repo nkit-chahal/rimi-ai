@@ -325,6 +325,65 @@ def extract_design_multi():
     return jsonify({'success': True, 'results': results, 'totalCredits': total_credits, **updated_credits})
 
 
+@bp.route('/api/extract-design-single', methods=['POST'])
+def extract_design_single():
+    """Run extraction with a single specified model."""
+    data = request.get_json()
+    filename = data.get('filename', '')
+    model_id = data.get('modelId', '')
+    
+    if not filename:
+        return jsonify({'error': 'Filename is required'}), 400
+    if not model_id:
+        return jsonify({'error': 'Model ID is required'}), 400
+        
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+
+    project_id = int(data.get('projectId', 1))
+    user_id = data.get('userId') or data.get('user_id')
+    if user_id:
+        try: user_id = int(user_id)
+        except ValueError: user_id = None
+
+    ok, remaining, limit, used = check_credits(user_id)
+    if not ok:
+        return jsonify({'error': 'Insufficient AI credits.', 'creditsUsed': used, 'creditsLimit': limit}), 403
+
+    # Find the model config
+    model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), None)
+    if not model_cfg:
+        return jsonify({'error': f'Unknown model: {model_id}'}), 400
+
+    # Read and encode image
+    with open(filepath, "rb") as img_file:
+        image_bytes = img_file.read()
+        encoded_string = base64.b64encode(image_bytes).decode('utf-8')
+        mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"
+        data_uri = f"data:{mime_type};base64,{encoded_string}"
+
+    # Get image description for text-only models
+    image_description = None
+    if not model_cfg['supports_image']:
+        image_description = _describe_image_for_extraction(data_uri)
+
+    result = _run_single_extract(model_cfg, data_uri, project_id, filename, image_description)
+    
+    if result['creditsUsed'] > 0:
+        record_activity(project_id, 'generation', 1 if result['resultUrl'] else 0, result['creditsUsed'], user_id=user_id)
+
+    updated_credits = get_updated_credits(user_id)
+    return jsonify({
+        'success': True,
+        'modelId': result['modelId'],
+        'resultUrl': result['resultUrl'],
+        'duration': result['duration'],
+        'error': result['error'],
+        **updated_credits
+    })
+
+
 @bp.route('/api/extract-edit', methods=['POST'])
 def extract_edit():
     """Edit an extracted pattern result using the same model that generated it."""
