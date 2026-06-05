@@ -324,11 +324,11 @@ def init_db():
         admin_pw = bcrypt.hashpw(b'Admin@123', bcrypt.gensalt()).decode('utf-8')
         user_pw = bcrypt.hashpw(b'User@123', bcrypt.gensalt()).decode('utf-8')
         conn.execute(
-            "INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (1, 'admin@rimiai.pro', ?, 'Admin', 'AD', 'admin', 'Enterprise', 0, 1000000, ?)",
+            "INSERT OR IGNORE INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (1, 'admin@rimiai.pro', ?, 'Admin', 'AD', 'admin', 'Enterprise', 0, 1000000, ?)",
             (admin_pw, reset_at)
         )
         conn.execute(
-            "INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (2, 'user@rimiai.pro', ?, 'User', 'US', 'user', 'Business Pro', 0, 50000, ?)",
+            "INSERT OR IGNORE INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (2, 'user@rimiai.pro', ?, 'User', 'US', 'user', 'Business Pro', 0, 50000, ?)",
             (user_pw, reset_at)
         )
         conn.commit()
