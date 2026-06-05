@@ -656,12 +656,14 @@ input[type=range]::-moz-range-track {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  overflow-y: auto;
+  overflow: hidden;
   transition: var(--transition-lux);
 }
 .st-sidebar-top {
   flex: 1;
   padding: 1.25rem 1rem;
+  overflow-y: auto;
+  min-height: 0;
 }
 .st-logo {
   font-size: 1.15rem;
@@ -708,6 +710,7 @@ input[type=range]::-moz-range-track {
 .st-sidebar-bottom {
   padding: 1rem;
   border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .st-credits-label {
   font-size: .78rem;
@@ -2591,6 +2594,7 @@ input[type=range]::-moz-range-track {
   z-index: 1;
   overflow: hidden;
   transition: all 0.3s ease;
+  flex-shrink: 0;
 }
 .st-sidebar-bottom::before {
   content: '';
