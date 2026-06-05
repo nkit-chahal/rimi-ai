@@ -16,6 +16,7 @@ bp = Blueprint('repeat', __name__)
 def create_repeat_set():
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     image_url = data.get('imageUrl', '')
     grid_size = max(2, min(int(data.get('gridSize', 3)), 6))
     scale = float(data.get('scale', 100)) / 100.0

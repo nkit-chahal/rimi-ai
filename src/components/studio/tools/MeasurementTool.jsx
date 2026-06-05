@@ -92,7 +92,7 @@ export default function MeasurementTool({ uploaded, preview, controls }) {
                     <div style={{ flex: 1, position: 'relative', minHeight: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
                         {preview ? (
                             <div style={{ position: 'relative', maxWidth: '100%', maxHeight: '500px' }}>
-                                <img src={preview.startsWith('http') || preview.startsWith('/') ? `${API}${preview}` : preview} alt="Pattern"
+                                <img src={preview.startsWith('http') ? preview : preview.startsWith('/') ? `${API}${preview}` : preview} alt="Pattern"
                                     style={{ maxWidth: '100%', maxHeight: '500px', objectFit: 'contain', borderRadius: '8px' }} />
                                 {measureShowGrid && (
                                     <div style={{ position: 'absolute', inset: 0, backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent calc(100% / ${controls.gridSize || 2} - 1px), rgba(255,255,255,0.15) calc(100% / ${controls.gridSize || 2} - 1px), rgba(255,255,255,0.15) calc(100% / ${controls.gridSize || 2})), repeating-linear-gradient(90deg, transparent, transparent calc(100% / ${controls.gridSize || 2} - 1px), rgba(255,255,255,0.15) calc(100% / ${controls.gridSize || 2} - 1px), rgba(255,255,255,0.15) calc(100% / ${controls.gridSize || 2}))`, pointerEvents: 'none', borderRadius: '8px' }} />

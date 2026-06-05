@@ -27,6 +27,7 @@ def image_layers():
     """
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     num_layers = int(data.get('numLayers', 4))
     description = data.get('description', 'auto')
     output_format = data.get('outputFormat', 'png')
@@ -153,6 +154,7 @@ def caption_layer():
     """
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
 
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
@@ -223,6 +225,7 @@ def edit_layer():
     """
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     user_prompt = data.get('prompt', '')
     edit_type = data.get('editType', 'freeform')
     project_id = int(data.get('projectId', 1))
@@ -367,6 +370,7 @@ def inpaint_layer():
     """
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     user_prompt = data.get('prompt', '').strip()
     mask_data_url = data.get('mask', '')
     canvas_width = int(data.get('canvasWidth', 1024))

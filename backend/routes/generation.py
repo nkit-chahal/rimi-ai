@@ -18,6 +18,7 @@ bp = Blueprint('generation', __name__)
 def describe_image():
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     creativity = int(data.get('creativity', 3))
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
@@ -65,6 +66,7 @@ def describe_image():
 def extract_design():
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -266,6 +268,7 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
 def extract_design_multi():
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -330,6 +333,7 @@ def extract_design_single():
     """Run extraction with a single specified model."""
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     model_id = data.get('modelId', '')
     
     if not filename:
@@ -471,6 +475,7 @@ def generate_inspirations():
     creativity = int(data.get('creativity', 3))
     count = int(data.get('count', 3))
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     image_url = data.get('imageUrl', '')
     if not user_prompt:
         return jsonify({'error': 'Prompt is required'}), 400

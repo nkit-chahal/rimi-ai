@@ -4,7 +4,11 @@ import sqlite3
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timezone, timedelta
 
+import bcrypt
+import jwt
+
 from db import db, rows_to_dicts
+from middleware import admin_required, login_required
 
 bp = Blueprint('admin', __name__)
 
@@ -44,7 +48,13 @@ def api_login():
         user_row = conn.execute("SELECT * FROM users WHERE email = ?", (email.strip(),)).fetchone()
         if user_row:
             user = dict(user_row)
-            if user['password'] == password:
+            stored_pw = user['password']
+            pw_ok = False
+            if stored_pw.startswith('$2'):
+                pw_ok = bcrypt.checkpw(password.encode('utf-8'), stored_pw.encode('utf-8'))
+            else:
+                pw_ok = stored_pw == password
+            if pw_ok:
                 last_login_at = _record_login_event(conn, user["id"], "email")
                 conn.commit()
                 # Resolve resetDays
@@ -69,16 +79,22 @@ def api_login():
                     "emailVerified": bool(user.get("email_verified", 0)),
                     "lastLoginAt": last_login_at,
                 }
-                return jsonify({'success': True, 'user': user_payload})
+                jwt_secret = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
+                token = jwt.encode(
+                    {'user_id': user['id'], 'role': user['role'], 'exp': datetime.now(timezone.utc) + timedelta(hours=24)},
+                    jwt_secret, algorithm='HS256'
+                )
+                return jsonify({'success': True, 'user': user_payload, 'token': token})
         return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
     except Exception as e:
         print(f"Error during login: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Login failed. Please try again.'}), 500
     finally:
         conn.close()
 
 
 @bp.route('/api/admin/logs', methods=['GET'])
+@admin_required
 def admin_logs():
     conn = db()
     try:
@@ -107,12 +123,13 @@ def admin_logs():
         })
     except Exception as e:
         print(f"Error fetching admin logs: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:
         conn.close()
 
 
 @bp.route('/api/admin/users', methods=['GET'])
+@admin_required
 def admin_users():
     conn = db()
     try:
@@ -140,17 +157,19 @@ def admin_users():
                 "avatarUrl": u.get("avatar_url"),
                 "emailVerified": bool(u.get("email_verified", 0)),
                 "lastLoginAt": u.get("last_login_at"),
-                "createdAt": u.get("created_at")
+                "createdAt": u.get("created_at"),
+                "status": u.get("status", "active")
             })
         return jsonify({'success': True, 'users': users})
     except Exception as e:
         print(f"Error fetching admin users: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:
         conn.close()
 
 
 @bp.route('/api/admin/adjust-credits', methods=['POST'])
+@admin_required
 def admin_adjust_credits():
     data = request.get_json() or {}
     user_id = data.get('userId')
@@ -187,12 +206,13 @@ def admin_adjust_credits():
         return jsonify({'success': True, 'message': 'Credits limit updated successfully'})
     except Exception as e:
         print(f"Error adjusting credits: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:
         conn.close()
 
 
 @bp.route('/api/admin/billing-overview', methods=['GET'])
+@admin_required
 def admin_billing_overview():
     conn = db()
     try:
@@ -297,7 +317,7 @@ def admin_billing_overview():
         })
     except Exception as e:
         print(f"Error fetching billing overview: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:
         conn.close()
 
@@ -343,6 +363,7 @@ def credit_pricing():
 
 # --------------- Admin Create User ---------------
 @bp.route('/api/admin/create-user', methods=['POST'])
+@admin_required
 def admin_create_user():
     data = request.get_json() or {}
     email = data.get('email', '').strip()
@@ -360,9 +381,10 @@ def admin_create_user():
 
     conn = db()
     try:
+        hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         conn.execute(
             "INSERT INTO users (email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (?,?,?,?,?,?,0,?,?)",
-            (email, password, name, initials, role, plan, credits_limit, reset_at)
+            (email, hashed_pw, name, initials, role, plan, credits_limit, reset_at)
         )
         conn.commit()
         return jsonify({'success': True, 'message': f'User {name} created successfully'})
@@ -370,13 +392,14 @@ def admin_create_user():
         return jsonify({'success': False, 'error': 'A user with this email already exists'}), 400
     except Exception as e:
         print(f"Error creating user: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:
         conn.close()
 
 
 # --------------- Admin Delete User ---------------
 @bp.route('/api/admin/delete-user/<int:user_id>', methods=['DELETE'])
+@admin_required
 def admin_delete_user(user_id):
     conn = db()
     try:
@@ -388,7 +411,43 @@ def admin_delete_user(user_id):
         return jsonify({'success': True, 'message': 'User deleted successfully'})
     except Exception as e:
         print(f"Error deleting user: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
+    finally:
+        conn.close()
+
+
+# --------------- Admin Suspend / Unsuspend User ---------------
+@bp.route('/api/admin/suspend-user/<int:user_id>', methods=['POST'])
+@admin_required
+def admin_suspend_user(user_id):
+    conn = db()
+    try:
+        user = conn.execute("SELECT id, role FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        if user['role'] == 'admin':
+            return jsonify({'success': False, 'error': 'Cannot suspend admin users'}), 403
+        conn.execute("UPDATE users SET status = 'suspended' WHERE id = ?", (user_id,))
+        conn.commit()
+        return jsonify({'success': True, 'message': 'User suspended successfully'})
+    except Exception as e:
+        print(f"Error suspending user: {e}")
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
+    finally:
+        conn.close()
+
+
+@bp.route('/api/admin/unsuspend-user/<int:user_id>', methods=['POST'])
+@admin_required
+def admin_unsuspend_user(user_id):
+    conn = db()
+    try:
+        conn.execute("UPDATE users SET status = 'active' WHERE id = ?", (user_id,))
+        conn.commit()
+        return jsonify({'success': True, 'message': 'User reactivated successfully'})
+    except Exception as e:
+        print(f"Error unsuspending user: {e}")
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:
         conn.close()
 

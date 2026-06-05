@@ -30,6 +30,7 @@ def vectorize_image():
 
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     image_url = data.get('imageUrl', '')
     engine = data.get('engine', 'local')
     num_colors = int(data.get('numColors', 32))
@@ -198,6 +199,7 @@ def vectorize_image():
 def upscale():
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     upscale_factor = data.get('upscaleFactor', 'x4')
 
     # Extract user_id early for credit check

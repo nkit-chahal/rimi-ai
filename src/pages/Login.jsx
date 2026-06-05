@@ -137,7 +137,6 @@ export default function Login({ onLogin, onGoToLanding }) {
             <div className="login-field">
               <div className="login-field-header">
                 <label htmlFor="password">Password</label>
-                <a href="#forgot" className="login-forgot" onClick={(e) => e.preventDefault()}>Forgot?</a>
               </div>
               <div className="login-input-wrapper">
                 <input

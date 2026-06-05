@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './index.css';
 import Studio from './pages/Studio';
 import Login from './pages/Login';
@@ -43,6 +43,13 @@ function App() {
     window.location.hash = '';
     setView('login');
   };
+
+  // Auto-logout when JWT expires (401 from any API call)
+  useEffect(() => {
+    const onSessionExpired = () => handleLogout();
+    window.addEventListener('rim:session-expired', onSessionExpired);
+    return () => window.removeEventListener('rim:session-expired', onSessionExpired);
+  }, []);
 
   if (view === 'studio') {
     if (!currentUser) {

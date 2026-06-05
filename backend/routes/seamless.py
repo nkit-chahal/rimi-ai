@@ -25,6 +25,7 @@ def generate_seamless():
     count = min(4, max(1, int(data.get('count', 4))))
     creativity = int(data.get('creativity', 3))
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     image_url = data.get('imageUrl', '')
     project_id = int(data.get('projectId', 1))
     user_id = data.get('userId') or data.get('user_id')
@@ -156,6 +157,7 @@ def generate_seamless():
 def make_seamless():
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     image_url = data.get('imageUrl', '')
     project_id = int(data.get('projectId', 1))
     user_id_raw = data.get('userId') or data.get('user_id')

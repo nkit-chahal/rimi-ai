@@ -32,3 +32,10 @@ DB_PATH = os.path.join(BASE_DIR, 'rimi_ai.sqlite3')
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def safe_filename(filename):
+    """Sanitize a filename to prevent path traversal."""
+    if not filename:
+        return None
+    return os.path.basename(filename).lstrip('.')

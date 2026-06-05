@@ -21,17 +21,23 @@ def get_studio_state(project_id=1, user_id=None):
     else:
         user = dict(user_row)
 
-    projects = rows_to_dicts(conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall())
+    projects = rows_to_dicts(conn.execute(
+        "SELECT * FROM projects WHERE user_id = ? OR user_id IS NULL ORDER BY updated_at DESC",
+        (user["id"],)
+    ).fetchall())
     if not projects:
-        # Auto-create a default project when the database is empty
+        # Auto-create a default project for this user
         now_iso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn.execute(
-            "INSERT INTO projects (id, name, status, thumbnail_url, hero_image_url, updated_at) VALUES (1, 'My First Project', 'Draft', '', '', ?)",
-            (now_iso,)
+            "INSERT INTO projects (id, name, status, thumbnail_url, hero_image_url, updated_at, user_id) VALUES (NULL, 'My First Project', 'Draft', '', '', ?, ?)",
+            (now_iso, user["id"])
         )
         conn.commit()
-        projects = rows_to_dicts(conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall())
-    project_row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        projects = rows_to_dicts(conn.execute(
+            "SELECT * FROM projects WHERE user_id = ? OR user_id IS NULL ORDER BY updated_at DESC",
+            (user["id"],)
+        ).fetchall())
+    project_row = conn.execute("SELECT * FROM projects WHERE id = ? AND (user_id = ? OR user_id IS NULL)", (project_id, user["id"])).fetchone()
     project = dict(project_row) if project_row else projects[0]
     variations = rows_to_dicts(conn.execute("SELECT * FROM pattern_variations WHERE project_id = ? ORDER BY id", (project["id"],)).fetchall())
     metrics_row = conn.execute("SELECT * FROM project_metrics WHERE project_id = ?", (project["id"],)).fetchone()

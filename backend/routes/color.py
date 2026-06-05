@@ -37,6 +37,7 @@ def extract_palette_api():
     num_colors = int(data.get('numColors', 5))
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
+    filename = os.path.basename(filename)
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         filepath = os.path.join(RESULTS_DIR, filename)
@@ -59,6 +60,7 @@ def recolor_api():
     user_id = data.get('userId') or data.get('user_id')
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
+    filename = os.path.basename(filename)
     user_id, error_response, status_code = require_credits(user_id)
     if error_response:
         return error_response, status_code
@@ -100,6 +102,7 @@ def generate_tech_pack_api():
     user_id = data.get('userId') or data.get('user_id')
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
+    filename = os.path.basename(filename)
     user_id, error_response, status_code = require_credits(user_id)
     if error_response:
         return error_response, status_code
@@ -168,6 +171,7 @@ def color_reduce_api():
     brand_palette_id = data.get('brandPaletteId')
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
+    filename = os.path.basename(filename)
     user_id, error_response, status_code = require_credits(user_id)
     if error_response:
         return error_response, status_code
@@ -220,6 +224,7 @@ def layer_export_api():
     user_id = data.get('userId') or data.get('user_id')
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
+    filename = os.path.basename(filename)
     if export_format not in ('zip', 'tiff'):
         return jsonify({'error': 'Format must be zip or tiff'}), 400
     user_id, error_response, status_code = require_credits(user_id)

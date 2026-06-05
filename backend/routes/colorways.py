@@ -92,6 +92,7 @@ def generate_colorways():
 
     if not filename or not palette:
         return jsonify({'error': 'Filename and palette are required'}), 400
+    filename = os.path.basename(filename)
 
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
@@ -189,6 +190,7 @@ def export_linecard():
 
     data = request.get_json()
     filename = data.get('filename', '')
+    filename = os.path.basename(filename) if filename else ''
     colorways_data = data.get('colorways', [])
     base_palette = data.get('basePalette', [])
     project_id = int(data.get('projectId', 1))

@@ -4,6 +4,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
+import jwt as pyjwt
 import requests
 from flask import Blueprint, jsonify, make_response, redirect, request
 
@@ -195,7 +196,7 @@ def google_callback():
                 INSERT INTO users
                 (email, password, name, initials, role, plan, credits_used, credits_limit,
                  reset_at, login_provider, google_sub, avatar_url, email_verified, created_at)
-                VALUES (?, ?, ?, ?, 'user', 'Business Studio', 0, 0, ?, 'google', ?, ?, 1, ?)
+                VALUES (?, ?, ?, ?, 'user', 'Free Trial', 0, 200, ?, 'google', ?, ?, 1, ?)
                 """,
                 (
                     email,
@@ -262,7 +263,12 @@ def google_exchange():
             (utc_now().isoformat(), token),
         )
         conn.commit()
-        return jsonify({"success": True, "user": user_payload(row)})
+        jwt_secret = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
+        jwt_token = pyjwt.encode(
+            {'user_id': row['user_id'], 'role': row['role'], 'exp': utc_now() + timedelta(hours=24)},
+            jwt_secret, algorithm='HS256'
+        )
+        return jsonify({"success": True, "user": user_payload(row), "token": jwt_token})
     except Exception as exc:
         conn.rollback()
         print(f"Google token exchange failed: {exc}")

@@ -67,6 +67,7 @@ def _image_to_data_uri(pil_img: Image.Image) -> str:
 
 def _load_pattern_image(filename: str = "", url: str = "") -> Image.Image:
     if filename:
+        filename = os.path.basename(filename)
         path = os.path.join(UPLOAD_DIR, filename)
         if not os.path.exists(path):
             raise FileNotFoundError(f"Pattern file not found: {filename}")
@@ -188,6 +189,7 @@ def _generate_single_mockup(
 def generate_mockup():
     data = request.get_json()
     pattern_filename = data.get("patternFilename", "")
+    pattern_filename = os.path.basename(pattern_filename) if pattern_filename else ""
     pattern_url = data.get("patternUrl", "")
     product_type = data.get("productType", "")
     category = data.get("category", "")
@@ -235,6 +237,7 @@ def generate_mockup():
 def generate_mockups_batch():
     data = request.get_json()
     pattern_filename = data.get("patternFilename", "")
+    pattern_filename = os.path.basename(pattern_filename) if pattern_filename else ""
     products = data.get("products", [])
     category = data.get("category", "")
     custom_prompt = data.get("customPrompt", "")

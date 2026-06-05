@@ -65,18 +65,28 @@ def download():
             directory = RESULTS_DIR if path.startswith('/results/') else UPLOAD_DIR
             return send_from_directory(directory, filename, as_attachment=True)
 
-    # For remote URLs (like replicate.delivery)
+    # For remote URLs — SSRF protection: only allow known domains
     import requests as http_requests
+
+    ALLOWED_DOWNLOAD_DOMAINS = {
+        'replicate.delivery',
+        'pbxt.replicate.delivery',
+        'replicate.com',
+        'oaidalleapiprodscus.blob.core.windows.net',
+        'storage.googleapis.com',
+    }
+
+    domain = parsed.hostname or ''
+    if not any(domain == d or domain.endswith('.' + d) for d in ALLOWED_DOWNLOAD_DOMAINS):
+        return jsonify({'error': f'Download from this domain is not allowed'}), 403
     
     try:
         print(f"  [Download Proxy] Streaming from {url}...")
         resp = http_requests.get(url, stream=True, timeout=30)
         resp.raise_for_status()
         
-        filename = url.split('/')[-1]
-        if '?' in filename:
-            filename = filename.split('?')[0]
-        if not filename:
+        filename = os.path.basename(parsed.path) or 'download.png'
+        if not filename or filename == '/':
             filename = 'download.png'
             
         headers = {
@@ -91,7 +101,7 @@ def download():
         return Response(generate(), headers=headers)
     except Exception as e:
         print(f"  [Download Proxy] Error: {e}")
-        return f'Failed to proxy download: {str(e)}', 500
+        return jsonify({'error': 'Failed to proxy download'}), 500
 
 
 # --------------- Exports ---------------

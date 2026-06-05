@@ -1,25 +1,28 @@
 """Projects CRUD routes."""
 import os
 import json
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone
 
 from config import UPLOAD_DIR, RESULTS_DIR
 from db import db
+from middleware import login_required
 
 bp = Blueprint('projects', __name__)
 
 
 # --------------- Projects CRUD ---------------
 @bp.route('/api/projects', methods=['POST'])
+@login_required
 def create_project():
     data = request.get_json() or {}
     name = data.get('name', 'New Project')
+    user_id = g.current_user['id']
     conn = db()
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     cur = conn.execute(
-        "INSERT INTO projects (name, status, thumbnail_url, hero_image_url, updated_at) VALUES (?, ?, ?, ?, ?)",
-        (name, "Draft", "/demo_geometric.png", "/demo_geometric.png", now)
+        "INSERT INTO projects (name, status, thumbnail_url, hero_image_url, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+        (name, "Draft", "/demo_geometric.png", "/demo_geometric.png", now, user_id)
     )
     project_id = cur.lastrowid
     conn.execute("INSERT INTO project_metrics (project_id) VALUES (?)", (project_id,))
@@ -31,9 +34,18 @@ def create_project():
 
 
 @bp.route('/api/projects/<int:project_id>', methods=['PUT'])
+@login_required
 def update_project(project_id):
     data = request.get_json() or {}
+    user_id = g.current_user['id']
     conn = db()
+
+    # Verify ownership
+    project = conn.execute("SELECT id FROM projects WHERE id = ? AND (user_id = ? OR user_id IS NULL)", (project_id, user_id)).fetchone()
+    if not project:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
+
     sets = []
     vals = []
     if 'name' in data and data['name']:
@@ -56,8 +68,16 @@ def update_project(project_id):
 
 
 @bp.route('/api/projects/<int:project_id>', methods=['DELETE'])
+@login_required
 def delete_project(project_id):
+    user_id = g.current_user['id']
     conn = db()
+
+    # Verify ownership
+    project = conn.execute("SELECT id FROM projects WHERE id = ? AND (user_id = ? OR user_id IS NULL)", (project_id, user_id)).fetchone()
+    if not project:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
     
     # 1. Collect all associated file URLs
     files_to_delete = set()
@@ -82,10 +102,10 @@ def delete_project(project_id):
     for url in files_to_delete:
         if not url: continue
         if url.startswith('/uploads/'):
-            path = os.path.join(UPLOAD_DIR, url.split('/')[-1])
+            path = os.path.join(UPLOAD_DIR, os.path.basename(url))
             if os.path.exists(path): os.remove(path)
         elif url.startswith('/results/'):
-            path = os.path.join(RESULTS_DIR, url.split('/')[-1])
+            path = os.path.join(RESULTS_DIR, os.path.basename(url))
             if os.path.exists(path): os.remove(path)
 
     # 3. Database Cascade Delete

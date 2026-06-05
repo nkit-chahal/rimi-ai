@@ -9,6 +9,7 @@ import requests
 from flask import Blueprint, jsonify, request
 
 from db import db, db_lock
+from middleware import login_required
 
 bp = Blueprint("billing", __name__)
 
@@ -24,6 +25,7 @@ def _razorpay_credentials():
 
 
 @bp.route("/api/create-order", methods=["POST"])
+@login_required
 def create_order():
     data = request.get_json() or {}
 
@@ -93,6 +95,7 @@ def create_order():
 
 
 @bp.route("/api/verify-payment", methods=["POST"])
+@login_required
 def verify_payment():
     data = request.get_json() or {}
     order_id = data.get("razorpay_order_id")

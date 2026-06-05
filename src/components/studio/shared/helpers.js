@@ -61,3 +61,46 @@ export function updateCreditsFromJson(data, setUser) {
         }));
     }
 }
+
+/**
+ * Centralized API fetch wrapper with authentication and error handling.
+ * Automatically includes Authorization header and checks response status.
+ * @param {string} url - The API endpoint URL (full URL or path starting with /api/)
+ * @param {object} options - Fetch options (method, body, headers, etc.)
+ * @param {string} token - Optional JWT token for authentication
+ * @returns {Promise<object>} Parsed JSON response
+ */
+export async function apiFetch(url, options = {}, token = null) {
+    const fullUrl = url.startsWith('http') ? url : `${API}${url}`;
+    const headers = { ...options.headers };
+    
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    // Don't set Content-Type for FormData (browser sets it with boundary)
+    if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
+    
+    const res = await fetch(fullUrl, { ...options, headers });
+    
+    if (!res.ok) {
+        // Auto-logout on 401 (expired or invalid token)
+        if (res.status === 401) {
+            window.dispatchEvent(new CustomEvent('rim:session-expired'));
+        }
+        let errorMessage = `Request failed (${res.status})`;
+        try {
+            const errorData = await res.json();
+            errorMessage = errorData.error || errorMessage;
+        } catch {
+            // Response wasn't JSON
+        }
+        const err = new Error(errorMessage);
+        err.status = res.status;
+        throw err;
+    }
+    
+    return res.json();
+}

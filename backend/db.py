@@ -8,6 +8,8 @@ import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
+
 from config import DB_PATH, UPLOAD_DIR, RESULTS_DIR
 
 db_lock = threading.Lock()
@@ -256,24 +258,12 @@ def init_db():
     ensure_column("users", "email_verified", "INTEGER NOT NULL DEFAULT 0")
     ensure_column("users", "last_login_at", "TEXT")
     ensure_column("users", "created_at", "TEXT")
+    ensure_column("users", "status", "TEXT NOT NULL DEFAULT 'active'")
+
+    # Data isolation: every project belongs to a user
+    ensure_column("projects", "user_id", "INTEGER REFERENCES users(id)")
+
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
-    conn.execute("""
-        UPDATE users
-        SET credits_limit = 0
-        WHERE login_provider = 'google'
-          AND credits_limit = 25000
-          AND NOT EXISTS (
-              SELECT 1 FROM payments
-              WHERE payments.user_id = users.id
-                AND payments.status = 'paid'
-          )
-          AND NOT EXISTS (
-              SELECT 1 FROM credit_transactions
-              WHERE credit_transactions.user_id = users.id
-                AND credit_transactions.credits > 0
-                AND credit_transactions.transaction_type IN ('recharge', 'admin_adjustment')
-          )
-    """)
     conn.commit()
     
     # Auto-migration of existing result files
@@ -331,13 +321,15 @@ def init_db():
     if user_count == 0:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         reset_at = (now + timedelta(days=30)).isoformat()
+        admin_pw = bcrypt.hashpw(b'Admin@123', bcrypt.gensalt()).decode('utf-8')
+        user_pw = bcrypt.hashpw(b'User@123', bcrypt.gensalt()).decode('utf-8')
         conn.execute(
-            "INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (1, 'admin@rimiai.pro', 'Admin@123', 'Admin', 'AD', 'admin', 'Enterprise', 0, 1000000, ?)",
-            (reset_at,)
+            "INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (1, 'admin@rimiai.pro', ?, 'Admin', 'AD', 'admin', 'Enterprise', 0, 1000000, ?)",
+            (admin_pw, reset_at)
         )
         conn.execute(
-            "INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (2, 'user@rimiai.pro', 'User@123', 'User', 'US', 'user', 'Business Pro', 0, 50000, ?)",
-            (reset_at,)
+            "INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (2, 'user@rimiai.pro', ?, 'User', 'US', 'user', 'Business Pro', 0, 50000, ?)",
+            (user_pw, reset_at)
         )
         conn.commit()
         print("Seeded database with admin and user accounts.")
