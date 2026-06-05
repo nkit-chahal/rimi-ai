@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify
 from PIL import Image, ImageOps
 
 from config import UPLOAD_DIR, RESULTS_DIR
-from auth import record_activity, log_export
+from auth import check_credits, get_updated_credits, record_activity, log_export
 
 bp = Blueprint('repeat', __name__)
 
@@ -22,6 +22,17 @@ def create_repeat_set():
     repeat_type = data.get('repeatType', 'block')
     dpi = int(data.get('dpi', 300))
     out_format = data.get('format', 'PNG').upper()
+    project_id = int(data.get('projectId', 1))
+    user_id = data.get('userId') or data.get('user_id')
+    if user_id:
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            user_id = None
+    ok, remaining, limit, used = check_credits(user_id)
+    if not ok:
+        return jsonify({'error': 'Insufficient AI credits. Please recharge to continue.',
+                        'creditsUsed': used, 'creditsLimit': limit}), 403
     try:
         if image_url and image_url.startswith('http'):
             resp = http_requests.get(image_url, timeout=30)
@@ -67,13 +78,14 @@ def create_repeat_set():
         result_name = f"repeat_{grid_size}x{grid_size}_{uuid.uuid4().hex[:8]}.{ext}"
         result_path = os.path.join(RESULTS_DIR, result_name)
         tiled.save(result_path, save_format, quality=95, dpi=(dpi, dpi))
-        project_id = int(data.get('projectId', 1))
-        record_activity(project_id, 'export', 1, 50)
+        record_activity(project_id, 'export', 1, 50, user_id=user_id)
+        updated_credits = get_updated_credits(user_id)
         input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
         log_export(project_id, result_name, input_fn, "Repeat Set",
                    {"gridSize": grid_size, "scale": scale, "repeatType": repeat_type, "dpi": dpi, "format": save_format})
         return jsonify({'success': True, 'resultUrl': f'/results/{result_name}',
-                        'gridSize': grid_size, 'dimensions': f'{tiled.size[0]}x{tiled.size[1]}', 'dpi': dpi, 'format': save_format})
+                        'gridSize': grid_size, 'dimensions': f'{tiled.size[0]}x{tiled.size[1]}', 'dpi': dpi, 'format': save_format,
+                        **updated_credits})
     except Exception as e:
         print(f"  [Repeat Set] Error: {e}")
         return jsonify({'error': str(e)}), 500

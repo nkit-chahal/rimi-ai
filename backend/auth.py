@@ -56,12 +56,12 @@ def log_replicate_call(project_id, model_name, duration, credits, cost_usd):
 def check_credits(user_id):
     """Check if a user has remaining credits. Returns (ok, remaining, limit, used)."""
     if not user_id:
-        return True, 999999, 999999, 0
+        return False, 0, 0, 0
     conn = db()
     try:
         user = conn.execute("SELECT credits_used, credits_limit FROM users WHERE id = ?", (user_id,)).fetchone()
         if not user:
-            return True, 999999, 999999, 0
+            return False, 0, 0, 0
         remaining = user["credits_limit"] - user["credits_used"]
         return remaining > 0, remaining, user["credits_limit"], user["credits_used"]
     finally:
@@ -111,7 +111,7 @@ def record_activity(project_id, activity_type='export', count=1, credits=50, use
         )
     
     if not user_id:
-        user_id = 2
+        raise ValueError("user_id is required to record billable activity")
     conn.execute("UPDATE users SET credits_used = credits_used + ? WHERE id = ?", (credits, user_id))
     conn.execute(
         """

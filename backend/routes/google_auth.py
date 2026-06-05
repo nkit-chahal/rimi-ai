@@ -195,7 +195,7 @@ def google_callback():
                 INSERT INTO users
                 (email, password, name, initials, role, plan, credits_used, credits_limit,
                  reset_at, login_provider, google_sub, avatar_url, email_verified, created_at)
-                VALUES (?, ?, ?, ?, 'user', 'Business Studio', 0, 25000, ?, 'google', ?, ?, 1, ?)
+                VALUES (?, ?, ?, ?, 'user', 'Business Studio', 0, 0, ?, 'google', ?, ?, 1, ?)
                 """,
                 (
                     email,

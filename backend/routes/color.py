@@ -17,6 +17,19 @@ from techpack_utils import generate_tech_pack
 bp = Blueprint('color', __name__)
 
 
+def require_credits(user_id):
+    if user_id:
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            user_id = None
+    ok, remaining, limit, used = check_credits(user_id)
+    if not ok:
+        return user_id, jsonify({'error': 'Insufficient AI credits. Please recharge to continue.',
+                                 'creditsUsed': used, 'creditsLimit': limit}), 403
+    return user_id, None, None
+
+
 @bp.route('/api/extract-palette', methods=['POST'])
 def extract_palette_api():
     data = request.get_json()
@@ -46,9 +59,9 @@ def recolor_api():
     user_id = data.get('userId') or data.get('user_id')
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
-    if user_id:
-        try: user_id = int(user_id)
-        except ValueError: user_id = None
+    user_id, error_response, status_code = require_credits(user_id)
+    if error_response:
+        return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         filepath = os.path.join(RESULTS_DIR, filename)
@@ -87,9 +100,9 @@ def generate_tech_pack_api():
     user_id = data.get('userId') or data.get('user_id')
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
-    if user_id:
-        try: user_id = int(user_id)
-        except ValueError: user_id = None
+    user_id, error_response, status_code = require_credits(user_id)
+    if error_response:
+        return error_response, status_code
     filepath = os.path.join(RESULTS_DIR, filename)
     if not os.path.exists(filepath):
         filepath = os.path.join(UPLOAD_DIR, filename)
@@ -155,9 +168,9 @@ def color_reduce_api():
     brand_palette_id = data.get('brandPaletteId')
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
-    if user_id:
-        try: user_id = int(user_id)
-        except ValueError: user_id = None
+    user_id, error_response, status_code = require_credits(user_id)
+    if error_response:
+        return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         filepath = os.path.join(RESULTS_DIR, filename)
@@ -209,9 +222,9 @@ def layer_export_api():
         return jsonify({'error': 'Filename is required'}), 400
     if export_format not in ('zip', 'tiff'):
         return jsonify({'error': 'Format must be zip or tiff'}), 400
-    if user_id:
-        try: user_id = int(user_id)
-        except ValueError: user_id = None
+    user_id, error_response, status_code = require_credits(user_id)
+    if error_response:
+        return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         filepath = os.path.join(RESULTS_DIR, filename)

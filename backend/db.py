@@ -257,6 +257,23 @@ def init_db():
     ensure_column("users", "last_login_at", "TEXT")
     ensure_column("users", "created_at", "TEXT")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
+    conn.execute("""
+        UPDATE users
+        SET credits_limit = 0
+        WHERE login_provider = 'google'
+          AND credits_limit = 25000
+          AND NOT EXISTS (
+              SELECT 1 FROM payments
+              WHERE payments.user_id = users.id
+                AND payments.status = 'paid'
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM credit_transactions
+              WHERE credit_transactions.user_id = users.id
+                AND credit_transactions.credits > 0
+                AND credit_transactions.transaction_type IN ('recharge', 'admin_adjustment')
+          )
+    """)
     conn.commit()
     
     # Auto-migration of existing result files
