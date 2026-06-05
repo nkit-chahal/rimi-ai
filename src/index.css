@@ -10097,6 +10097,51 @@ input[type=range]::-moz-range-track {
   cursor: not-allowed;
 }
 
+.login-oauth-section {
+  margin-top: 1.5rem;
+}
+
+.login-google-btn {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  padding: 0.82rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 0.94rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, opacity 0.22s ease;
+}
+
+.login-google-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.26);
+}
+
+.login-google-btn:disabled {
+  opacity: 0.68;
+  cursor: not-allowed;
+}
+
+.login-google-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #4285f4 0 25%, #34a853 25% 50%, #fbbc05 50% 75%, #ea4335 75% 100%);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
 /* Quick-auth Styles */
 .login-quick-auth {
   margin-top: 2rem;

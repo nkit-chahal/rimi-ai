@@ -197,7 +197,67 @@ def init_db():
             created_at TEXT NOT NULL,
             FOREIGN KEY(project_id) REFERENCES projects(id)
         );
+        CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            provider TEXT NOT NULL DEFAULT 'razorpay',
+            provider_order_id TEXT NOT NULL UNIQUE,
+            provider_payment_id TEXT,
+            amount INTEGER NOT NULL,
+            currency TEXT NOT NULL DEFAULT 'INR',
+            credits INTEGER NOT NULL DEFAULT 0,
+            pack_id TEXT,
+            receipt TEXT,
+            status TEXT NOT NULL DEFAULT 'created',
+            created_at TEXT NOT NULL,
+            paid_at TEXT,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS credit_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            payment_id INTEGER,
+            project_id INTEGER,
+            transaction_type TEXT NOT NULL,
+            credits INTEGER NOT NULL,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            FOREIGN KEY(payment_id) REFERENCES payments(id),
+            FOREIGN KEY(project_id) REFERENCES projects(id)
+        );
+        CREATE TABLE IF NOT EXISTS login_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            provider TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS oauth_login_tokens (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            expires_at TEXT NOT NULL,
+            used_at TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        );
     """)
+
+    def ensure_column(table, column, definition):
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    ensure_column("users", "login_provider", "TEXT NOT NULL DEFAULT 'email'")
+    ensure_column("users", "google_sub", "TEXT")
+    ensure_column("users", "avatar_url", "TEXT")
+    ensure_column("users", "email_verified", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column("users", "last_login_at", "TEXT")
+    ensure_column("users", "created_at", "TEXT")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
+    conn.commit()
     
     # Auto-migration of existing result files
     try:

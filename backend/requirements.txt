@@ -5,6 +5,7 @@ gunicorn
 numpy
 pillow
 python-dotenv
+razorpay
 replicate
 requests
 vtracer

@@ -113,6 +113,14 @@ def record_activity(project_id, activity_type='export', count=1, credits=50, use
     if not user_id:
         user_id = 2
     conn.execute("UPDATE users SET credits_used = credits_used + ? WHERE id = ?", (credits, user_id))
+    conn.execute(
+        """
+        INSERT INTO credit_transactions
+        (user_id, project_id, transaction_type, credits, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (user_id, project_id, activity_type, -abs(int(credits)), f"{activity_type} usage", now)
+    )
     conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
     conn.commit()
     conn.close()

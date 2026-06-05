@@ -11,6 +11,25 @@ bp = Blueprint('admin', __name__)
 
 # --------------- Authentication & Administrator Endpoints ---------------
 
+def _record_login_event(conn, user_id, provider):
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    conn.execute(
+        """
+        INSERT INTO login_events (user_id, provider, ip_address, user_agent, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            user_id,
+            provider,
+            request.headers.get("X-Forwarded-For", request.remote_addr),
+            request.headers.get("User-Agent", ""),
+            now,
+        ),
+    )
+    conn.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (now, user_id))
+    return now
+
+
 @bp.route('/api/login', methods=['POST'])
 def api_login():
     data = request.get_json() or {}
@@ -26,6 +45,8 @@ def api_login():
         if user_row:
             user = dict(user_row)
             if user['password'] == password:
+                last_login_at = _record_login_event(conn, user["id"], "email")
+                conn.commit()
                 # Resolve resetDays
                 try:
                     reset_at = datetime.fromisoformat(user["reset_at"])
@@ -43,6 +64,10 @@ def api_login():
                     "creditsUsed": user["credits_used"],
                     "creditsLimit": user["credits_limit"],
                     "resetDays": reset_days,
+                    "loginProvider": user.get("login_provider", "email"),
+                    "avatarUrl": user.get("avatar_url"),
+                    "emailVerified": bool(user.get("email_verified", 0)),
+                    "lastLoginAt": last_login_at,
                 }
                 return jsonify({'success': True, 'user': user_payload})
         return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
@@ -59,14 +84,26 @@ def admin_logs():
     try:
         replicate_logs_rows = conn.execute("SELECT * FROM replicate_logs ORDER BY id DESC").fetchall()
         exports_rows = conn.execute("SELECT * FROM exports ORDER BY id DESC").fetchall()
+        login_event_rows = conn.execute("""
+            SELECT
+                le.*,
+                u.name AS user_name,
+                u.email AS user_email
+            FROM login_events le
+            LEFT JOIN users u ON u.id = le.user_id
+            ORDER BY le.created_at DESC
+            LIMIT 100
+        """).fetchall()
         
         replicate_logs = rows_to_dicts(replicate_logs_rows)
         exports = rows_to_dicts(exports_rows)
+        login_events = rows_to_dicts(login_event_rows)
         
         return jsonify({
             'success': True,
             'replicateLogs': replicate_logs,
-            'exports': exports
+            'exports': exports,
+            'loginEvents': login_events
         })
     except Exception as e:
         print(f"Error fetching admin logs: {e}")
@@ -97,7 +134,13 @@ def admin_users():
                 "plan": u["plan"],
                 "creditsUsed": u["credits_used"],
                 "creditsLimit": u["credits_limit"],
-                "resetDays": reset_days
+                "resetDays": reset_days,
+                "loginProvider": u.get("login_provider", "email"),
+                "googleSub": u.get("google_sub"),
+                "avatarUrl": u.get("avatar_url"),
+                "emailVerified": bool(u.get("email_verified", 0)),
+                "lastLoginAt": u.get("last_login_at"),
+                "createdAt": u.get("created_at")
             })
         return jsonify({'success': True, 'users': users})
     except Exception as e:
@@ -124,13 +167,136 @@ def admin_adjust_credits():
         
     conn = db()
     try:
+        existing_user = conn.execute("SELECT credits_limit FROM users WHERE id = ?", (user_id,)).fetchone()
+        previous_limit = existing_user["credits_limit"] if existing_user else None
         cur = conn.execute("UPDATE users SET credits_limit = ? WHERE id = ?", (credits_limit, user_id))
+        if cur.rowcount:
+            delta = credits_limit - previous_limit
+            created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+            conn.execute(
+                """
+                INSERT INTO credit_transactions
+                (user_id, transaction_type, credits, note, created_at)
+                VALUES (?, 'admin_adjustment', ?, ?, ?)
+                """,
+                (user_id, delta, "Admin credit limit adjustment", created_at)
+            )
         conn.commit()
         if cur.rowcount == 0:
             return jsonify({'success': False, 'error': 'User not found'}), 404
         return jsonify({'success': True, 'message': 'Credits limit updated successfully'})
     except Exception as e:
         print(f"Error adjusting credits: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@bp.route('/api/admin/billing-overview', methods=['GET'])
+def admin_billing_overview():
+    conn = db()
+    try:
+        users = rows_to_dicts(conn.execute("""
+            SELECT id, email, name, initials, role, plan, credits_used, credits_limit,
+                   reset_at, login_provider, avatar_url, email_verified, last_login_at, created_at
+            FROM users
+            ORDER BY id
+        """).fetchall())
+
+        usage_rows = conn.execute("""
+            SELECT
+                user_id,
+                COUNT(CASE WHEN transaction_type IN ('generation', 'export') THEN 1 END) AS api_calls,
+                COALESCE(SUM(CASE WHEN credits < 0 THEN -credits ELSE 0 END), 0) AS credits_spent,
+                COALESCE(SUM(CASE WHEN transaction_type IN ('recharge', 'admin_adjustment') AND credits > 0 THEN credits ELSE 0 END), 0) AS credits_added,
+                COALESCE(SUM(CASE WHEN transaction_type = 'recharge' AND credits > 0 THEN credits ELSE 0 END), 0) AS recharge_credits
+            FROM credit_transactions
+            GROUP BY user_id
+        """).fetchall()
+        usage_by_user = {row["user_id"]: dict(row) for row in usage_rows}
+
+        payment_rows = rows_to_dicts(conn.execute("""
+            SELECT
+                p.*,
+                u.name AS user_name,
+                u.email AS user_email
+            FROM payments p
+            LEFT JOIN users u ON u.id = p.user_id
+            ORDER BY p.created_at DESC
+            LIMIT 100
+        """).fetchall())
+
+        recent_transactions = rows_to_dicts(conn.execute("""
+            SELECT
+                ct.*,
+                u.name AS user_name,
+                u.email AS user_email
+            FROM credit_transactions ct
+            LEFT JOIN users u ON u.id = ct.user_id
+            ORDER BY ct.created_at DESC
+            LIMIT 150
+        """).fetchall())
+
+        payment_summary = conn.execute("""
+            SELECT
+                COUNT(*) AS total_orders,
+                COUNT(CASE WHEN status = 'paid' THEN 1 END) AS paid_orders,
+                COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) AS paid_amount,
+                COALESCE(SUM(CASE WHEN status = 'paid' THEN credits ELSE 0 END), 0) AS paid_credits
+            FROM payments
+        """).fetchone()
+
+        total_api_calls = 0
+        total_credits_spent = 0
+        total_recharge_credits = 0
+        user_summaries = []
+        for user in users:
+            usage = usage_by_user.get(user["id"], {})
+            api_calls = int(usage.get("api_calls") or 0)
+            credits_spent = int(usage.get("credits_spent") or user["credits_used"] or 0)
+            recharge_credits = int(usage.get("recharge_credits") or 0)
+            total_api_calls += api_calls
+            total_credits_spent += credits_spent
+            total_recharge_credits += recharge_credits
+            user_summaries.append({
+                "id": user["id"],
+                "email": user["email"],
+                "name": user["name"],
+                "initials": user["initials"],
+                "role": user["role"],
+                "plan": user["plan"],
+                "creditsUsed": user["credits_used"],
+                "creditsLimit": user["credits_limit"],
+                "apiCalls": api_calls,
+                "creditsSpent": credits_spent,
+                "creditsAdded": int(usage.get("credits_added") or 0),
+                "rechargeCredits": recharge_credits,
+                "remainingCredits": max(0, user["credits_limit"] - user["credits_used"]),
+                "loginProvider": user.get("login_provider", "email"),
+                "avatarUrl": user.get("avatar_url"),
+                "emailVerified": bool(user.get("email_verified", 0)),
+                "lastLoginAt": user.get("last_login_at"),
+                "createdAt": user.get("created_at"),
+            })
+
+        return jsonify({
+            'success': True,
+            'summary': {
+                'totalUsers': len(users),
+                'totalApiCalls': total_api_calls,
+                'totalCreditsSpent': total_credits_spent,
+                'totalRechargeCredits': total_recharge_credits,
+                'totalOrders': payment_summary["total_orders"],
+                'paidOrders': payment_summary["paid_orders"],
+                'paidAmount': payment_summary["paid_amount"],
+                'paidCredits': payment_summary["paid_credits"],
+            },
+            'users': user_summaries,
+            'payments': payment_rows,
+            'transactions': recent_transactions,
+        })
+    except Exception as e:
+        print(f"Error fetching billing overview: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         conn.close()

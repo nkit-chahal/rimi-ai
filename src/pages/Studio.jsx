@@ -32,6 +32,13 @@ async function getCroppedImg(imageElement, crop, fileName) {
 
 const localApiHosts = new Set(['localhost', '127.0.0.1']);
 const API = import.meta.env.VITE_API_URL || (localApiHosts.has(window.location.hostname) ? 'http://localhost:3001' : '');
+const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID || '';
+
+const CREDIT_PACKS = [
+    { id: 'starter', label: 'Starter Credits', credits: 5000, amount: 49900 },
+    { id: 'pro', label: 'Pro Credits', credits: 12000, amount: 99900 },
+    { id: 'studio', label: 'Studio Credits', credits: 50000, amount: 299900 },
+];
 
 const forceDownload = async (e, url) => {
     e.preventDefault();
@@ -108,6 +115,7 @@ const NAV = [
             { id: 'library', label: 'Brand Library', icon: 'M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z' },
             { id: 'measurement', label: 'Measurement', icon: 'M2 2h6v6H2zM16 2h6v6h-6zM2 16h6v6H2zM16 16h6v6h-6zM8 5h8M8 19h8M5 8v8M19 8v8' },
             { id: 'exports', label: 'Exports', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3' },
+            { id: 'billing', label: 'Billing', icon: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM12 6v12M8 10h6a2 2 0 010 4h-4a2 2 0 000 4h6' },
         ],
     },
 ];
@@ -238,7 +246,7 @@ const emptyState = {
 
 export default function Studio({ onBack, currentUser, currentToken, onLogout }) {
     const adminTools = ['admin-dashboard', 'admin-users', 'admin-projects', 'admin-logs', 'admin-credits'];
-    const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports'];
+    const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing'];
     const isAdmin = currentUser?.role === 'admin';
     const [tool, _setTool] = useState(() => {
         const hash = window.location.hash.replace('#', '');
@@ -259,6 +267,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [isDrag, setIsDrag] = useState(false);
     const [error, setError] = useState('');
     const [isLoadingState, setIsLoadingState] = useState(true);
+    const [paymentStatus, setPaymentStatus] = useState({ loadingPackId: null, message: '', error: '' });
 
     const fileRef = useRef(null);
     const canvasRef = useRef(null);
@@ -411,7 +420,24 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [creditAdjustmentAmount, setCreditAdjustmentAmount] = useState(5000);
     const [creditFeedback, setCreditFeedback] = useState('');
     const [replicateLogs, setReplicateLogs] = useState([]);
+    const [loginEvents, setLoginEvents] = useState([]);
     const [replicateLogsLoading, setReplicateLogsLoading] = useState(false);
+    const [adminBilling, setAdminBilling] = useState({
+        summary: {
+            totalUsers: 0,
+            totalApiCalls: 0,
+            totalCreditsSpent: 0,
+            totalRechargeCredits: 0,
+            totalOrders: 0,
+            paidOrders: 0,
+            paidAmount: 0,
+            paidCredits: 0,
+        },
+        users: [],
+        payments: [],
+        transactions: [],
+    });
+    const [adminBillingLoading, setAdminBillingLoading] = useState(false);
 
     const fetchAdminUsers = useCallback(() => {
         setAdminUsersLoading(true);
@@ -429,9 +455,41 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             .finally(() => setAdminUsersLoading(false));
     }, [adminSelectedUserId]);
 
+    const fetchAdminBilling = useCallback(() => {
+        setAdminBillingLoading(true);
+        fetch(`${API}/api/admin/billing-overview`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    setAdminBilling({
+                        summary: d.summary || {
+                            totalUsers: 0,
+                            totalApiCalls: 0,
+                            totalCreditsSpent: 0,
+                            totalRechargeCredits: 0,
+                            totalOrders: 0,
+                            paidOrders: 0,
+                            paidAmount: 0,
+                            paidCredits: 0,
+                        },
+                        users: d.users || [],
+                        payments: d.payments || [],
+                        transactions: d.transactions || [],
+                    });
+                    if (!adminSelectedUserId && d.users?.length > 0) setAdminSelectedUserId(d.users[0].id);
+                }
+            })
+            .catch(err => console.error('Failed to fetch admin billing:', err))
+            .finally(() => setAdminBillingLoading(false));
+    }, [adminSelectedUserId, currentToken]);
+
     useEffect(() => {
         if (isAdmin && (tool === 'admin-users' || tool === 'admin-credits')) fetchAdminUsers();
     }, [tool, fetchAdminUsers]);
+
+    useEffect(() => {
+        if (isAdmin && (tool === 'admin-credits' || tool === 'admin-dashboard')) fetchAdminBilling();
+    }, [tool, fetchAdminBilling, isAdmin]);
 
     useEffect(() => {
         if (tool === 'admin-logs') {
@@ -441,6 +499,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 .then(d => {
                     if (d.success && d.replicateLogs) {
                         setReplicateLogs(d.replicateLogs);
+                        setLoginEvents(d.loginEvents || []);
                     }
                 })
                 .catch(err => console.error('Failed to fetch admin logs:', err))
@@ -3140,6 +3199,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         upscale: 'Super Resolution',
         library: 'Brand Library',
         exports: 'Exports',
+        billing: 'Billing',
         'admin-users': 'User Management',
         'admin-logs': 'Activity Logs',
         'admin-credits': 'Credits & Billing',
@@ -3876,6 +3936,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 if (d.success) {
                     setCreditFeedback(`Successfully updated credits for ${selectedUser.name}! New limit: ${newLimit.toLocaleString()}`);
                     fetchAdminUsers();
+                    fetchAdminBilling();
                 } else {
                     setCreditFeedback(`Error: ${d.error || 'Failed to update credits'}`);
                 }
@@ -4131,9 +4192,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                 <tr>
                                     <th>User</th>
                                     <th>Email</th>
+                                    <th>Login</th>
                                     <th>Role</th>
                                     <th>Plan</th>
                                     <th>Credits</th>
+                                    <th>Last Login</th>
                                     <th>Free Gens</th>
                                     <th>Actions</th>
                                 </tr>
@@ -4148,9 +4211,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                             </div>
                                         </td>
                                         <td style={{ fontSize: '12px' }}>{u.email}</td>
+                                        <td>
+                                            <span className="model-tag" style={{ textTransform: 'capitalize' }}>
+                                                {u.loginProvider || 'email'}
+                                            </span>
+                                        </td>
                                         <td><span className={`model-tag ${u.role === 'admin' ? 'admin' : ''}`}>{u.role}</span></td>
                                         <td><span className="model-tag">{u.plan}</span></td>
                                         <td style={{ fontSize: '12px' }}>{u.creditsUsed?.toLocaleString()} / {u.creditsLimit?.toLocaleString()}</td>
+                                        <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                            {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never'}
+                                        </td>
                                         <td style={{ fontSize: '12px', fontWeight: 600, color: '#22c55e' }}>{u.freeGenerations || 0}</td>
                                         <td>
                                             <button style={{ padding: '3px 10px', fontSize: '11px', background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440', borderRadius: '6px', cursor: 'pointer' }} onClick={() => handleDeleteUser(u.id, u.name)}>Delete</button>
@@ -4248,11 +4319,61 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     )}
                 </div>
             </div>
+            <div className="admin-card glassmorphism-card replicate-logs-section" style={{ marginTop: '16px' }}>
+                <div className="admin-card-header" style={{ justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <I d="M15 7a3 3 0 11-6 0 3 3 0 016 0zm4 13v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2m12-9l2 2 4-4" s={20} />
+                        <h3>Login Events</h3>
+                    </div>
+                    <span className="admin-live-badge"><span className="pulse"></span> AUTH FEED</span>
+                </div>
+                <div className="admin-table-container">
+                    {replicateLogsLoading ? (
+                        <div className="st-error" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', textAlign: 'center', padding: '32px 0' }}>Loading login events...</div>
+                    ) : loginEvents.length === 0 ? (
+                        <div className="st-error" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', textAlign: 'center', padding: '32px 0' }}>No login events yet.</div>
+                    ) : (
+                        <table className="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Provider</th>
+                                    <th>IP Address</th>
+                                    <th>User Agent</th>
+                                    <th>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loginEvents.map((event, index) => (
+                                    <tr key={event.id || index}>
+                                        <td>
+                                            <div style={{ fontWeight: 700 }}>{event.user_name || 'Unknown user'}</div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{event.user_email || `User #${event.user_id}`}</div>
+                                        </td>
+                                        <td><span className="model-tag" style={{ textTransform: 'capitalize' }}>{event.provider}</span></td>
+                                        <td style={{ fontSize: 12 }}>{event.ip_address || '-'}</td>
+                                        <td style={{ fontSize: 12, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.user_agent || '-'}</td>
+                                        <td className="time-tag">{event.created_at}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
         </div>
     );
 
     const renderAdminCredits = () => {
         const selectedUser = adminUsers.find(u => u.id === adminSelectedUserId);
+        const billingUsers = adminBilling.users.length ? adminBilling.users : adminUsers.map(u => ({
+            ...u,
+            apiCalls: 0,
+            creditsSpent: u.creditsUsed || 0,
+            creditsAdded: 0,
+            rechargeCredits: 0,
+            remainingCredits: Math.max(0, (u.creditsLimit || 0) - (u.creditsUsed || 0)),
+        }));
         return (
             <div className="admin-workspace-panel animate-fade-in">
                 {renderBudgetBanner()}
@@ -4318,6 +4439,140 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             </div>
                         </form>
                     )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginTop: '16px' }}>
+                    {[
+                        { label: 'Paid Orders', value: adminBilling.summary.paidOrders, sub: `${adminBilling.summary.totalOrders} total orders` },
+                        { label: 'Recharge Revenue', value: `Rs. ${(adminBilling.summary.paidAmount / 100).toLocaleString('en-IN')}`, sub: 'verified Razorpay payments' },
+                        { label: 'Credits Recharged', value: adminBilling.summary.totalRechargeCredits.toLocaleString(), sub: `${adminBilling.summary.paidCredits.toLocaleString()} paid credits` },
+                        { label: 'Tracked API Calls', value: adminBilling.summary.totalApiCalls.toLocaleString(), sub: `${adminBilling.summary.totalCreditsSpent.toLocaleString()} credits spent` },
+                    ].map((item) => (
+                        <div key={item.label} className="admin-card glassmorphism-card" style={{ padding: '16px' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{item.label}</span>
+                            <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px' }}>{item.value}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '3px' }}>{item.sub}</div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="admin-card glassmorphism-card" style={{ marginTop: '16px' }}>
+                    <div className="admin-card-header" style={{ justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <I d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" s={20} />
+                            <h3>User Credit, Recharge & API Usage</h3>
+                        </div>
+                        <button className="admin-btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={fetchAdminBilling} disabled={adminBillingLoading}>
+                            {adminBillingLoading ? 'Refreshing...' : 'Refresh'}
+                        </button>
+                    </div>
+                    <div className="admin-table-container">
+                        {adminBillingLoading && billingUsers.length === 0 ? (
+                            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading billing overview...</div>
+                        ) : (
+                            <table className="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Login</th>
+                                        <th>Plan</th>
+                                        <th>API Calls</th>
+                                        <th>Credits Used</th>
+                                        <th>Recharged</th>
+                                        <th>Limit</th>
+                                        <th>Remaining</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {billingUsers.map(u => (
+                                        <tr key={u.id}>
+                                            <td>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: u.role === 'admin' ? '#6366f1' : '#06b6d4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700 }}>
+                                                        {u.initials}
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontWeight: 700 }}>{u.name}</div>
+                                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{u.email}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span className="model-tag" style={{ textTransform: 'capitalize' }}>{u.loginProvider || 'email'}</span>
+                                            </td>
+                                            <td>{u.plan}</td>
+                                            <td className="strong">{Number(u.apiCalls || 0).toLocaleString()}</td>
+                                            <td>{Number(u.creditsSpent || u.creditsUsed || 0).toLocaleString()}</td>
+                                            <td style={{ color: '#16a34a', fontWeight: 700 }}>+{Number(u.rechargeCredits || 0).toLocaleString()}</td>
+                                            <td>{Number(u.creditsLimit || 0).toLocaleString()}</td>
+                                            <td>{Number(u.remainingCredits || 0).toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)', gap: '16px', marginTop: '16px' }}>
+                    <div className="admin-card glassmorphism-card">
+                        <div className="admin-card-header">
+                            <I d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z" s={20} />
+                            <h3>Recent Razorpay Payments</h3>
+                        </div>
+                        <div className="admin-table-container">
+                            {adminBilling.payments.length === 0 ? (
+                                <div style={{ padding: '28px', textAlign: 'center', color: 'var(--text-secondary)' }}>No payment records yet.</div>
+                            ) : (
+                                <table className="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th>User</th>
+                                            <th>Amount</th>
+                                            <th>Credits</th>
+                                            <th>Status</th>
+                                            <th>Order</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {adminBilling.payments.slice(0, 12).map(p => (
+                                            <tr key={p.id}>
+                                                <td>
+                                                    <div style={{ fontWeight: 700 }}>{p.user_name || 'Unknown'}</div>
+                                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{p.user_email || '-'}</div>
+                                                </td>
+                                                <td>Rs. {(Number(p.amount || 0) / 100).toLocaleString('en-IN')}</td>
+                                                <td>{Number(p.credits || 0).toLocaleString()}</td>
+                                                <td><span className={`st-pl-run-status ${p.status}`}>{p.status}</span></td>
+                                                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{p.provider_order_id}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="admin-card glassmorphism-card">
+                        <div className="admin-card-header">
+                            <I d="M9 12h6M9 16h6M9 8h6M5 3h14v18H5z" s={20} />
+                            <h3>Credit Ledger</h3>
+                        </div>
+                        <div style={{ padding: '8px 18px 18px', display: 'grid', gap: '8px', maxHeight: 420, overflow: 'auto' }}>
+                            {adminBilling.transactions.length === 0 ? (
+                                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>No credit transactions yet.</div>
+                            ) : adminBilling.transactions.slice(0, 20).map(tx => (
+                                <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
+                                    <div>
+                                        <div style={{ fontSize: 13, fontWeight: 700 }}>{tx.user_name || 'Unknown'} <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>- {tx.transaction_type}</span></div>
+                                        <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{tx.note || tx.created_at}</div>
+                                    </div>
+                                    <span style={{ fontWeight: 800, color: Number(tx.credits) >= 0 ? '#16a34a' : '#ef4444' }}>
+                                        {Number(tx.credits) >= 0 ? '+' : ''}{Number(tx.credits).toLocaleString()}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
         );
@@ -5159,12 +5414,174 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         );
     };
 
+    const startRazorpayCheckout = async (pack) => {
+        setPaymentStatus({ loadingPackId: pack.id, message: '', error: '' });
+
+        if (!RAZORPAY_KEY_ID) {
+            setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay key id is not configured.' });
+            return;
+        }
+
+        if (!window.Razorpay) {
+            setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay checkout script is not loaded.' });
+            return;
+        }
+
+        try {
+            const orderRes = await fetch(`${API}/api/create-order`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    amount: pack.amount,
+                    currency: 'INR',
+                    receipt: `rimi_${user?.id || 'guest'}_${pack.id}_${Date.now()}`,
+                    userId: user?.id,
+                    packId: pack.id,
+                    credits: pack.credits,
+                }),
+            });
+            const orderData = await orderRes.json().catch(() => ({}));
+            if (!orderRes.ok || !orderData.success) {
+                throw new Error(orderData.error || 'Unable to create payment order.');
+            }
+
+            const checkout = new window.Razorpay({
+                key: RAZORPAY_KEY_ID,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: 'RIM AI',
+                description: pack.label,
+                order_id: orderData.order_id,
+                prefill: {
+                    name: user?.name || '',
+                    email: user?.email || '',
+                },
+                theme: { color: '#6366f1' },
+                modal: {
+                    ondismiss: () => {
+                        setPaymentStatus({ loadingPackId: null, message: '', error: 'Payment cancelled.' });
+                    },
+                },
+                handler: async (response) => {
+                    try {
+                        setPaymentStatus({ loadingPackId: pack.id, message: 'Verifying payment...', error: '' });
+                        const verifyRes = await fetch(`${API}/api/verify-payment`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature,
+                            }),
+                        });
+                        const verifyData = await verifyRes.json().catch(() => ({}));
+                        if (!verifyRes.ok || !verifyData.success) {
+                            throw new Error(verifyData.error || 'Payment verification failed.');
+                        }
+                        setPaymentStatus({
+                            loadingPackId: null,
+                            message: `Payment verified for ${pack.credits.toLocaleString()} credits.`,
+                            error: '',
+                        });
+                        updateCreditsFromResponse(verifyData);
+                        await loadStudioState(activeProject.id);
+                    } catch (err) {
+                        setPaymentStatus({
+                            loadingPackId: null,
+                            message: '',
+                            error: err.message || 'Payment verification failed.',
+                        });
+                    }
+                },
+            });
+
+            checkout.on('payment.failed', (response) => {
+                setPaymentStatus({
+                    loadingPackId: null,
+                    message: '',
+                    error: response?.error?.description || 'Payment failed. Please try again.',
+                });
+            });
+
+            checkout.open();
+        } catch (err) {
+            setPaymentStatus({
+                loadingPackId: null,
+                message: '',
+                error: err.message || 'Unable to start payment.',
+            });
+        }
+    };
+
+    const renderBilling = () => (
+        <div style={{ padding: '2rem', display: 'grid', gap: '1.25rem' }}>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '1rem',
+            }}>
+                {CREDIT_PACKS.map((pack) => {
+                    const isLoading = paymentStatus.loadingPackId === pack.id;
+                    return (
+                        <div
+                            key={pack.id}
+                            style={{
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '8px',
+                                background: '#fff',
+                                padding: '1.25rem',
+                                display: 'grid',
+                                gap: '0.85rem',
+                                boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
+                            }}
+                        >
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1rem', color: '#0f172a' }}>{pack.label}</h3>
+                                <p style={{ margin: '0.35rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>
+                                    {pack.credits.toLocaleString()} AI credits
+                                </p>
+                            </div>
+                            <strong style={{ fontSize: '1.6rem', color: '#111827' }}>
+                                Rs. {(pack.amount / 100).toLocaleString('en-IN')}
+                            </strong>
+                            <button
+                                className="st-btn"
+                                type="button"
+                                onClick={() => startRazorpayCheckout(pack)}
+                                disabled={isLoading}
+                                style={{ width: '100%', justifyContent: 'center' }}
+                            >
+                                {isLoading ? 'Processing...' : 'Pay with Razorpay'}
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {(paymentStatus.message || paymentStatus.error) && (
+                <div
+                    style={{
+                        padding: '0.85rem 1rem',
+                        borderRadius: '8px',
+                        border: `1px solid ${paymentStatus.error ? '#fecaca' : '#bbf7d0'}`,
+                        background: paymentStatus.error ? '#fef2f2' : '#f0fdf4',
+                        color: paymentStatus.error ? '#b91c1c' : '#166534',
+                        fontSize: '0.9rem',
+                    }}
+                >
+                    {paymentStatus.error || paymentStatus.message}
+                </div>
+            )}
+        </div>
+    );
+
     const renderCanvas = () => {
         if (tool === 'admin-dashboard') return renderAdminDashboard();
         if (tool === 'admin-users') return renderAdminUsers();
         if (tool === 'admin-projects') return renderAdminProjects();
         if (tool === 'admin-logs') return renderAdminLogs();
         if (tool === 'admin-credits') return renderAdminCredits();
+        if (tool === 'billing') return renderBilling();
         if (tool === 'mappings') return renderMappings();
         if (tool === 'colorways') return renderColorways();
         if (tool === 'vectorpro') return renderVectorPro();
@@ -7639,16 +8056,16 @@ if (tool === 'imagelayers') {
                             </button>
                         </div>
                     </header>
-                    <div className={`st-workspace ${tool === 'pattern' || tool === 'seamless' || tool === 'inspire' || tool === 'library' || tool === 'exports' || tool === 'mappings' || tool === 'colorway-manager' || tool === 'measurement' || tool.startsWith('admin') ? 'full-width' : ''}`}>
+                    <div className={`st-workspace ${tool === 'pattern' || tool === 'seamless' || tool === 'inspire' || tool === 'library' || tool === 'exports' || tool === 'billing' || tool === 'mappings' || tool === 'colorway-manager' || tool === 'measurement' || tool.startsWith('admin') ? 'full-width' : ''}`}>
                         <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
                             <div className="st-page-head">
                                 <div>
                                     <h1 className="st-title">{toolLabel} {tool === 'library' && <span className="st-pro-badge">Pro</span>}</h1>
-                                    {tool !== 'inspire' && <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Extract clean, seamless patterns using the power of multiple AI models.' : tool === 'exports' ? 'View and download your recently exported assets.' : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.' : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.' : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.' : 'Upload artwork and generate print-ready assets.'}</p>}
+                                    {tool !== 'inspire' && <p>{tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' : tool === 'pattern' ? 'Extract clean, seamless patterns using the power of multiple AI models.' : tool === 'exports' ? 'View and download your recently exported assets.' : tool === 'billing' ? 'Buy AI credit packs through Razorpay Standard Checkout.' : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.' : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.' : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.' : 'Upload artwork and generate print-ready assets.'}</p>}
                                 </div>
                             </div>
 
-                            {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && !tool.startsWith('admin')) && (
+                            {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && !tool.startsWith('admin')) && (
                                 <div
                                     className={`st-upload ${isDrag ? 'dragging' : ''} ${preview ? 'has-image' : ''}`}
                                     onClick={() => fileRef.current?.click()}
@@ -7668,7 +8085,7 @@ if (tool === 'imagelayers') {
 
 
                         </main>
-                        {tool !== 'library' && tool !== 'exports' && tool !== 'mappings' && tool !== 'pattern' && tool !== 'seamless' && !tool.startsWith('admin') && (
+                        {tool !== 'library' && tool !== 'exports' && tool !== 'billing' && tool !== 'mappings' && tool !== 'pattern' && tool !== 'seamless' && !tool.startsWith('admin') && (
                             <aside className="st-right-panel">
                                 {tool === 'dashboard' ? (
                                     <div className="st-pl-right">

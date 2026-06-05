@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -7,6 +7,45 @@ export default function Login({ onLogin, onGoToLanding }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const googleError = params.get('google_error');
+    const googleLoginToken = params.get('google_login_token');
+
+    if (googleError) {
+      setError(googleError);
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+      return;
+    }
+
+    if (!googleLoginToken) return;
+
+    const exchangeGoogleToken = async () => {
+      setIsLoading(true);
+      setError('');
+      try {
+        const res = await fetch(`${API}/api/auth/google/exchange`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: googleLoginToken }),
+        });
+        const data = await res.json();
+        if (data.success && data.user) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+          onLogin(data.user, data.token);
+          return;
+        }
+        setError(data.error || 'Google login could not be completed.');
+      } catch (err) {
+        setError('Unable to complete Google login. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    exchangeGoogleToken();
+  }, [onLogin]);
 
 
   const handleLogin = async (e) => {
@@ -38,6 +77,11 @@ export default function Login({ onLogin, onGoToLanding }) {
       setError('Unable to connect to server. Please try again.');
       setIsLoading(false);
     }
+  };
+
+  const handleGoogleLogin = () => {
+    setError('');
+    window.location.href = `${API}/api/auth/google/start`;
   };
 
   return (
@@ -116,6 +160,16 @@ export default function Login({ onLogin, onGoToLanding }) {
               )}
             </button>
           </form>
+
+          <div className="login-oauth-section">
+            <div className="login-quick-divider">
+              <span>or</span>
+            </div>
+            <button type="button" className="login-google-btn" onClick={handleGoogleLogin} disabled={isLoading}>
+              <span className="login-google-icon" aria-hidden="true">G</span>
+              <span>Continue with Google</span>
+            </button>
+          </div>
 
         </div>
 

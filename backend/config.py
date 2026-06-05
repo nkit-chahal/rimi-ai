@@ -6,10 +6,13 @@ import os
 from dotenv import load_dotenv
 from groq import Groq
 
-load_dotenv()
+# Load root env first, then backend/.env so backend-only secrets win.
+BASE_DIR = os.path.dirname(__file__)
+ROOT_DIR = os.path.dirname(BASE_DIR)
+load_dotenv(os.path.join(ROOT_DIR, '.env'))
+load_dotenv(os.path.join(BASE_DIR, '.env'), override=True)
 
 # Directories
-BASE_DIR = os.path.dirname(__file__)
 UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
 RESULTS_DIR = os.path.join(BASE_DIR, 'results')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
