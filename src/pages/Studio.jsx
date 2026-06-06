@@ -262,6 +262,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     }, [isAdmin]);
     const [state, setState] = useState(emptyState);
     const [activeProjectId, setActiveProjectId] = useState(1);
+    const [showProjectDropdown, setShowProjectDropdown] = useState(false);
     const [controlTab, setControlTab] = useState('controls');
     const [uploads, setUploads] = useState({});
     const [isDrag, setIsDrag] = useState(false);
@@ -7844,7 +7845,7 @@ if (tool === 'imagelayers') {
                 <div className="st-main">
                     <header className={`st-topbar ${isSidebarHidden ? 'sidebar-toggle-visible' : ''}`}>
                         {isSidebarHidden && (
-                            <button
+                                <button
                                 className="st-sidebar-toggle topbar"
                                 type="button"
                                 aria-label="Show sidebar"
@@ -7854,9 +7855,83 @@ if (tool === 'imagelayers') {
                                 <I d="M3 3h18v18H3zM9 3v18M12 9l3 3-3 3" s={17} />
                             </button>
                         )}
-                        <select className="st-project-select" value={activeProject.id} onChange={(e) => loadStudioState(+e.target.value)}>
-                            {state.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
+                        <div className="st-project-dropdown-wrap" style={{ position: 'relative' }}>
+                            <button
+                                className="st-project-select"
+                                onClick={() => setShowProjectDropdown(!showProjectDropdown)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                            >
+                                <span>{activeProject.name}</span>
+                                <I d="M6 9l6 6 6-6" s={14} />
+                            </button>
+                            {showProjectDropdown && (
+                                <div
+                                    className="st-project-dropdown-menu"
+                                    style={{
+                                        position: 'absolute', top: '100%', left: 0, marginTop: '4px',
+                                        minWidth: '240px', background: '#fff', border: '1px solid #e2e8f0',
+                                        borderRadius: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+                                        zIndex: 9999, overflow: 'hidden'
+                                    }}
+                                >
+                                    <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                                        {state.projects.map((p) => (
+                                            <button
+                                                key={p.id}
+                                                style={{
+                                                    display: 'flex', alignItems: 'center', gap: '10px',
+                                                    width: '100%', padding: '10px 14px', border: 'none',
+                                                    background: p.id === activeProject.id ? 'rgba(139,92,246,0.08)' : 'transparent',
+                                                    cursor: 'pointer', fontSize: '0.85rem', fontWeight: p.id === activeProject.id ? 700 : 500,
+                                                    color: p.id === activeProject.id ? '#7c3aed' : '#334155',
+                                                    transition: 'background 0.15s ease'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = p.id === activeProject.id ? 'rgba(139,92,246,0.12)' : '#f8fafc'}
+                                                onMouseLeave={e => e.currentTarget.style.background = p.id === activeProject.id ? 'rgba(139,92,246,0.08)' : 'transparent'}
+                                                onClick={() => { loadStudioState(p.id); setShowProjectDropdown(false); }}
+                                            >
+                                                <img
+                                                    src={p.thumbnailUrl && p.thumbnailUrl.startsWith('/') ? `${API}${p.thumbnailUrl}` : (p.thumbnailUrl || '/demo_geometric.png')}
+                                                    alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover', border: '1px solid #e2e8f0' }}
+                                                />
+                                                <span style={{ flex: 1, textAlign: 'left' }}>{p.name}</span>
+                                                {p.id === activeProject.id && <I d="M5 13l4 4L19 7" s={14} />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div style={{ borderTop: '1px solid #e2e8f0', padding: '6px' }}>
+                                        <button
+                                            style={{
+                                                display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+                                                padding: '9px 12px', border: 'none', borderRadius: '7px',
+                                                background: 'linear-gradient(135deg, #7c3aed, #6366f1)',
+                                                color: '#fff', fontSize: '0.82rem', fontWeight: 700,
+                                                cursor: 'pointer', transition: 'opacity 0.2s ease'
+                                            }}
+                                            onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
+                                            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                                            onClick={async () => {
+                                                const name = prompt('New project name:');
+                                                if (!name || !name.trim()) return;
+                                                const r = await fetch(`${API}/api/projects`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+                                                    body: JSON.stringify({ name: name.trim() })
+                                                });
+                                                const d = await r.json();
+                                                if (d.success && d.projectId) {
+                                                    loadStudioState(d.projectId);
+                                                }
+                                                setShowProjectDropdown(false);
+                                            }}
+                                        >
+                                            <I d="M12 5v14M5 12h14" s={14} />
+                                            <span>New Project</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         <div className="st-search"><I d="M21 21l-4.3-4.3M10 18a8 8 0 100-16 8 8 0 000 16z" s={16} /><input placeholder="Search projects, patterns, tools..." /><kbd>Ctrl K</kbd></div>
                         <div className="st-user-actions">
                             {/* Background Tasks Tray Widget */}
@@ -8142,7 +8217,7 @@ if (tool === 'imagelayers') {
                                         <button className="st-btn primary" onClick={async () => {
                                             const inp = document.getElementById('newProjectName');
                                             if (!inp.value) return;
-                                            const r = await fetch(`${API}/api/projects`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: inp.value }) });
+                                            const r = await fetch(`${API}/api/projects`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` }, body: JSON.stringify({ name: inp.value }) });
                                             if (r.ok) { inp.value = ''; loadStudioState(activeProject.id); }
                                         }}>Create Project</button>
                                     </div>
@@ -8156,7 +8231,7 @@ if (tool === 'imagelayers') {
                                                 onClick={async () => {
                                                     const url = prompt('Enter new image URL or path for this project thumbnail:', p.thumbnailUrl);
                                                     if (url && url !== p.thumbnailUrl) {
-                                                        await fetch(`${API}/api/projects/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thumbnail_url: url }) });
+                                                        await fetch(`${API}/api/projects/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` }, body: JSON.stringify({ thumbnail_url: url }) });
                                                         loadStudioState(activeProject.id);
                                                     }
                                                 }}
@@ -8167,14 +8242,14 @@ if (tool === 'imagelayers') {
                                                 className="st-input"
                                                 onBlur={async (e) => {
                                                     if (e.target.value !== p.name && e.target.value.trim() !== '') {
-                                                        await fetch(`${API}/api/projects/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: e.target.value }) });
+                                                        await fetch(`${API}/api/projects/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` }, body: JSON.stringify({ name: e.target.value }) });
                                                         loadStudioState(activeProject.id);
                                                     }
                                                 }}
                                             />
                                             <button className="st-btn danger" disabled={state.projects.length <= 1} onClick={async () => {
                                                 if (!window.confirm('Are you sure? This will delete all history, variations, and settings for this project.')) return;
-                                                await fetch(`${API}/api/projects/${p.id}`, { method: 'DELETE' });
+                                                await fetch(`${API}/api/projects/${p.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${currentToken}` } });
                                                 loadStudioState(state.projects.find(x => x.id !== p.id).id);
                                             }}>Delete</button>
                                         </div>
