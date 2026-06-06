@@ -12,7 +12,9 @@ def get_studio_state(project_id=1, user_id=None):
     if user_id is not None:
         user_row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     else:
-        user_row = conn.execute("SELECT * FROM users ORDER BY id LIMIT 1").fetchone()
+        user_row = conn.execute("SELECT * FROM users WHERE role != 'admin' ORDER BY id LIMIT 1").fetchone()
+        if not user_row:
+            user_row = conn.execute("SELECT * FROM users ORDER BY id LIMIT 1").fetchone()
 
     if not user_row:
         user = {"id": 1, "email": "user@rim.ai", "name": "Default User", "initials": "DU",

@@ -3,19 +3,31 @@ import './index.css';
 import Studio from './pages/Studio';
 import Login from './pages/Login';
 
-function App() {
-  const [view, setView] = useState(() => {
+function readSavedUser() {
+  try {
     const saved = localStorage.getItem('rim_user');
-    return saved ? 'studio' : 'login';
-  });
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('rim_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
+    if (!saved) return null;
+
+    const user = JSON.parse(saved);
+    if (!user?.id) {
+      localStorage.removeItem('rim_user');
+      localStorage.removeItem('rim_token');
       return null;
     }
+
+    return user;
+  } catch {
+    localStorage.removeItem('rim_user');
+    localStorage.removeItem('rim_token');
+    return null;
+  }
+}
+
+function App() {
+  const [view, setView] = useState(() => {
+    return readSavedUser() ? 'studio' : 'login';
   });
+  const [currentUser, setCurrentUser] = useState(() => readSavedUser());
   const [currentToken, setCurrentToken] = useState(() => {
     try {
       const saved = localStorage.getItem('rim_token');

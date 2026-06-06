@@ -327,8 +327,14 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             });
     };
 
+    const stateUserMatchesCurrent = currentUser?.id && state.user?.id === currentUser.id;
     const user = currentUser
-        ? { ...currentUser, creditsUsed: state.user.creditsUsed ?? currentUser.creditsUsed, creditsLimit: state.user.creditsLimit ?? currentUser.creditsLimit }
+        ? {
+            ...currentUser,
+            creditsUsed: stateUserMatchesCurrent ? (state.user.creditsUsed ?? currentUser.creditsUsed) : currentUser.creditsUsed,
+            creditsLimit: stateUserMatchesCurrent ? (state.user.creditsLimit ?? currentUser.creditsLimit) : currentUser.creditsLimit,
+            resetDays: stateUserMatchesCurrent ? (state.user.resetDays ?? currentUser.resetDays) : currentUser.resetDays,
+        }
         : state.user;
     const activeProject = state.activeProject;
 
