@@ -327,7 +327,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             });
     };
 
-    const user = currentUser || state.user;
+    const user = currentUser
+        ? { ...currentUser, creditsUsed: state.user.creditsUsed ?? currentUser.creditsUsed, creditsLimit: state.user.creditsLimit ?? currentUser.creditsLimit }
+        : state.user;
     const activeProject = state.activeProject;
 
     // ===== DYNAMIC CREDIT PRICING =====
