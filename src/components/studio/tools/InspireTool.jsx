@@ -13,7 +13,7 @@ export default function InspireTool({ uploaded, preview, activeProject, user, se
     const [isGen, setIsGen] = useState(false);
     const [creditPricing] = useState({ inspire: 50 });
 
-    const fileRef = { current: null };
+    const fileRef = React.useRef(null);
 
     const descImg = async () => {
         if (!uploaded) return;

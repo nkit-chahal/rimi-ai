@@ -11,6 +11,7 @@ from auth import (
     log_export, check_credits, get_updated_credits, record_activity,
 )
 from color_utils import recolor_image
+import storage
 
 bp = Blueprint('colorways', __name__)
 
@@ -160,6 +161,7 @@ def generate_colorways():
 
         try:
             recolor_image(filepath, color_mapping, result_path)
+            storage.sync_to_s3(result_path)
             colorways.append({
                 'colors': new_colors,
                 'strategy': strategy,
@@ -263,6 +265,7 @@ def export_linecard():
             y -= 30
 
         c.save()
+        storage.sync_to_s3(pdf_path)
 
         log_export(project_id, pdf_name, filename, "Colorway Line Card")
         return jsonify({'success': True, 'pdfUrl': f'/results/{pdf_name}'})

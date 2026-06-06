@@ -10,6 +10,7 @@ from auth import (
     log_export, log_replicate_call, check_credits,
     get_updated_credits, record_activity,
 )
+import storage
 
 bp = Blueprint('vectorize', __name__)
 
@@ -107,6 +108,7 @@ def vectorize_image():
                 with open(result_path, "wb") as f:
                     f.write(resp.content)
 
+            storage.sync_to_s3(result_path)
             print(f"  [Vectorize] Recraft done! Saved: {result_name}")
 
         else:
@@ -156,6 +158,7 @@ def vectorize_image():
             os.remove(tmp_path)
             credits_used = 5  # CPU edits (local PIL fixes) flat
 
+            storage.sync_to_s3(result_path)
             print(f"  [Vectorize] vtracer done! Saved: {result_name} ({os.path.getsize(result_path) // 1024}KB)")
 
         user_id = data.get('userId') or data.get('user_id')
@@ -270,6 +273,8 @@ def upscale():
             resp = http_requests.get(url)
             with open(result_path, "wb") as file:
                 file.write(resp.content)
+
+        storage.sync_to_s3(result_path)
 
         record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
 

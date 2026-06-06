@@ -13,7 +13,7 @@ export default function SeamlessTool({ uploaded, preview, activeProject, user, s
     const [seamlessStatus, setSeamlessStatus] = useState('');
     const [isDrag, setIsDrag] = useState(false);
 
-    const fileRef = { current: null };
+    const fileRef = React.useRef(null);
 
     // Progress simulation
     useEffect(() => {

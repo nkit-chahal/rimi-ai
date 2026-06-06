@@ -13,6 +13,7 @@ from color_utils import extract_palette, recolor_image
 from pantone_utils import match_to_pantone, quantize_and_save
 from layer_utils import export_zip, export_tiff
 from techpack_utils import generate_tech_pack
+import storage
 
 bp = Blueprint('color', __name__)
 
@@ -76,6 +77,7 @@ def recolor_api():
         local_filename = f"recolor_{local_uuid}.{ext}"
         local_filepath = os.path.join(RESULTS_DIR, local_filename)
         recolor_image(filepath, color_mapping, local_filepath)
+        storage.sync_to_s3(local_filepath)
         duration = time.time() - start_time
         credits_used = 10
         local_url = f"/results/{local_filename}"
@@ -128,6 +130,7 @@ def generate_tech_pack_api():
     pdf_filepath = os.path.join(RESULTS_DIR, pdf_filename)
     try:
         generate_tech_pack(filepath, project_metadata, pdf_filepath, options=tech_pack_options)
+        storage.sync_to_s3(pdf_filepath)
     except Exception as e:
         print(f"Failed to generate PDF: {e}")
         return jsonify({'error': 'Failed to generate Tech Pack PDF'}), 500
@@ -196,6 +199,7 @@ def color_reduce_api():
             finally:
                 conn.close()
         palette = quantize_and_save(filepath, n_colors, local_filepath, brand_palette)
+        storage.sync_to_s3(local_filepath)
         credits_used = 10
         local_url = f"/results/{local_filename}"
         conn = db()
@@ -245,6 +249,7 @@ def layer_export_api():
             out_filename = f"layers_{local_uuid}.tiff"
             out_filepath = os.path.join(RESULTS_DIR, out_filename)
             palette = export_tiff(filepath, n_colors, out_filepath)
+        storage.sync_to_s3(out_filepath)
         local_url = f"/results/{out_filename}"
         conn = db()
         created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()

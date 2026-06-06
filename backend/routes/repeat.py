@@ -8,6 +8,7 @@ from PIL import Image, ImageOps
 
 from config import UPLOAD_DIR, RESULTS_DIR
 from auth import check_credits, get_updated_credits, record_activity, log_export
+import storage
 
 bp = Blueprint('repeat', __name__)
 
@@ -79,6 +80,7 @@ def create_repeat_set():
         result_name = f"repeat_{grid_size}x{grid_size}_{uuid.uuid4().hex[:8]}.{ext}"
         result_path = os.path.join(RESULTS_DIR, result_name)
         tiled.save(result_path, save_format, quality=95, dpi=(dpi, dpi))
+        storage.sync_to_s3(result_path)
         record_activity(project_id, 'export', 1, 50, user_id=user_id)
         updated_credits = get_updated_credits(user_id)
         input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)

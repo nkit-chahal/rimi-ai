@@ -10,6 +10,7 @@ from flask import Blueprint, request, jsonify
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client
 from auth import check_credits, record_activity, get_updated_credits, log_export, log_replicate_call
 import replicate
+import storage
 
 bp = Blueprint('generation', __name__)
 
@@ -108,6 +109,7 @@ def extract_design():
             local_filepath = os.path.join(RESULTS_DIR, local_filename)
             with open(local_filepath, 'wb') as f:
                 f.write(resp.content)
+            storage.sync_to_s3(local_filepath)
             local_url = f"/results/{local_filename}"
             local_result_urls.append(local_url)
             log_export(project_id, local_filename, filename, "Extract Design", {"prompt": "Extract design out of outfit"})
@@ -240,6 +242,7 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
         local_filepath = os.path.join(RESULTS_DIR, local_filename)
         with open(local_filepath, 'wb') as f:
             f.write(resp.content)
+        storage.sync_to_s3(local_filepath)
         local_url = f"/results/{local_filename}"
         log_export(project_id, local_filename, filename, "Extract Design Multi", {"model": model_id})
 
@@ -455,6 +458,7 @@ def extract_edit():
         local_filepath = os.path.join(RESULTS_DIR, local_filename)
         with open(local_filepath, 'wb') as f:
             f.write(resp.content)
+        storage.sync_to_s3(local_filepath)
         local_url = f"/results/{local_filename}"
 
         record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)

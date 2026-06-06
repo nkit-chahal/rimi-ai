@@ -13,6 +13,7 @@ from auth import (
     green_matte_to_rgba, remove_background_with_rmbg,
     decode_data_url_image,
 )
+import storage
 
 bp = Blueprint('layers', __name__)
 
@@ -104,6 +105,7 @@ def image_layers():
                 layer_bytes = resp.content
 
             placement = save_rgba_content_layer(layer_bytes, layer_path)
+            storage.sync_to_s3(layer_path)
 
             layers.append({
                 'url': f'/results/{layer_name}',
@@ -334,6 +336,7 @@ def edit_layer():
             final_img = remove_background_with_rmbg(result_img) or green_matte_to_rgba(result_img, matte_color)
 
         final_img.save(result_path, 'PNG')
+        storage.sync_to_s3(result_path)
 
         record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
         log_export(
@@ -476,6 +479,7 @@ def inpaint_layer():
         result_name = f"layinpaint_{result_id}.png"
         result_path = os.path.join(RESULTS_DIR, result_name)
         final_canvas.save(result_path, 'PNG')
+        storage.sync_to_s3(result_path)
 
         record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
         log_export(
@@ -594,6 +598,7 @@ def compose_layers():
         result_name = f"composed_{result_id}.png"
         result_path = os.path.join(RESULTS_DIR, result_name)
         canvas.save(result_path, 'PNG')
+        storage.sync_to_s3(result_path)
 
         record_activity(project_id, 'export', 1, 10, user_id=user_id)
         log_export(

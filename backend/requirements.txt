@@ -1,4 +1,5 @@
 bcrypt
+boto3
 flask
 flask-cors
 flask-limiter
@@ -7,6 +8,7 @@ groq
 gunicorn
 numpy
 pillow
+psycopg2-binary
 python-dotenv
 razorpay
 replicate

@@ -17,6 +17,7 @@ from auth import (
     log_export, log_replicate_call, check_credits,
     get_updated_credits, record_activity,
 )
+import storage
 
 bp = Blueprint('mockups', __name__)
 
@@ -181,6 +182,7 @@ def _generate_single_mockup(
     mockup_path = os.path.join(RESULTS_DIR, mockup_name)
     with open(mockup_path, "wb") as f:
         f.write(resp.content)
+    storage.sync_to_s3(mockup_path)
 
     return mockup_name, credits_used
 

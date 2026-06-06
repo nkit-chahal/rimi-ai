@@ -1,10 +1,11 @@
 """Exports routes: download proxy, list exports, delete exports."""
 import os
 import json
-from flask import Blueprint, request, jsonify, send_from_directory, Response
+from flask import Blueprint, request, jsonify, send_from_directory, Response, abort
 
-from config import UPLOAD_DIR, RESULTS_DIR
+from config import UPLOAD_DIR, RESULTS_DIR, USE_S3
 from db import db, db_lock, resolve_input_url, iso_to_epoch
+import storage
 
 bp = Blueprint('exports', __name__)
 
@@ -62,8 +63,15 @@ def download():
         path = parsed.path
         if path.startswith('/results/') or path.startswith('/uploads/'):
             filename = path.split('/')[-1]
-            directory = RESULTS_DIR if path.startswith('/results/') else UPLOAD_DIR
-            return send_from_directory(directory, filename, as_attachment=True)
+            dir_type = 'results' if path.startswith('/results/') else 'uploads'
+            directory = RESULTS_DIR if dir_type == 'results' else UPLOAD_DIR
+            local_path = os.path.join(directory, filename)
+            if os.path.exists(local_path):
+                return send_from_directory(directory, filename, as_attachment=True)
+            if USE_S3:
+                data, ct = storage.get_file(dir_type, filename)
+                if data:
+                    return Response(data, mimetype=ct, headers={'Content-Disposition': f'attachment; filename={filename}'})
 
     # For remote URLs — SSRF protection: only allow known domains
     import requests as http_requests

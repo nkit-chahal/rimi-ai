@@ -26,8 +26,17 @@ MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 os.environ.setdefault("REPLICATE_API_TOKEN", os.getenv("REPLICATE_API_TOKEN", ""))
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
 
-# Database
+# Database – PostgreSQL on Railway (DATABASE_URL), SQLite locally
+DATABASE_URL = os.getenv('DATABASE_URL')
 DB_PATH = os.path.join(BASE_DIR, 'rimi_ai.sqlite3')
+
+# S3-compatible Bucket (Railway Object Storage)
+S3_ENDPOINT = os.getenv('AWS_ENDPOINT_URL')
+S3_BUCKET = os.getenv('AWS_S3_BUCKET_NAME')
+S3_REGION = os.getenv('AWS_DEFAULT_REGION', 'auto')
+S3_ACCESS_KEY = os.getenv('AWS_ACCESS_KEY_ID')
+S3_SECRET_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+USE_S3 = bool(S3_ENDPOINT and S3_BUCKET and S3_ACCESS_KEY)
 
 
 def allowed_file(filename):

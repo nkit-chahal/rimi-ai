@@ -14,6 +14,7 @@ from config import UPLOAD_DIR, RESULTS_DIR, groq_client
 from db import db
 from auth import check_credits, record_activity, get_updated_credits, log_export, log_replicate_call
 import replicate
+import storage
 
 bp = Blueprint('seamless', __name__)
 
@@ -114,6 +115,7 @@ def generate_seamless():
             result_name = f"seamless_gen_{uuid.uuid4().hex[:8]}.png"
             result_path = os.path.join(RESULTS_DIR, result_name)
             img.save(result_path, 'PNG')
+            storage.sync_to_s3(result_path)
             local_url = f'/results/{result_name}'
             results.append({'url': local_url, 'remoteUrl': url_str, 'score': round(score, 3), 'index': idx})
             if score > best_score:
@@ -303,6 +305,7 @@ def make_seamless():
         result_name = f"seamless_tile_{uuid.uuid4().hex[:8]}.png"
         result_path = os.path.join(RESULTS_DIR, result_name)
         fixed_tile.save(result_path, 'PNG', quality=95)
+        storage.sync_to_s3(result_path)
         overall_score = best_score["overall"]
         score_pct = int(overall_score * 100)
         tile_seamless = 1 if overall_score >= 0.70 else 0
