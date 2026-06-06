@@ -432,6 +432,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [creditFeedback, setCreditFeedback] = useState('');
     const [replicateLogs, setReplicateLogs] = useState([]);
     const [loginEvents, setLoginEvents] = useState([]);
+    const [adminAuditEvents, setAdminAuditEvents] = useState([]);
     const [replicateLogsLoading, setReplicateLogsLoading] = useState(false);
     const [adminBilling, setAdminBilling] = useState({
         summary: {
@@ -511,6 +512,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     if (d.success && d.replicateLogs) {
                         setReplicateLogs(d.replicateLogs);
                         setLoginEvents(d.loginEvents || []);
+                        setAdminAuditEvents(d.adminAuditEvents || []);
                     }
                 })
                 .catch(err => console.error('Failed to fetch admin logs:', err))
@@ -3973,8 +3975,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [adminProjects, setAdminProjects] = useState([]);
     const [adminProjectsLoading, setAdminProjectsLoading] = useState(false);
     const [showCreateUserModal, setShowCreateUserModal] = useState(false);
-    const [createUserForm, setCreateUserForm] = useState({ email: '', password: '', name: '', role: 'user', plan: 'Business Studio', creditsLimit: '25000', freeGenerations: '10' });
+    const [createUserForm, setCreateUserForm] = useState({ email: '', password: '', name: '', role: 'user', plan: 'Business Studio', creditsLimit: '25000' });
     const [createUserFeedback, setCreateUserFeedback] = useState('');
+    const [showEditUserModal, setShowEditUserModal] = useState(false);
+    const [editUserForm, setEditUserForm] = useState({ id: null, email: '', password: '', name: '', role: 'user', plan: 'Business Studio', creditsLimit: '0', status: 'active' });
     const [adminStats, setAdminStats] = useState({ totalUsers: 0, totalProjects: 0, recentLogs: [] });
 
     useEffect(() => {
@@ -4007,24 +4011,85 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     }, [tool]);
 
     const handleCreateUser = () => {
-        const { email, password, name, role, plan, creditsLimit, freeGenerations } = createUserForm;
+        const { email, password, name, role, plan, creditsLimit } = createUserForm;
         if (!email || !password || !name) { setCreateUserFeedback('All fields are required'); return; }
         fetch(`${API}/api/admin/create-user`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
-            body: JSON.stringify({ email, password, name, role, plan, creditsLimit: parseInt(creditsLimit), freeGenerations: parseInt(freeGenerations) }),
+            body: JSON.stringify({ email, password, name, role, plan, creditsLimit: parseInt(creditsLimit) }),
         })
             .then(r => r.json())
             .then(d => {
                 if (d.success) {
-                    setCreateUserFeedback('âœ“ ' + d.message);
+                    setCreateUserFeedback('Success: ' + d.message);
                     setShowCreateUserModal(false);
-                    setCreateUserForm({ email: '', password: '', name: '', role: 'user', plan: 'Business Studio', creditsLimit: '25000', freeGenerations: '10' });
+                    setCreateUserForm({ email: '', password: '', name: '', role: 'user', plan: 'Business Studio', creditsLimit: '25000' });
                     fetchAdminUsers();
+                    fetchAdminBilling();
                 } else {
-                    setCreateUserFeedback('âœ— ' + (d.error || 'Failed'));
+                    setCreateUserFeedback('Error: ' + (d.error || 'Failed'));
                 }
             });
+        setTimeout(() => setCreateUserFeedback(''), 5000);
+    };
+
+    const openEditUserModal = (userToEdit) => {
+        setEditUserForm({
+            id: userToEdit.id,
+            email: userToEdit.email || '',
+            password: '',
+            name: userToEdit.name || '',
+            role: userToEdit.role || 'user',
+            plan: userToEdit.plan || 'Business Studio',
+            creditsLimit: String(userToEdit.creditsLimit ?? 0),
+            status: userToEdit.status || 'active',
+        });
+        setShowEditUserModal(true);
+    };
+
+    const handleUpdateUser = () => {
+        const { id, email, password, name, role, plan, creditsLimit, status } = editUserForm;
+        if (!id || !email || !name) { setCreateUserFeedback('Name and email are required'); return; }
+        const payload = { email, name, role, plan, creditsLimit: parseInt(creditsLimit), status };
+        if (password) payload.password = password;
+        fetch(`${API}/api/admin/users/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+            body: JSON.stringify(payload),
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    setCreateUserFeedback('Updated user successfully');
+                    setShowEditUserModal(false);
+                    setEditUserForm({ id: null, email: '', password: '', name: '', role: 'user', plan: 'Business Studio', creditsLimit: '0', status: 'active' });
+                    fetchAdminUsers();
+                    fetchAdminBilling();
+                } else {
+                    setCreateUserFeedback(d.error || 'Failed to update user');
+                }
+            })
+            .catch(() => setCreateUserFeedback('Failed to update user'));
+        setTimeout(() => setCreateUserFeedback(''), 5000);
+    };
+
+    const handleToggleUserStatus = (userToToggle) => {
+        const nextAction = userToToggle.status === 'suspended' ? 'unsuspend' : 'suspend';
+        fetch(`${API}/api/admin/${nextAction}-user/${userToToggle.id}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${currentToken}` },
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    setCreateUserFeedback(nextAction === 'suspend' ? 'User suspended' : 'User reactivated');
+                    fetchAdminUsers();
+                    fetchAdminBilling();
+                } else {
+                    setCreateUserFeedback(d.error || `Failed to ${nextAction} user`);
+                }
+            })
+            .catch(() => setCreateUserFeedback(`Failed to ${nextAction} user`));
         setTimeout(() => setCreateUserFeedback(''), 5000);
     };
 
@@ -4033,9 +4098,15 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         fetch(`${API}/api/admin/delete-user/${userId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${currentToken}` } })
             .then(r => r.json())
             .then(d => {
-                if (d.success) fetchAdminUsers();
-                else alert(d.error || 'Failed to delete user');
+                if (d.success) {
+                    setCreateUserFeedback('User deleted');
+                    fetchAdminUsers();
+                    fetchAdminBilling();
+                } else {
+                    setCreateUserFeedback(d.error || 'Failed to delete user');
+                }
             });
+        setTimeout(() => setCreateUserFeedback(''), 5000);
     };
 
     const renderAdminDashboard = () => {
@@ -4189,10 +4260,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         );
     };
 
+    const adminUserFeedbackIsError = createUserFeedback && /failed|error|required|cannot|invalid/i.test(createUserFeedback);
+
     const renderAdminUsers = () => (
         <div className="admin-workspace-panel animate-fade-in">
             {renderBudgetBanner()}
-            {createUserFeedback && <div style={{ padding: '8px 16px', marginBottom: '12px', borderRadius: '8px', background: createUserFeedback.startsWith('âœ“') ? '#22c55e20' : '#ef444420', color: createUserFeedback.startsWith('âœ“') ? '#22c55e' : '#ef4444', fontSize: '13px', fontWeight: 500 }}>{createUserFeedback}</div>}
+            {createUserFeedback && <div style={{ padding: '8px 16px', marginBottom: '12px', borderRadius: '8px', background: adminUserFeedbackIsError ? '#ef444420' : '#22c55e20', color: adminUserFeedbackIsError ? '#ef4444' : '#22c55e', fontSize: '13px', fontWeight: 500 }}>{createUserFeedback}</div>}
             <div className="admin-card glassmorphism-card replicate-logs-section">
                 <div className="admin-card-header" style={{ justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -4217,9 +4290,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                     <th>Login</th>
                                     <th>Role</th>
                                     <th>Plan</th>
+                                    <th>Status</th>
                                     <th>Credits</th>
                                     <th>Last Login</th>
-                                    <th>Free Gens</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -4240,13 +4313,33 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                         </td>
                                         <td><span className={`model-tag ${u.role === 'admin' ? 'admin' : ''}`}>{u.role}</span></td>
                                         <td><span className="model-tag">{u.plan}</span></td>
+                                        <td>
+                                            <span className="model-tag" style={{ color: u.status === 'suspended' ? '#ef4444' : '#16a34a', textTransform: 'capitalize' }}>
+                                                {u.status || 'active'}
+                                            </span>
+                                        </td>
                                         <td style={{ fontSize: '12px' }}>{u.creditsUsed?.toLocaleString()} / {u.creditsLimit?.toLocaleString()}</td>
                                         <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                                             {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never'}
                                         </td>
-                                        <td style={{ fontSize: '12px', fontWeight: 600, color: '#22c55e' }}>{u.freeGenerations || 0}</td>
                                         <td>
-                                            <button style={{ padding: '3px 10px', fontSize: '11px', background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440', borderRadius: '6px', cursor: 'pointer' }} onClick={() => handleDeleteUser(u.id, u.name)}>Delete</button>
+                                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                                <button style={{ padding: '3px 10px', fontSize: '11px', background: '#6366f120', color: '#4f46e5', border: '1px solid #6366f140', borderRadius: '6px', cursor: 'pointer' }} onClick={() => openEditUserModal(u)}>Edit</button>
+                                                <button
+                                                    disabled={u.role === 'admin' || u.id === currentUser?.id}
+                                                    style={{ padding: '3px 10px', fontSize: '11px', background: u.status === 'suspended' ? '#22c55e20' : '#f59e0b20', color: u.status === 'suspended' ? '#16a34a' : '#b45309', border: `1px solid ${u.status === 'suspended' ? '#22c55e40' : '#f59e0b40'}`, borderRadius: '6px', cursor: (u.role === 'admin' || u.id === currentUser?.id) ? 'not-allowed' : 'pointer', opacity: (u.role === 'admin' || u.id === currentUser?.id) ? 0.5 : 1 }}
+                                                    onClick={() => handleToggleUserStatus(u)}
+                                                >
+                                                    {u.status === 'suspended' ? 'Activate' : 'Suspend'}
+                                                </button>
+                                                <button
+                                                    disabled={u.role === 'admin' || u.id === currentUser?.id}
+                                                    style={{ padding: '3px 10px', fontSize: '11px', background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440', borderRadius: '6px', cursor: (u.role === 'admin' || u.id === currentUser?.id) ? 'not-allowed' : 'pointer', opacity: (u.role === 'admin' || u.id === currentUser?.id) ? 0.5 : 1 }}
+                                                    onClick={() => handleDeleteUser(u.id, u.name)}
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -4265,7 +4358,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             { label: 'Email', key: 'email', type: 'email', placeholder: 'john@company.com' },
                             { label: 'Password', key: 'password', type: 'password', placeholder: 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢' },
                             { label: 'Credit Limit', key: 'creditsLimit', type: 'number', placeholder: '25000' },
-                            { label: 'Free Generations', key: 'freeGenerations', type: 'number', placeholder: '10' },
                         ].map(f => (
                             <div key={f.key} style={{ marginBottom: '12px' }}>
                                 <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>{f.label}</label>
@@ -4290,6 +4382,54 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                             <button style={{ padding: '8px 16px', fontSize: '13px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }} onClick={() => setShowCreateUserModal(false)}>Cancel</button>
                             <button className="admin-btn-primary" style={{ padding: '8px 20px', fontSize: '13px' }} onClick={handleCreateUser}>Create User</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showEditUserModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowEditUserModal(false)}>
+                    <div className="admin-card glassmorphism-card" style={{ width: '460px', maxHeight: '90vh', overflow: 'auto', padding: '24px' }} onClick={e => e.stopPropagation()}>
+                        <h3 style={{ marginBottom: '16px' }}>Edit User</h3>
+                        {[
+                            { label: 'Full Name', key: 'name', type: 'text', placeholder: 'John Doe' },
+                            { label: 'Email', key: 'email', type: 'email', placeholder: 'john@company.com' },
+                            { label: 'Credit Limit', key: 'creditsLimit', type: 'number', placeholder: '25000' },
+                            { label: 'Reset Password', key: 'password', type: 'password', placeholder: 'Leave blank to keep current password' },
+                        ].map(f => (
+                            <div key={f.key} style={{ marginBottom: '12px' }}>
+                                <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>{f.label}</label>
+                                <input className="admin-input" type={f.type} placeholder={f.placeholder} value={editUserForm[f.key]} onChange={e => setEditUserForm(prev => ({ ...prev, [f.key]: e.target.value }))} style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }} />
+                            </div>
+                        ))}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div>
+                                <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Role</label>
+                                <select className="admin-input" value={editUserForm.role} onChange={e => setEditUserForm(prev => ({ ...prev, role: e.target.value }))} style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}>
+                                    <option value="user">User</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Status</label>
+                                <select className="admin-input" value={editUserForm.status} onChange={e => setEditUserForm(prev => ({ ...prev, status: e.target.value }))} style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}>
+                                    <option value="active">Active</option>
+                                    <option value="suspended">Suspended</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Plan</label>
+                            <select className="admin-input" value={editUserForm.plan} onChange={e => setEditUserForm(prev => ({ ...prev, plan: e.target.value }))} style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}>
+                                <option value="Business Studio">Business Studio</option>
+                                <option value="Enterprise Pro">Enterprise Pro</option>
+                                <option value="Free Trial">Free Trial</option>
+                                <option value="Business Pro">Business Pro</option>
+                                <option value="Enterprise">Enterprise</option>
+                            </select>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button style={{ padding: '8px 16px', fontSize: '13px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }} onClick={() => setShowEditUserModal(false)}>Cancel</button>
+                            <button className="admin-btn-primary" style={{ padding: '8px 20px', fontSize: '13px' }} onClick={handleUpdateUser}>Save Changes</button>
                         </div>
                     </div>
                 </div>
@@ -4375,6 +4515,51 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                         <td><span className="model-tag" style={{ textTransform: 'capitalize' }}>{event.provider}</span></td>
                                         <td style={{ fontSize: 12 }}>{event.ip_address || '-'}</td>
                                         <td style={{ fontSize: 12, maxWidth: 340, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.user_agent || '-'}</td>
+                                        <td className="time-tag">{event.created_at}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+            <div className="admin-card glassmorphism-card replicate-logs-section" style={{ marginTop: '16px' }}>
+                <div className="admin-card-header" style={{ justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <I d="M9 12h6M9 16h6M9 8h6M5 3h14v18H5z" s={20} />
+                        <h3>Admin Audit Events</h3>
+                    </div>
+                    <span className="admin-live-badge"><span className="pulse"></span> ADMIN FEED</span>
+                </div>
+                <div className="admin-table-container">
+                    {replicateLogsLoading ? (
+                        <div className="st-error" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', textAlign: 'center', padding: '32px 0' }}>Loading audit events...</div>
+                    ) : adminAuditEvents.length === 0 ? (
+                        <div className="st-error" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', textAlign: 'center', padding: '32px 0' }}>No admin audit events yet.</div>
+                    ) : (
+                        <table className="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Action</th>
+                                    <th>Admin</th>
+                                    <th>Target User</th>
+                                    <th>Details</th>
+                                    <th>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {adminAuditEvents.map((event, index) => (
+                                    <tr key={event.id || index}>
+                                        <td><span className="model-tag">{event.action}</span></td>
+                                        <td>
+                                            <div style={{ fontWeight: 700 }}>{event.admin_name || 'Unknown admin'}</div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{event.admin_email || `User #${event.admin_user_id}`}</div>
+                                        </td>
+                                        <td>
+                                            <div style={{ fontWeight: 700 }}>{event.target_user_name || 'Unknown target'}</div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{event.target_user_email || (event.target_user_id ? `User #${event.target_user_id}` : '-')}</div>
+                                        </td>
+                                        <td style={{ fontSize: 12, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.details_json || '{}'}</td>
                                         <td className="time-tag">{event.created_at}</td>
                                     </tr>
                                 ))}

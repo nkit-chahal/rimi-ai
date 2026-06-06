@@ -1,7 +1,8 @@
 """Admin routes: login, logs, users, credit management, health check."""
+import json
 import os
 import sqlite3
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone, timedelta
 
 import bcrypt
@@ -11,6 +12,56 @@ from db import db, rows_to_dicts
 from middleware import admin_required, login_required
 
 bp = Blueprint('admin', __name__)
+
+VALID_ROLES = {'user', 'admin'}
+VALID_STATUSES = {'active', 'suspended'}
+
+
+def _initials_from_name(name):
+    return ''.join(w[0].upper() for w in (name or '').split()[:2]) or 'U'
+
+
+def _safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _is_unique_violation(exc):
+    text = str(exc).lower()
+    return isinstance(exc, sqlite3.IntegrityError) or 'unique' in text or 'duplicate' in text
+
+
+def _active_admin_count(conn, excluding_user_id=None):
+    if excluding_user_id is None:
+        row = conn.execute("SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND status = 'active'").fetchone()
+    else:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND status = 'active' AND id != ?",
+            (excluding_user_id,),
+        ).fetchone()
+    return row["c"] if isinstance(row, dict) else row[0]
+
+
+def _record_admin_audit(conn, action, target_user_id=None, details=None):
+    created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    conn.execute(
+        """
+        INSERT INTO admin_audit_events
+        (admin_user_id, target_user_id, action, details_json, ip_address, user_agent, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            g.current_user.get("id"),
+            target_user_id,
+            action,
+            json.dumps(details or {}, sort_keys=True),
+            request.headers.get("X-Forwarded-For", request.remote_addr),
+            request.headers.get("User-Agent", ""),
+            created_at,
+        ),
+    )
 
 
 # --------------- Authentication & Administrator Endpoints ---------------
@@ -48,6 +99,8 @@ def api_login():
         user_row = conn.execute("SELECT * FROM users WHERE email = ?", (email.strip(),)).fetchone()
         if user_row:
             user = dict(user_row)
+            if user.get("status") in ("suspended", "banned"):
+                return jsonify({'success': False, 'error': 'Account is suspended'}), 403
             stored_pw = user['password']
             pw_ok = False
             if stored_pw.startswith('$2'):
@@ -110,16 +163,31 @@ def admin_logs():
             ORDER BY le.created_at DESC
             LIMIT 100
         """).fetchall()
+        admin_audit_rows = conn.execute("""
+            SELECT
+                a.*,
+                admin.name AS admin_name,
+                admin.email AS admin_email,
+                target.name AS target_user_name,
+                target.email AS target_user_email
+            FROM admin_audit_events a
+            LEFT JOIN users admin ON admin.id = a.admin_user_id
+            LEFT JOIN users target ON target.id = a.target_user_id
+            ORDER BY a.created_at DESC
+            LIMIT 150
+        """).fetchall()
         
         replicate_logs = rows_to_dicts(replicate_logs_rows)
         exports = rows_to_dicts(exports_rows)
         login_events = rows_to_dicts(login_event_rows)
+        admin_audit_events = rows_to_dicts(admin_audit_rows)
         
         return jsonify({
             'success': True,
             'replicateLogs': replicate_logs,
             'exports': exports,
-            'loginEvents': login_events
+            'loginEvents': login_events,
+            'adminAuditEvents': admin_audit_events
         })
     except Exception as e:
         print(f"Error fetching admin logs: {e}")
@@ -199,6 +267,12 @@ def admin_adjust_credits():
                 VALUES (?, 'admin_adjustment', ?, ?, ?)
                 """,
                 (user_id, delta, "Admin credit limit adjustment", created_at)
+            )
+            _record_admin_audit(
+                conn,
+                "credits.adjust",
+                target_user_id=user_id,
+                details={"previousCreditsLimit": previous_limit, "creditsLimit": credits_limit, "delta": delta},
             )
         conn.commit()
         if cur.rowcount == 0:
@@ -366,32 +440,124 @@ def credit_pricing():
 @admin_required
 def admin_create_user():
     data = request.get_json() or {}
-    email = data.get('email', '').strip()
+    email = data.get('email', '').strip().lower()
     password = data.get('password', '')
     name = data.get('name', '').strip()
     role = data.get('role', 'user')
     plan = data.get('plan', 'Business Studio')
-    credits_limit = int(data.get('creditsLimit', 25000))
+    credits_limit = _safe_int(data.get('creditsLimit'), 25000)
+    status = data.get('status', 'active')
 
     if not email or not password or not name:
         return jsonify({'success': False, 'error': 'Email, password, and name are required'}), 400
+    if role not in VALID_ROLES:
+        return jsonify({'success': False, 'error': 'Invalid role'}), 400
+    if status not in VALID_STATUSES:
+        return jsonify({'success': False, 'error': 'Invalid status'}), 400
+    if credits_limit < 0:
+        return jsonify({'success': False, 'error': 'Credit limit cannot be negative'}), 400
 
-    initials = ''.join(w[0].upper() for w in name.split()[:2]) or 'U'
+    initials = _initials_from_name(name)
     reset_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat()
 
     conn = db()
     try:
         hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        conn.execute(
-            "INSERT INTO users (email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (?,?,?,?,?,?,0,?,?)",
-            (email, hashed_pw, name, initials, role, plan, credits_limit, reset_at)
+        cur = conn.execute(
+            "INSERT INTO users (email, password, name, initials, role, plan, credits_used, credits_limit, reset_at, status) VALUES (?,?,?,?,?,?,0,?,?,?)",
+            (email, hashed_pw, name, initials, role, plan, credits_limit, reset_at, status)
+        )
+        _record_admin_audit(
+            conn,
+            "user.create",
+            target_user_id=cur.lastrowid,
+            details={"email": email, "name": name, "role": role, "plan": plan, "creditsLimit": credits_limit, "status": status},
         )
         conn.commit()
         return jsonify({'success': True, 'message': f'User {name} created successfully'})
-    except sqlite3.IntegrityError:
-        return jsonify({'success': False, 'error': 'A user with this email already exists'}), 400
     except Exception as e:
+        if _is_unique_violation(e):
+            conn.rollback()
+            return jsonify({'success': False, 'error': 'A user with this email already exists'}), 400
+        conn.rollback()
         print(f"Error creating user: {e}")
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
+    finally:
+        conn.close()
+
+
+@bp.route('/api/admin/users/<int:user_id>', methods=['PUT'])
+@admin_required
+def admin_update_user(user_id):
+    data = request.get_json() or {}
+    conn = db()
+    try:
+        existing = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not existing:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        existing = dict(existing)
+
+        email = data.get('email', existing['email'])
+        email = email.strip().lower() if isinstance(email, str) else existing['email']
+        name = data.get('name', existing['name'])
+        name = name.strip() if isinstance(name, str) else existing['name']
+        role = data.get('role', existing['role'])
+        plan = data.get('plan', existing['plan'])
+        status = data.get('status', existing.get('status', 'active'))
+        credits_limit = _safe_int(data.get('creditsLimit'), existing['credits_limit'])
+        password = data.get('password', '')
+
+        if not email or not name:
+            return jsonify({'success': False, 'error': 'Email and name are required'}), 400
+        if role not in VALID_ROLES:
+            return jsonify({'success': False, 'error': 'Invalid role'}), 400
+        if status not in VALID_STATUSES:
+            return jsonify({'success': False, 'error': 'Invalid status'}), 400
+        if credits_limit < 0:
+            return jsonify({'success': False, 'error': 'Credit limit cannot be negative'}), 400
+        if existing['role'] == 'admin' and (role != 'admin' or status != 'active') and _active_admin_count(conn, user_id) == 0:
+            return jsonify({'success': False, 'error': 'Cannot remove or suspend the last active admin'}), 403
+        if user_id == g.current_user['id'] and status != 'active':
+            return jsonify({'success': False, 'error': 'Cannot suspend your own admin account'}), 403
+
+        initials = _initials_from_name(name)
+        updates = [
+            "email = ?",
+            "name = ?",
+            "initials = ?",
+            "role = ?",
+            "plan = ?",
+            "credits_limit = ?",
+            "status = ?",
+        ]
+        values = [email, name, initials, role, plan, credits_limit, status]
+        changed = {
+            "email": {"from": existing["email"], "to": email},
+            "name": {"from": existing["name"], "to": name},
+            "role": {"from": existing["role"], "to": role},
+            "plan": {"from": existing["plan"], "to": plan},
+            "creditsLimit": {"from": existing["credits_limit"], "to": credits_limit},
+            "status": {"from": existing.get("status", "active"), "to": status},
+        }
+        changed = {key: value for key, value in changed.items() if value["from"] != value["to"]}
+        if password:
+            if len(password) < 8:
+                return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
+            updates.append("password = ?")
+            values.append(bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'))
+            changed["passwordReset"] = True
+        values.append(user_id)
+
+        conn.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", values)
+        _record_admin_audit(conn, "user.update", target_user_id=user_id, details=changed)
+        conn.commit()
+        return jsonify({'success': True, 'message': f'User {name} updated successfully'})
+    except Exception as e:
+        if _is_unique_violation(e):
+            conn.rollback()
+            return jsonify({'success': False, 'error': 'A user with this email already exists'}), 400
+        conn.rollback()
+        print(f"Error updating user: {e}")
         return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:
         conn.close()
@@ -403,13 +569,27 @@ def admin_create_user():
 def admin_delete_user(user_id):
     conn = db()
     try:
-        # Don't allow deleting admin users
-        cur = conn.execute("DELETE FROM users WHERE id = ? AND role != 'admin'", (user_id,))
+        user = conn.execute("SELECT id, role FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        if user_id == g.current_user['id']:
+            return jsonify({'success': False, 'error': 'Cannot delete your own account'}), 403
+        if user['role'] == 'admin':
+            return jsonify({'success': False, 'error': 'Cannot delete admin users. Demote or suspend first.'}), 403
+
+        cur = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        _record_admin_audit(
+            conn,
+            "user.delete",
+            target_user_id=user_id,
+            details={"role": user["role"]},
+        )
         conn.commit()
         if cur.rowcount == 0:
-            return jsonify({'success': False, 'error': 'User not found or cannot delete admin'}), 404
+            return jsonify({'success': False, 'error': 'User not found'}), 404
         return jsonify({'success': True, 'message': 'User deleted successfully'})
     except Exception as e:
+        conn.rollback()
         print(f"Error deleting user: {e}")
         return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:
@@ -425,12 +605,16 @@ def admin_suspend_user(user_id):
         user = conn.execute("SELECT id, role FROM users WHERE id = ?", (user_id,)).fetchone()
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
+        if user_id == g.current_user['id']:
+            return jsonify({'success': False, 'error': 'Cannot suspend your own account'}), 403
         if user['role'] == 'admin':
             return jsonify({'success': False, 'error': 'Cannot suspend admin users'}), 403
         conn.execute("UPDATE users SET status = 'suspended' WHERE id = ?", (user_id,))
+        _record_admin_audit(conn, "user.suspend", target_user_id=user_id)
         conn.commit()
         return jsonify({'success': True, 'message': 'User suspended successfully'})
     except Exception as e:
+        conn.rollback()
         print(f"Error suspending user: {e}")
         return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:
@@ -442,10 +626,15 @@ def admin_suspend_user(user_id):
 def admin_unsuspend_user(user_id):
     conn = db()
     try:
-        conn.execute("UPDATE users SET status = 'active' WHERE id = ?", (user_id,))
+        cur = conn.execute("UPDATE users SET status = 'active' WHERE id = ?", (user_id,))
+        if cur.rowcount:
+            _record_admin_audit(conn, "user.activate", target_user_id=user_id)
         conn.commit()
+        if cur.rowcount == 0:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
         return jsonify({'success': True, 'message': 'User reactivated successfully'})
     except Exception as e:
+        conn.rollback()
         print(f"Error unsuspending user: {e}")
         return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:

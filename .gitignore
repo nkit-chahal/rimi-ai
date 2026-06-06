@@ -35,6 +35,8 @@ backend/results/
 backend/*.sqlite3
 backend/*.sqlite3-journal
 backend/__pycache__/
+**/__pycache__/
+*.pyc
 backend/test_*.py
 backend/.env
 backend/_test_temp*/

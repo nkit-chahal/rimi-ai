@@ -17,11 +17,17 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(na
 
 def create_app():
     app = Flask(__name__)
+    jwt_secret = os.getenv("JWT_SECRET", "")
+    if os.getenv("FLASK_ENV") == "production" and (
+        not jwt_secret or jwt_secret == "rimi-ai-dev-secret-change-in-production"
+    ):
+        raise RuntimeError("JWT_SECRET must be configured in production")
 
     # Security: restrict CORS to known origins
     _allowed_origins = os.getenv(
         "CORS_ORIGINS", "http://localhost:5173,http://localhost:3001"
     ).split(",")
+    _allowed_origins = [origin.strip() for origin in _allowed_origins if origin.strip()]
     CORS(app, resources={r"/api/*": {"origins": _allowed_origins}}, supports_credentials=True)
 
     # Security: enforce max upload size (25 MB)
@@ -32,7 +38,7 @@ def create_app():
         get_remote_address,
         app=app,
         default_limits=["200 per minute"],
-        storage_uri="memory://",
+        storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://"),
     )
     # Store limiter on app so route modules can use it
     app.limiter = limiter

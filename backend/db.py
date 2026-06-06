@@ -96,6 +96,10 @@ class _PgCursorWrapper:
     def description(self):
         return self._cur.description
 
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
 
 class _PgConnectionWrapper:
     """Wraps a psycopg2 connection so it looks like a sqlite3.Connection."""
@@ -349,6 +353,16 @@ def _pg_schema_sql():
             user_agent TEXT,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS admin_audit_events (
+            id SERIAL PRIMARY KEY,
+            admin_user_id INTEGER,
+            target_user_id INTEGER,
+            action TEXT NOT NULL,
+            details_json TEXT NOT NULL DEFAULT '{}',
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS oauth_login_tokens (
             token TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL,
@@ -538,6 +552,18 @@ def init_db():
                 user_agent TEXT,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS admin_audit_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_user_id INTEGER,
+                target_user_id INTEGER,
+                action TEXT NOT NULL,
+                details_json TEXT NOT NULL DEFAULT '{}',
+                ip_address TEXT,
+                user_agent TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(admin_user_id) REFERENCES users(id),
+                FOREIGN KEY(target_user_id) REFERENCES users(id)
             );
             CREATE TABLE IF NOT EXISTS oauth_login_tokens (
                 token TEXT PRIMARY KEY,

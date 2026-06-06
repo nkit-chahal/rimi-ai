@@ -176,6 +176,8 @@ def google_callback():
         ).fetchone()
 
         if user:
+            if user["status"] in ("suspended", "banned"):
+                return redirect_with_error("Account is suspended.")
             user_id = user["id"]
             conn.execute(
                 """
