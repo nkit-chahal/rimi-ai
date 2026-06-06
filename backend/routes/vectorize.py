@@ -8,7 +8,7 @@ from flask import Blueprint, request, jsonify
 from config import UPLOAD_DIR, RESULTS_DIR
 from auth import (
     log_export, log_replicate_call, check_credits,
-    get_updated_credits, record_activity,
+    get_credit_price, get_updated_credits, record_activity,
 )
 import storage
 
@@ -36,6 +36,8 @@ def vectorize_image():
     engine = data.get('engine', 'local')
     num_colors = int(data.get('numColors', 32))
     project_id = int(data.get('projectId', 1))
+    pricing_key = 'vectorize' if engine == 'api' else 'vectorizeLocal'
+    required_credits = get_credit_price(pricing_key, 100 if engine == 'api' else 5)
 
     # Extract user_id early for credit check
     user_id_raw = data.get('userId') or data.get('user_id')
@@ -45,10 +47,15 @@ def vectorize_image():
             user_id_early = int(user_id_raw)
         except ValueError:
             pass
-    ok, remaining, limit, used = check_credits(user_id_early)
+    ok, remaining, limit, used = check_credits(user_id_early, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits. Contact your admin to increase your credit limit.',
-                        'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify({
+            'error': f'Insufficient AI credits. This action needs {required_credits} credits, but you have {remaining} remaining.',
+            'creditsUsed': used,
+            'creditsLimit': limit,
+            'creditsRequired': required_credits,
+            'creditsRemaining': remaining,
+        }), 403
 
     # Resolve filepath from filename or imageUrl
     filepath = None
@@ -72,7 +79,7 @@ def vectorize_image():
     else:
         return jsonify({'error': 'Provide either filename or imageUrl'}), 400
 
-    credits_used = 5  # local engine default
+    credits_used = required_credits
     try:
         if engine == 'api':
             # ---- Recraft AI Vectorize (Replicate) ----
@@ -89,7 +96,7 @@ def vectorize_image():
                 input={"image": data_uri}
             )
             duration = time.time() - start_time
-            credits_used = 100  # Recraft API / Vectorize Replicate flat
+            credits_used = required_credits  # Recraft API / Vectorize Replicate flat
             cost_usd = duration * 0.00115  # standard GPU-based logging estimation
             log_replicate_call(project_id, "recraft-ai/recraft-vectorize", duration, credits_used, cost_usd)
 
@@ -156,7 +163,7 @@ def vectorize_image():
 
             # Cleanup temp file
             os.remove(tmp_path)
-            credits_used = 5  # CPU edits (local PIL fixes) flat
+            credits_used = required_credits  # CPU edits (local PIL fixes) flat
 
             storage.sync_to_s3(result_path)
             print(f"  [Vectorize] vtracer done! Saved: {result_name} ({os.path.getsize(result_path) // 1024}KB)")
@@ -168,7 +175,10 @@ def vectorize_image():
             except ValueError:
                 user_id = None
 
-        record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
+        try:
+            record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
+        except ValueError as credit_error:
+            return jsonify({'error': str(credit_error), **get_updated_credits(user_id)}), 403
 
         # Log export
         input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)

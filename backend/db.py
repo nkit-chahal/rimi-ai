@@ -14,6 +14,23 @@ from config import DB_PATH, DATABASE_URL, UPLOAD_DIR, RESULTS_DIR
 
 db_lock = threading.Lock()
 
+DEFAULT_CREDIT_PRICING = [
+    ("upload", "Upload", "Upload artwork", 0, "fixed", 1),
+    ("extract", "Pattern Extraction", "/api/extract-design", 50, "dynamic", 1),
+    ("seamless", "Make Seamless", "/api/make-seamless", 80, "dynamic", 1),
+    ("repeat", "Repeat Set", "/api/create-repeat-set", 50, "fixed", 1),
+    ("upscale", "Super Resolution", "/api/upscale", 60, "dynamic", 1),
+    ("vectorize", "Vectorize", "/api/vectorize cloud", 100, "fixed", 1),
+    ("vectorizeLocal", "Vectorize Local", "/api/vectorize local", 5, "fixed", 1),
+    ("export", "Export", "Standard export", 0, "fixed", 1),
+    ("inspire", "Inspirations", "/api/generate-inspirations", 50, "dynamic", 1),
+    ("mappings", "Mappings", "/api/generate-mockup", 50, "dynamic", 1),
+    ("imageLayers", "Image Layers", "/api/image-layers", 100, "dynamic", 1),
+    ("colorways", "Colorways", "/api/colorways", 50, "dynamic", 1),
+    ("colorReduction", "Color Reduction", "/api/reduce-colors", 10, "fixed", 1),
+    ("techPack", "Tech Pack Export", "/api/export-techpack", 15, "fixed", 1),
+]
+
 # ---------------------------------------------------------------------------
 # Transparent PostgreSQL / SQLite wrapper
 # ---------------------------------------------------------------------------
@@ -126,6 +143,9 @@ class _PgConnectionWrapper:
     def commit(self):
         self._conn.commit()
 
+    def rollback(self):
+        self._conn.rollback()
+
     def close(self):
         self._conn.close()
 
@@ -149,6 +169,33 @@ def rows_to_dicts(rows):
     if _USE_PG:
         return [dict(row) for row in rows]
     return [dict(row) for row in rows]
+
+
+def seed_credit_pricing(conn):
+    updated_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    if _USE_PG:
+        for tool_key, label, api_name, credits, pricing_type, is_active in DEFAULT_CREDIT_PRICING:
+            conn.execute(
+                """
+                INSERT INTO credit_pricing
+                (tool_key, label, api_name, credits, pricing_type, is_active, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (tool_key) DO NOTHING
+                """,
+                (tool_key, label, api_name, credits, pricing_type, is_active, updated_at),
+            )
+    else:
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO credit_pricing
+            (tool_key, label, api_name, credits, pricing_type, is_active, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (tool_key, label, api_name, credits, pricing_type, is_active, updated_at)
+                for tool_key, label, api_name, credits, pricing_type, is_active in DEFAULT_CREDIT_PRICING
+            ],
+        )
 
 
 def resolve_input_url(input_filename):
@@ -344,6 +391,15 @@ def _pg_schema_sql():
             credits INTEGER NOT NULL,
             note TEXT,
             created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS credit_pricing (
+            tool_key TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            api_name TEXT NOT NULL DEFAULT '',
+            credits INTEGER NOT NULL DEFAULT 0,
+            pricing_type TEXT NOT NULL DEFAULT 'fixed',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS login_events (
             id SERIAL PRIMARY KEY,
@@ -544,6 +600,15 @@ def init_db():
                 FOREIGN KEY(payment_id) REFERENCES payments(id),
                 FOREIGN KEY(project_id) REFERENCES projects(id)
             );
+            CREATE TABLE IF NOT EXISTS credit_pricing (
+                tool_key TEXT PRIMARY KEY,
+                label TEXT NOT NULL,
+                api_name TEXT NOT NULL DEFAULT '',
+                credits INTEGER NOT NULL DEFAULT 0,
+                pricing_type TEXT NOT NULL DEFAULT 'fixed',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS login_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
@@ -672,4 +737,6 @@ def init_db():
         conn.commit()
         print("Seeded database with admin and user accounts.")
 
+    seed_credit_pricing(conn)
+    conn.commit()
     conn.close()

@@ -79,18 +79,22 @@ def log_replicate_call(project_id, model_name, duration, credits, cost_usd):
             conn.close()
 
 
-def check_credits(user_id):
-    """Check if a user has remaining credits. Returns (ok, remaining, limit, used)."""
+def check_credits(user_id, required_credits=1):
+    """Check if a user has enough remaining credits. Returns (ok, remaining, limit, used)."""
     user_id = resolve_user_id(user_id)
     if not user_id:
         return False, 0, 0, 0
+    try:
+        required_credits = max(1, int(required_credits))
+    except (TypeError, ValueError):
+        required_credits = 1
     conn = db()
     try:
         user = conn.execute("SELECT credits_used, credits_limit FROM users WHERE id = ?", (user_id,)).fetchone()
         if not user:
             return False, 0, 0, 0
         remaining = user["credits_limit"] - user["credits_used"]
-        return remaining > 0, remaining, user["credits_limit"], user["credits_used"]
+        return remaining >= required_credits, remaining, user["credits_limit"], user["credits_used"]
     finally:
         conn.close()
 
@@ -110,49 +114,86 @@ def get_updated_credits(user_id):
         conn.close()
 
 
+def get_credit_price(tool_key, default=0):
+    conn = db()
+    try:
+        row = conn.execute(
+            "SELECT credits FROM credit_pricing WHERE tool_key = ? AND is_active = 1",
+            (tool_key,),
+        ).fetchone()
+        if not row:
+            return int(default)
+        return int(row["credits"])
+    except Exception:
+        return int(default)
+    finally:
+        conn.close()
+
+
 def record_activity(project_id, activity_type='export', count=1, credits=50, user_id=None):
     user_id = resolve_user_id(user_id)
+    credits = int(credits)
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn = db()
-    if activity_type == 'export':
+    try:
+        if not user_id:
+            raise ValueError("user_id is required to record billable activity")
+
+        user_update = conn.execute(
+            """
+            UPDATE users
+            SET credits_used = credits_used + ?
+            WHERE id = ? AND credits_used + ? <= credits_limit
+            """,
+            (credits, user_id, credits),
+        )
+        if user_update.rowcount != 1:
+            user = conn.execute("SELECT credits_used, credits_limit FROM users WHERE id = ?", (user_id,)).fetchone()
+            if not user:
+                raise ValueError("User not found for billable activity")
+            remaining = user["credits_limit"] - user["credits_used"]
+            raise ValueError(f"Insufficient AI credits. This action needs {credits} credits, but you have {remaining} remaining.")
+
+        if activity_type == 'export':
+            conn.execute(
+                """
+                UPDATE project_metrics
+                SET exports = exports + ?,
+                    exports_delta = exports_delta + ?,
+                    credits_used = credits_used + ?,
+                    credits_delta = credits_delta + ?
+                WHERE project_id = ?
+                """,
+                (count, count, credits, credits, project_id),
+            )
+        elif activity_type == 'generation':
+            conn.execute(
+                """
+                UPDATE project_metrics
+                SET ai_generations = ai_generations + ?,
+                    ai_generations_delta = ai_generations_delta + ?,
+                    credits_used = credits_used + ?,
+                    credits_delta = credits_delta + ?
+                WHERE project_id = ?
+                """,
+                (count, count, credits, credits, project_id),
+            )
+
         conn.execute(
             """
-            UPDATE project_metrics
-            SET exports = exports + ?,
-                exports_delta = exports_delta + ?,
-                credits_used = credits_used + ?,
-                credits_delta = credits_delta + ?
-            WHERE project_id = ?
+            INSERT INTO credit_transactions
+            (user_id, project_id, transaction_type, credits, note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (count, count, credits, credits, project_id),
+            (user_id, project_id, activity_type, -abs(credits), f"{activity_type} usage", now)
         )
-    elif activity_type == 'generation':
-        conn.execute(
-            """
-            UPDATE project_metrics
-            SET ai_generations = ai_generations + ?,
-                ai_generations_delta = ai_generations_delta + ?,
-                credits_used = credits_used + ?,
-                credits_delta = credits_delta + ?
-            WHERE project_id = ?
-            """,
-            (count, count, credits, credits, project_id),
-        )
-    
-    if not user_id:
-        raise ValueError("user_id is required to record billable activity")
-    conn.execute("UPDATE users SET credits_used = credits_used + ? WHERE id = ?", (credits, user_id))
-    conn.execute(
-        """
-        INSERT INTO credit_transactions
-        (user_id, project_id, transaction_type, credits, note, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (user_id, project_id, activity_type, -abs(int(credits)), f"{activity_type} usage", now)
-    )
-    conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
-    conn.commit()
-    conn.close()
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 # ===== Image utility helpers =====

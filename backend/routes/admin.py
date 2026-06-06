@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 import bcrypt
 import jwt
 
-from db import db, rows_to_dicts
+from db import DEFAULT_CREDIT_PRICING, db, rows_to_dicts
 from middleware import admin_required, login_required
 
 bp = Blueprint('admin', __name__)
@@ -396,43 +396,99 @@ def admin_billing_overview():
         conn.close()
 
 
-# --------------- Credit Pricing (dynamic averages) ---------------
+# --------------- Credit Pricing ---------------
 @bp.route('/api/credit-pricing')
 def credit_pricing():
-    """Returns average credits per tool type based on actual replicate_logs data."""
+    """Returns active credit pricing mapped by frontend tool key."""
     conn = db()
     try:
-        rows = conn.execute("""
-            SELECT model_name, AVG(credits) as avg_credits, COUNT(*) as call_count 
-            FROM replicate_logs GROUP BY model_name
-        """).fetchall()
+        rows = rows_to_dicts(conn.execute("""
+            SELECT tool_key, label, api_name, credits, pricing_type, is_active, updated_at
+            FROM credit_pricing
+            WHERE is_active = 1
+            ORDER BY label ASC
+        """).fetchall())
     finally:
         conn.close()
 
-    # Map model names to frontend tool types
-    model_to_tool = {
-        "openai/gpt-image-2": "extract",
-        "replicate/seamless-texture": "seamless",
-        "black-forest-labs/flux-fill-pro": "seamless",
-        "recraft-ai/recraft-vectorize": "vectorize",
-        "google/upscaler": "upscale",
-        "qwen/qwen-image-layered": "imageLayers",
-    }
-
-    # Defaults if no data yet
-    defaults = {
-        "upload": 0, "extract": 50, "seamless": 80,
-        "repeat": 10, "upscale": 60, "vectorize": 100, "export": 0,
-        "inspire": 50, "mappings": 50, "imageLayers": 100,
-    }
-
-    pricing = dict(defaults)
+    pricing = {tool_key: credits for tool_key, _label, _api, credits, _type, active in DEFAULT_CREDIT_PRICING if active}
     for row in rows:
-        tool = model_to_tool.get(row["model_name"])
-        if tool and row["call_count"] >= 1:
-            pricing[tool] = int(round(row["avg_credits"]))
+        pricing[row["tool_key"]] = int(row["credits"])
 
-    return jsonify({'success': True, 'pricing': pricing})
+    return jsonify({'success': True, 'pricing': pricing, 'rows': rows})
+
+
+@bp.route('/api/admin/credit-pricing', methods=['GET'])
+@admin_required
+def admin_credit_pricing():
+    conn = db()
+    try:
+        rows = rows_to_dicts(conn.execute("""
+            SELECT tool_key, label, api_name, credits, pricing_type, is_active, updated_at
+            FROM credit_pricing
+            ORDER BY label ASC
+        """).fetchall())
+        return jsonify({'success': True, 'pricing': rows})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/admin/credit-pricing/<tool_key>', methods=['PUT'])
+@admin_required
+def admin_update_credit_pricing(tool_key):
+    data = request.json or {}
+    label = (data.get('label') or '').strip()
+    api_name = (data.get('apiName') or data.get('api_name') or '').strip()
+    pricing_type = (data.get('pricingType') or data.get('pricing_type') or 'fixed').strip().lower()
+    credits = _safe_int(data.get('credits'), -1)
+    is_active = 1 if data.get('isActive', data.get('is_active', True)) else 0
+
+    if not tool_key:
+        return jsonify({'success': False, 'error': 'Tool key is required'}), 400
+    if not label:
+        return jsonify({'success': False, 'error': 'Label is required'}), 400
+    if credits < 0:
+        return jsonify({'success': False, 'error': 'Credits must be zero or greater'}), 400
+    if pricing_type not in {'fixed', 'dynamic'}:
+        return jsonify({'success': False, 'error': 'Pricing type must be fixed or dynamic'}), 400
+
+    conn = db()
+    try:
+        existing = conn.execute(
+            "SELECT tool_key, label, api_name, credits, pricing_type, is_active FROM credit_pricing WHERE tool_key = ?",
+            (tool_key,),
+        ).fetchone()
+        if not existing:
+            return jsonify({'success': False, 'error': 'Pricing row not found'}), 404
+
+        updated_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        conn.execute(
+            """
+            UPDATE credit_pricing
+            SET label = ?, api_name = ?, credits = ?, pricing_type = ?, is_active = ?, updated_at = ?
+            WHERE tool_key = ?
+            """,
+            (label, api_name, credits, pricing_type, is_active, updated_at, tool_key),
+        )
+        _record_admin_audit(conn, "credit_pricing.update", details={
+            "toolKey": tool_key,
+            "before": dict(existing),
+            "after": {
+                "label": label,
+                "api_name": api_name,
+                "credits": credits,
+                "pricing_type": pricing_type,
+                "is_active": is_active,
+            },
+        })
+        conn.commit()
+        return jsonify({'success': True, 'message': 'Credit pricing updated'})
+    except Exception as e:
+        conn.rollback()
+        print(f"Error updating credit pricing: {e}")
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
+    finally:
+        conn.close()
 
 
 # --------------- Admin Create User ---------------

@@ -337,16 +337,26 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         }
         : state.user;
     const activeProject = state.activeProject;
+    const userRemainingCredits = Math.max(0, (user.creditsLimit || 0) - (user.creditsUsed || 0));
 
     // ===== DYNAMIC CREDIT PRICING =====
-    const [creditPricing, setCreditPricing] = useState({ upload: 0, extract: 50, seamless: 80, repeat: 10, upscale: 60, vectorize: 100, export: 0, inspire: 50, mappings: 50 });
+    const [creditPricing, setCreditPricing] = useState({
+        upload: 0, extract: 50, seamless: 80, repeat: 50, upscale: 60,
+        vectorize: 100, vectorizeLocal: 5, export: 0, inspire: 50,
+        mappings: 50, imageLayers: 100, colorways: 50, colorReduction: 10,
+        techPack: 15,
+    });
 
-    useEffect(() => {
+    const fetchCreditPricing = useCallback(() => {
         fetch(`${API}/api/credit-pricing`)
             .then(r => r.json())
             .then(d => { if (d.success && d.pricing) setCreditPricing(d.pricing); })
             .catch(() => { });
     }, []);
+
+    useEffect(() => {
+        fetchCreditPricing();
+    }, [fetchCreditPricing]);
 
     // Update user credits from any generation API response
     const updateCreditsFromResponse = (responseData) => {
@@ -455,6 +465,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         transactions: [],
     });
     const [adminBillingLoading, setAdminBillingLoading] = useState(false);
+    const [adminPricing, setAdminPricing] = useState([]);
+    const [adminPricingLoading, setAdminPricingLoading] = useState(false);
+    const [adminPricingFeedback, setAdminPricingFeedback] = useState('');
 
     const fetchAdminUsers = useCallback(() => {
         setAdminUsersLoading(true);
@@ -500,6 +513,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             .finally(() => setAdminBillingLoading(false));
     }, [adminSelectedUserId, currentToken]);
 
+    const fetchAdminPricing = useCallback(() => {
+        setAdminPricingLoading(true);
+        fetch(`${API}/api/admin/credit-pricing`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success && d.pricing) setAdminPricing(d.pricing);
+            })
+            .catch(err => console.error('Failed to fetch credit pricing:', err))
+            .finally(() => setAdminPricingLoading(false));
+    }, [currentToken]);
+
     useEffect(() => {
         if (isAdmin && (tool === 'admin-users' || tool === 'admin-credits')) fetchAdminUsers();
     }, [tool, fetchAdminUsers]);
@@ -507,6 +531,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     useEffect(() => {
         if (isAdmin && (tool === 'admin-credits' || tool === 'admin-dashboard')) fetchAdminBilling();
     }, [tool, fetchAdminBilling, isAdmin]);
+
+    useEffect(() => {
+        if (isAdmin && tool === 'admin-credits') fetchAdminPricing();
+    }, [tool, fetchAdminPricing, isAdmin]);
 
     useEffect(() => {
         if (tool === 'admin-logs') {
@@ -613,6 +641,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [vecColors, setVecColors] = useState(32);
     const [isVec, setIsVec] = useState(false);
     const [vecUrl, setVecUrl] = useState(null);
+    const vectorizeCreditCost = vecEngine === 'api'
+        ? (creditPricing.vectorize || 100)
+        : (creditPricing.vectorizeLocal || 5);
+    const hasEnoughVectorizeCredits = userRemainingCredits >= vectorizeCreditCost;
 
     const [repeatUrl, setRepeatUrl] = useState(null);
     const [repeatMaskUrl, setRepeatMaskUrl] = useState(null);
@@ -2899,7 +2931,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             setError('Upload an image first');
             return;
         }
-
         let safeFilename = uploaded?.filename;
         let safeUrl = !uploaded ? activeUrl : null;
 
@@ -3054,6 +3085,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         const activeUrl = preview || activeProject.heroImageUrl;
         if (!uploaded && !activeUrl) {
             setError('Upload an image first');
+            return;
+        }
+        if (!hasEnoughVectorizeCredits) {
+            setError(`Insufficient credits. Vectorize needs ${vectorizeCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
             return;
         }
 
@@ -3487,8 +3522,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             <input type="range" min="2" max="256" value={vecColors} onChange={(e) => setVecColors(Number(e.target.value))} />
                         </div>
                     )}
-                    <button className="st-export-btn" onClick={vectorize} disabled={isVec || (!uploaded && !preview && !activeProject?.heroImageUrl)}>
-                        {isVec ? 'Vectorizing...' : 'Vectorize Image'}
+                    <button className="st-export-btn" onClick={vectorize} disabled={isVec || (!uploaded && !preview && !activeProject?.heroImageUrl) || !hasEnoughVectorizeCredits}>
+                        {isVec ? 'Vectorizing...' : hasEnoughVectorizeCredits ? 'Vectorize Image' : `Need ${vectorizeCreditCost} credits`}
                     </button>
                 </div>
             </div>
@@ -3974,6 +4009,45 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 setCreditFeedback(`Error: ${err.message}`);
             });
         setTimeout(() => setCreditFeedback(''), 5000);
+    };
+
+    const updateAdminPricingRow = (toolKey, updates) => {
+        setAdminPricing(prev => prev.map(row => (
+            row.tool_key === toolKey ? { ...row, ...updates } : row
+        )));
+    };
+
+    const saveAdminPricingRow = (row) => {
+        const credits = parseInt(row.credits, 10);
+        if (!row.label || Number.isNaN(credits) || credits < 0) {
+            setAdminPricingFeedback('Error: label is required and credits must be zero or greater');
+            setTimeout(() => setAdminPricingFeedback(''), 5000);
+            return;
+        }
+        setAdminPricingFeedback('');
+        fetch(`${API}/api/admin/credit-pricing/${row.tool_key}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+            body: JSON.stringify({
+                label: row.label,
+                apiName: row.api_name || '',
+                credits,
+                pricingType: row.pricing_type || 'fixed',
+                isActive: Boolean(row.is_active),
+            }),
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    setAdminPricingFeedback(`Saved pricing for ${row.label}`);
+                    fetchAdminPricing();
+                    fetchCreditPricing();
+                } else {
+                    setAdminPricingFeedback(`Error: ${d.error || 'Failed to save pricing'}`);
+                }
+            })
+            .catch(err => setAdminPricingFeedback(`Error: ${err.message}`));
+        setTimeout(() => setAdminPricingFeedback(''), 5000);
     };
 
     // Admin Projects & Dashboard state
@@ -4665,6 +4739,95 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '3px' }}>{item.sub}</div>
                         </div>
                     ))}
+                </div>
+
+                <div className="admin-card glassmorphism-card" style={{ marginTop: '16px' }}>
+                    <div className="admin-card-header" style={{ justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={20} />
+                            <h3>Tool Credit Pricing</h3>
+                        </div>
+                        <button className="admin-btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={fetchAdminPricing} disabled={adminPricingLoading}>
+                            {adminPricingLoading ? 'Refreshing...' : 'Refresh'}
+                        </button>
+                    </div>
+                    {adminPricingFeedback && (
+                        <div className={`admin-feedback-badge ${adminPricingFeedback.startsWith('Error') ? 'error' : ''}`} style={{ marginBottom: 12 }}>
+                            <span>{adminPricingFeedback}</span>
+                        </div>
+                    )}
+                    <div className="admin-table-container">
+                        {adminPricingLoading && adminPricing.length === 0 ? (
+                            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading credit pricing...</div>
+                        ) : (
+                            <table className="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Tool Key</th>
+                                        <th>Label</th>
+                                        <th>API</th>
+                                        <th>Credits</th>
+                                        <th>Type</th>
+                                        <th>Active</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {adminPricing.map(row => (
+                                        <tr key={row.tool_key}>
+                                            <td><span className="model-tag">{row.tool_key}</span></td>
+                                            <td>
+                                                <input
+                                                    className="admin-input"
+                                                    value={row.label || ''}
+                                                    onChange={e => updateAdminPricingRow(row.tool_key, { label: e.target.value })}
+                                                    style={{ minWidth: 150 }}
+                                                />
+                                            </td>
+                                            <td>
+                                                <input
+                                                    className="admin-input"
+                                                    value={row.api_name || ''}
+                                                    onChange={e => updateAdminPricingRow(row.tool_key, { api_name: e.target.value })}
+                                                    style={{ minWidth: 180 }}
+                                                />
+                                            </td>
+                                            <td>
+                                                <input
+                                                    className="admin-input"
+                                                    type="number"
+                                                    min="0"
+                                                    value={row.credits}
+                                                    onChange={e => updateAdminPricingRow(row.tool_key, { credits: e.target.value })}
+                                                    style={{ width: 92 }}
+                                                />
+                                            </td>
+                                            <td>
+                                                <select
+                                                    className="admin-select"
+                                                    value={row.pricing_type || 'fixed'}
+                                                    onChange={e => updateAdminPricingRow(row.tool_key, { pricing_type: e.target.value })}
+                                                >
+                                                    <option value="fixed">Fixed</option>
+                                                    <option value="dynamic">Dynamic</option>
+                                                </select>
+                                            </td>
+                                            <td>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(row.is_active)}
+                                                    onChange={e => updateAdminPricingRow(row.tool_key, { is_active: e.target.checked ? 1 : 0 })}
+                                                />
+                                            </td>
+                                            <td>
+                                                <button className="admin-action-btn edit" onClick={() => saveAdminPricingRow(row)}>Save</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
                 </div>
 
                 <div className="admin-card glassmorphism-card" style={{ marginTop: '16px' }}>
@@ -7548,7 +7711,7 @@ if (tool === 'imagelayers') {
                 const toolTitle = tool === 'vectorize' ? 'vectorize' : 'upscale';
                 const toolLabel = tool === 'vectorize' ? 'Vectorize' : 'Upscale';
                 const actionFunc = tool === 'vectorize' ? vectorize : upscale;
-                const creditCost = tool === 'vectorize' ? (creditPricing.vectorize || 30) : (creditPricing.upscale || 10);
+                const creditCost = tool === 'vectorize' ? vectorizeCreditCost : (creditPricing.upscale || 10);
                 
                 if (!preview) {
                     return (
@@ -7959,7 +8122,10 @@ if (tool === 'imagelayers') {
             );
   };
 
-            const creditPercent = Math.min(100, Math.round((user.creditsUsed / user.creditsLimit) * 100));
+            const remainingCredits = Math.max(0, (user.creditsLimit || 0) - (user.creditsUsed || 0));
+            const remainingCreditPercent = user.creditsLimit > 0
+                ? Math.min(100, Math.round((remainingCredits / user.creditsLimit) * 100))
+                : 0;
 
             const healthItems = [
             ['Tile Seamless', state.health.tileSeamless],
@@ -8033,14 +8199,14 @@ if (tool === 'imagelayers') {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 <div className="st-credits-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={14} />
-                                    Credits
+                                    Credits Remaining
                                 </div>
-                                <div className="st-credits-text strong">{(user.creditsLimit - user.creditsUsed).toLocaleString()} <span>/ {user.creditsLimit.toLocaleString()}</span></div>
-                                <div className="st-credits-bar"><div className="st-credits-fill" style={{ width: `${creditPercent}%` }} /></div>
+                                <div className="st-credits-text strong">{remainingCredits.toLocaleString()} <span>/ {user.creditsLimit.toLocaleString()}</span></div>
+                                <div className="st-credits-bar"><div className="st-credits-fill" style={{ width: `${remainingCreditPercent}%` }} /></div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div className="st-credits-text" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                         <I d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" s={12} />
-                                        Resets in {user.resetDays} days
+                                        {Number(user.creditsUsed || 0).toLocaleString()} used, resets in {user.resetDays} days
                                     </div>
                                     <button onClick={() => setShowSettingsModal(true)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', cursor: 'pointer', padding: '2px', borderRadius: '6px', transition: 'all 0.2s ease' }}
                                         onMouseEnter={e => e.currentTarget.style.color = '#a78bfa'}
