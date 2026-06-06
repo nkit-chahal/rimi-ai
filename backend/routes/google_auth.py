@@ -190,6 +190,12 @@ def google_callback():
                 """,
                 (google_sub, name, initials_from_name(name, email), avatar_url, user_id),
             )
+            # Enforce correct free tier credits for Free Trial users
+            if user["plan"] == "Free Trial" and user["credits_limit"] > 200:
+                conn.execute(
+                    "UPDATE users SET credits_limit = 200 WHERE id = ? AND plan = 'Free Trial'",
+                    (user_id,),
+                )
         else:
             cur = conn.execute(
                 """
