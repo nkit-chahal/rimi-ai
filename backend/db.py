@@ -26,6 +26,14 @@ if _USE_PG:
 
 class _PgCursorWrapper:
     """Wraps a psycopg2 cursor so callers can use SQLite-style '?' placeholders."""
+    _RETURNING_ID_TABLES = {
+        "brand_palettes",
+        "projects",
+        "pipeline_runs",
+        "saved_workflows",
+        "users",
+    }
+
     def __init__(self, cursor):
         self._cur = cursor
 
@@ -42,10 +50,16 @@ class _PgCursorWrapper:
             sql += ' ON CONFLICT DO NOTHING'
         return sql
 
+    @classmethod
+    def _insert_returns_id(cls, sql):
+        import re
+        match = re.match(r'\s*INSERT\s+INTO\s+(?:"?[\w]+"?\.)?"?([\w]+)"?', sql, flags=re.IGNORECASE)
+        return bool(match and match.group(1).lower() in cls._RETURNING_ID_TABLES)
+
     def execute(self, sql, params=None):
         converted = self._convert_query(sql)
-        # For INSERT, add RETURNING id so we can get lastrowid
-        self._last_was_insert = converted.strip().upper().startswith('INSERT')
+        # Only add RETURNING id for tables where callers consume lastrowid.
+        self._last_was_insert = self._insert_returns_id(converted)
         if self._last_was_insert and 'RETURNING' not in converted.upper():
             converted = converted.rstrip().rstrip(';') + ' RETURNING id'
         self._cur.execute(converted, params or ())
@@ -55,6 +69,8 @@ class _PgCursorWrapper:
                 self._lastrowid = row['id'] if row and isinstance(row, dict) else (row[0] if row else None)
             except Exception:
                 self._lastrowid = None
+        else:
+            self._lastrowid = None
         return self
 
     def executemany(self, sql, seq_of_params):
