@@ -263,6 +263,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [state, setState] = useState(emptyState);
     const [activeProjectId, setActiveProjectId] = useState(1);
     const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+    const [newProjectName, setNewProjectName] = useState('');
+    const projectDropdownRef = useRef(null);
     const [controlTab, setControlTab] = useState('controls');
     const [uploads, setUploads] = useState({});
     const [isDrag, setIsDrag] = useState(false);
@@ -543,6 +545,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const uploaded = useMemo(() => uploads[tool]?.file || null, [uploads, tool]);
     const preview = useMemo(() => uploads[tool]?.url || null, [uploads, tool]);
     const controls = state.controls;
+
+    // Close project dropdown on click outside
+    useEffect(() => {
+        const handler = (e) => {
+            if (projectDropdownRef.current && !projectDropdownRef.current.contains(e.target)) {
+                setShowProjectDropdown(false);
+            }
+        };
+        if (showProjectDropdown) document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showProjectDropdown]);
 
     const [prompt, setPrompt] = useState('');
     const [creativity, setCreativity] = useState(3);
@@ -7855,7 +7868,7 @@ if (tool === 'imagelayers') {
                                 <I d="M3 3h18v18H3zM9 3v18M12 9l3 3-3 3" s={17} />
                             </button>
                         )}
-                        <div className="st-project-dropdown-wrap" style={{ position: 'relative' }}>
+                        <div className="st-project-dropdown-wrap" ref={projectDropdownRef} style={{ position: 'relative' }}>
                             <button
                                 className="st-project-select"
                                 onClick={() => setShowProjectDropdown(!showProjectDropdown)}
@@ -7900,34 +7913,53 @@ if (tool === 'imagelayers') {
                                         ))}
                                     </div>
                                     <div style={{ borderTop: '1px solid #e2e8f0', padding: '6px' }}>
-                                        <button
-                                            style={{
-                                                display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
-                                                padding: '9px 12px', border: 'none', borderRadius: '7px',
-                                                background: 'linear-gradient(135deg, #7c3aed, #6366f1)',
-                                                color: '#fff', fontSize: '0.82rem', fontWeight: 700,
-                                                cursor: 'pointer', transition: 'opacity 0.2s ease'
-                                            }}
-                                            onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-                                            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                                            onClick={async () => {
-                                                const name = prompt('New project name:');
-                                                if (!name || !name.trim()) return;
-                                                const r = await fetch(`${API}/api/projects`, {
-                                                    method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
-                                                    body: JSON.stringify({ name: name.trim() })
-                                                });
-                                                const d = await r.json();
-                                                if (d.success && d.projectId) {
-                                                    loadStudioState(d.projectId);
-                                                }
-                                                setShowProjectDropdown(false);
+                                        <form
+                                            style={{ display: 'flex', gap: '6px' }}
+                                            onSubmit={async (e) => {
+                                                e.preventDefault();
+                                                if (!newProjectName.trim()) return;
+                                                try {
+                                                    const r = await fetch(`${API}/api/projects`, {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
+                                                        body: JSON.stringify({ name: newProjectName.trim() })
+                                                    });
+                                                    const d = await r.json();
+                                                    if (d.success && d.projectId) {
+                                                        loadStudioState(d.projectId);
+                                                        setNewProjectName('');
+                                                        setShowProjectDropdown(false);
+                                                    }
+                                                } catch (err) { console.error('Create project error:', err); }
                                             }}
                                         >
-                                            <I d="M12 5v14M5 12h14" s={14} />
-                                            <span>New Project</span>
-                                        </button>
+                                            <input
+                                                type="text"
+                                                value={newProjectName}
+                                                onChange={e => setNewProjectName(e.target.value)}
+                                                placeholder="Project name..."
+                                                autoFocus
+                                                style={{
+                                                    flex: 1, padding: '8px 10px', border: '1px solid #e2e8f0',
+                                                    borderRadius: '7px', fontSize: '0.82rem', outline: 'none'
+                                                }}
+                                                onFocus={e => e.target.style.borderColor = '#7c3aed'}
+                                                onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                                            />
+                                            <button
+                                                type="submit"
+                                                style={{
+                                                    display: 'flex', alignItems: 'center', gap: '5px',
+                                                    padding: '8px 14px', border: 'none', borderRadius: '7px',
+                                                    background: 'linear-gradient(135deg, #7c3aed, #6366f1)',
+                                                    color: '#fff', fontSize: '0.8rem', fontWeight: 700,
+                                                    cursor: 'pointer', whiteSpace: 'nowrap'
+                                                }}
+                                            >
+                                                <I d="M12 5v14M5 12h14" s={13} />
+                                                Create
+                                            </button>
+                                        </form>
                                     </div>
                                 </div>
                             )}
