@@ -353,7 +353,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         if (responseData && responseData.creditsUsed !== undefined) {
             setState(prev => ({
                 ...prev,
-                user: { ...prev.user, creditsUsed: responseData.creditsUsed, creditsLimit: responseData.creditsLimit }
+                user: {
+                    ...prev.user,
+                    id: prev.user?.id ?? currentUser?.id,
+                    creditsUsed: responseData.creditsUsed,
+                    creditsLimit: responseData.creditsLimit ?? prev.user?.creditsLimit ?? currentUser?.creditsLimit,
+                }
             }));
         }
     };

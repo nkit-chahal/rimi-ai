@@ -30,6 +30,8 @@ export default function PatternTool(props) {
             } else {
                 formData.append('imageUrl', preview || activeProject?.heroImageUrl);
             }
+            formData.append('projectId', activeProject?.id || 1);
+            formData.append('userId', user?.id || '');
             const res = await fetch(`${API}/api/extract-design`, {
                 method: 'POST',
                 headers: { ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}) },

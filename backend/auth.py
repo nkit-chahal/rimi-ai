@@ -8,7 +8,33 @@ import json
 import base64
 from datetime import datetime, timezone
 
+import jwt
+from flask import request
+
 from db import db, db_lock
+
+JWT_SECRET = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
+JWT_ALGORITHM = 'HS256'
+
+
+def resolve_user_id(user_id=None):
+    """Resolve a billable user from an explicit id or the current bearer token."""
+    if user_id:
+        try:
+            return int(user_id)
+        except (TypeError, ValueError):
+            pass
+
+    auth_header = request.headers.get('Authorization', '') if request else ''
+    if not auth_header.startswith('Bearer '):
+        return None
+
+    try:
+        payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        resolved = payload.get('user_id')
+        return int(resolved) if resolved else None
+    except Exception:
+        return None
 
 
 def log_export(project_id, filename, input_filename, tool_type, settings_dict=None, pipeline_run_id=None, pipeline_steps_list=None):
@@ -55,6 +81,7 @@ def log_replicate_call(project_id, model_name, duration, credits, cost_usd):
 
 def check_credits(user_id):
     """Check if a user has remaining credits. Returns (ok, remaining, limit, used)."""
+    user_id = resolve_user_id(user_id)
     if not user_id:
         return False, 0, 0, 0
     conn = db()
@@ -70,6 +97,7 @@ def check_credits(user_id):
 
 def get_updated_credits(user_id):
     """Fetch a user's latest credits_used and credits_limit after a generation."""
+    user_id = resolve_user_id(user_id)
     if not user_id:
         return {}
     conn = db()
@@ -83,6 +111,7 @@ def get_updated_credits(user_id):
 
 
 def record_activity(project_id, activity_type='export', count=1, credits=50, user_id=None):
+    user_id = resolve_user_id(user_id)
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn = db()
     if activity_type == 'export':

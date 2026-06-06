@@ -7,7 +7,7 @@ import concurrent.futures
 import requests as http_requests
 from flask import Blueprint, request, jsonify
 
-from config import UPLOAD_DIR, RESULTS_DIR, groq_client
+from config import UPLOAD_DIR, RESULTS_DIR, groq_client, safe_filename
 from auth import check_credits, record_activity, get_updated_credits, log_export, log_replicate_call
 import replicate
 import storage
@@ -65,9 +65,21 @@ def describe_image():
 
 @bp.route('/api/extract-design', methods=['POST'])
 def extract_design():
-    data = request.get_json()
+    data = request.get_json(silent=True) or request.form
     filename = data.get('filename', '')
-    filename = os.path.basename(filename) if filename else ''
+    image_file = request.files.get('image')
+    if image_file:
+        original_name = safe_filename(image_file.filename) or "upload.png"
+        ext = original_name.rsplit('.', 1)[-1].lower() if '.' in original_name else 'png'
+        filename = f"{uuid.uuid4().hex}.{ext}"
+        filepath = os.path.join(UPLOAD_DIR, filename)
+        image_file.save(filepath)
+        storage.sync_to_s3(filepath)
+    else:
+        image_url = data.get('imageUrl', '')
+        if not filename and image_url:
+            filename = os.path.basename(image_url.split('?', 1)[0])
+        filename = os.path.basename(filename) if filename else ''
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filepath = os.path.join(UPLOAD_DIR, filename)
