@@ -97,7 +97,7 @@ export default function Login({ onLogin, onGoToLanding }) {
         {/* Branding */}
         <div className="login-brand" onClick={onGoToLanding}>
           <span className="ln-logo-badge">RI</span>
-          <span className="login-logo-text">RIM AI</span>
+          <span className="login-logo-text">RIMI AI</span>
         </div>
 
         {/* Card Panel */}
@@ -173,7 +173,7 @@ export default function Login({ onLogin, onGoToLanding }) {
         </div>
 
         <div className="login-footer">
-          <p>© 2026 RIM AI. All Rights Reserved. Enterprise Grade Security.</p>
+          <p>© 2026 RIMI AI. All Rights Reserved. Enterprise Grade Security.</p>
         </div>
       </div>
     </div>

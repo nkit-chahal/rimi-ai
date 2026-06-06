@@ -1,5 +1,5 @@
 """
-RIM AI Backend — Thin App Factory
+RIMI AI Backend — Thin App Factory
 All routes are in backend/routes/, shared logic in config.py, db.py, auth.py.
 """
 import logging
@@ -51,7 +51,7 @@ app = create_app()
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 3001))
     logging.info("=" * 50)
-    logging.info("  RIM AI Backend — Flask + Replicate")
+    logging.info("  RIMI AI Backend — Flask + Replicate")
     logging.info(f"  http://localhost:{port}")
     logging.info("=" * 50)
     app.run(host='0.0.0.0', port=port, debug=(os.getenv('FLASK_ENV') != 'production'))

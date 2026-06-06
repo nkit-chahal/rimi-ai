@@ -5449,7 +5449,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 key: RAZORPAY_KEY_ID,
                 amount: orderData.amount,
                 currency: orderData.currency,
-                name: 'RIM AI',
+                name: 'RIMI AI',
                 description: pack.label,
                 order_id: orderData.order_id,
                 prefill: {
@@ -7761,7 +7761,7 @@ if (tool === 'imagelayers') {
                 {!isSidebarHidden && <aside className="st-sidebar">
                     <div className="st-sidebar-top">
                         <div className="st-sidebar-head">
-                            <div className="st-logo" onClick={() => { setTool(user.role === 'admin' ? 'admin-dashboard' : 'dashboard'); setError(''); }} style={{ cursor: 'pointer' }}><span className="ln-logo-badge">RI</span> RIM AI</div>
+                            <div className="st-logo" onClick={() => { setTool(user.role === 'admin' ? 'admin-dashboard' : 'dashboard'); setError(''); }} style={{ cursor: 'pointer' }}><span className="ln-logo-badge">RI</span> RIMI AI</div>
                             <button
                                 className="st-sidebar-toggle"
                                 type="button"

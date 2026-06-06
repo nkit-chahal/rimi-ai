@@ -455,4 +455,4 @@ def admin_unsuspend_user(user_id):
 # --------------- Health check ---------------
 @bp.route('/api/health')
 def health():
-    return jsonify({'status': 'ok', 'service': 'RIM AI Backend'})
+    return jsonify({'status': 'ok', 'service': 'RIMI AI Backend'})

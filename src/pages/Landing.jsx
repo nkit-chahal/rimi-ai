@@ -1050,7 +1050,7 @@ export default function Landing({ onEnterApp }) {
           <div className="ln-nav-inner">
             <div className="ln-nav-left">
               <div className="ln-logo">
-                <span className="ln-logo-badge">RI</span> RIM AI
+                <span className="ln-logo-badge">RI</span> RIMI AI
               </div>
               <div className="ln-nav-links">
                 <a href="#services">Services</a>
@@ -1098,11 +1098,11 @@ export default function Landing({ onEnterApp }) {
                   <div className="ln-chrome-dot" style={{background:'#27c93f'}} />
                 </div>
                 <div className="ln-chrome-title">
-                  {activeTab === 'clean' && 'RIM AI Workspace — Clean & Enhance Engine'}
-                  {activeTab === 'inspire' && 'RIM AI Workspace — AI inspirations moodboard'}
-                  {activeTab === 'repeat' && 'RIM AI Workspace — Repeating Pattern Generator'}
-                  {activeTab === 'mappings' && 'RIM AI Workspace — Dress to Design 3D Draping'}
-                  {activeTab === 'vectorize' && 'RIM AI Workspace — Spline Vectorization curves'}
+                  {activeTab === 'clean' && 'RIMI AI Workspace — Clean & Enhance Engine'}
+                  {activeTab === 'inspire' && 'RIMI AI Workspace — AI inspirations moodboard'}
+                  {activeTab === 'repeat' && 'RIMI AI Workspace — Repeating Pattern Generator'}
+                  {activeTab === 'mappings' && 'RIMI AI Workspace — Dress to Design 3D Draping'}
+                  {activeTab === 'vectorize' && 'RIMI AI Workspace — Spline Vectorization curves'}
                 </div>
                 <div style={{width: 32}} /> {/* spacer for center alignment */}
               </div>
@@ -1112,7 +1112,7 @@ export default function Landing({ onEnterApp }) {
                 <div className="ln-mockup-sidebar">
                   <div className="ln-mockup-logo">
                     <span className="ln-mockup-logo-badge">RI</span>
-                    <span style={{fontWeight: 700}}>RIM AI</span>
+                    <span style={{fontWeight: 700}}>RIMI AI</span>
                   </div>
                   <div style={{fontSize:'0.55rem',color:'#94a3b8',fontWeight:700,margin:'0.35rem 0',textTransform:'uppercase',letterSpacing:'0.05em'}}>AI Tools</div>
                   {[
@@ -1508,7 +1508,7 @@ export default function Landing({ onEnterApp }) {
           <div className="ln-testimonial-row">
             <div className="ln-testimonial">
               <div className="ln-quote-mark">“</div>
-              <p>RIM AI has completely revolutionized our workflow. We can now go from simple artwork sketches to print-ready textile repeat structures in minutes rather than days. The vectorizer quality is absolutely unmatched.</p>
+              <p>RIMI AI has completely revolutionized our workflow. We can now go from simple artwork sketches to print-ready textile repeat structures in minutes rather than days. The vectorizer quality is absolutely unmatched.</p>
               <div className="ln-quote-author">— Sarah Lin, Creative Director at Pattern House</div>
             </div>
             
@@ -1528,7 +1528,7 @@ export default function Landing({ onEnterApp }) {
         {/* Footer */}
         <footer className="ln-footer">
           <div className="ln-footer-inner">
-            <span>© {new Date().getFullYear()} RIM AI — All rights reserved.</span>
+            <span>© {new Date().getFullYear()} RIMI AI — All rights reserved.</span>
             <span>Made with ❤️ for designers & textile professionals</span>
           </div>
         </footer>
