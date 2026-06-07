@@ -1,17 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
+import { createPortal } from 'react-dom';
 
-export default function ColorwaysTool({ uploaded, preview, activeProject, user, controls, setError, addBgTask, updateCreditsFromResponse }) {
-    // ===== LOCAL STATE =====
+export default function ColorwaysTool(props) {
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, cwUrl, setCwUrl, handleUpload } = props;
+
+    const colorwayCreditCost = creditPricing.recolor || 10;
+    const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
+    const hasEnoughColorwayCredits = userRemainingCredits >= colorwayCreditCost;
+    const [isDrag, setIsDrag] = useState(false);
+    const fileRef = useRef(null);
+
     const [cwExtractedPalette, setCwExtractedPalette] = useState([]);
     const [cwTargetPalette, setCwTargetPalette] = useState([]);
-    const [cwUrl, setCwUrl] = useState(null);
-    const [isCwExtracting, setIsCwExtracting] = useState(false);
+        const [isCwExtracting, setIsCwExtracting] = useState(false);
     const [isCwRecoloring, setIsCwRecoloring] = useState(false);
     const [cwVariations, setCwVariations] = useState([]);
 
-    // ===== HANDLERS =====
     const extractColors = async () => {
         if (!uploaded) return;
         setIsCwExtracting(true);
@@ -37,6 +43,10 @@ export default function ColorwaysTool({ uploaded, preview, activeProject, user, 
 
     const generateColorway = async () => {
         if (!uploaded || cwTargetPalette.length === 0) return;
+        if (!hasEnoughColorwayCredits) {
+            setError(`Insufficient credits. Recolor needs ${colorwayCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setIsCwRecoloring(true);
         setError('');
 
@@ -64,128 +74,184 @@ export default function ColorwaysTool({ uploaded, preview, activeProject, user, 
         addBgTask('colorways', 'Colorway Generation', uploaded.filename, trigger);
         setIsCwRecoloring(false);
     };
+    // ===== END COLORWAYS FUNCTIONS =====
 
-    // ===== RENDER =====
-    return (
-        <div className="st-tool-content st-colorways">
-            <div className="st-canvas-container" style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+    // ===== VECTOR PRO (Pantone / Color Reduction) =====
 
-                <div className="st-panel st-panel-left" style={{ flex: '1 1 300px', maxWidth: '400px', backgroundColor: 'var(--card-bg)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                    <h3 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--text)' }}>Color Palette</h3>
 
-                    {!cwExtractedPalette.length ? (
-                        <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-                            <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>Extract colors from your uploaded image to get started.</p>
-                            <button
-                                className="st-btn primary"
-                                onClick={extractColors}
-                                disabled={!uploaded || isCwExtracting}
-                                style={{ width: '100%' }}
-                            >
-                                {isCwExtracting ? 'Extracting...' : 'Extract Colors'}
+        if (!preview) {
+            return (
+                <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
+                    <div
+                        className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
+                        onClick={() => fileRef.current?.click()}
+                        onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
+                        onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
+                        onDragLeave={() => setIsDrag(false)}
+                    >
+                        <div className="st-particles">
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                        </div>
+                        <div className="st-dropzone-icon-wrap">
+                            <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={36} />
+                        </div>
+                        <h2 className="st-dropzone-title">Upload artwork for Colorways</h2>
+                        <p className="st-dropzone-desc">Drag & drop or click to browse — map and generate new colorways</p>
+                        <div className="st-dropzone-badges">
+                            <span className="st-dropzone-badge">PNG</span>
+                            <span className="st-dropzone-badge">JPG</span>
+                            <span className="st-dropzone-badge">TIFF</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
+                <div className="st-comparison-workspace">
+                    <div className="st-comparison-card">
+                        <div className="st-comparison-card-head">
+                            <span>Original Artwork</span>
+                            <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} /> Replace
                             </button>
                         </div>
-                    ) : (
-                        <div className="st-cw-palette-editor">
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Color Mapping</label>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    {cwTargetPalette.map((mapping, idx) => (
-                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
-                                                <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: mapping.old, border: '1px solid var(--border)' }}></span>
-                                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{mapping.old}</span>
-                                            </div>
-                                            <I d="M14 5l7 7m0 0l-7 7m7-7H3" s={14} />
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
-                                                <input
-                                                    type="color"
-                                                    value={mapping.new}
-                                                    onChange={(e) => {
-                                                        const newPalette = [...cwTargetPalette];
-                                                        newPalette[idx].new = e.target.value;
-                                                        setCwTargetPalette(newPalette);
-                                                    }}
-                                                    style={{ width: '30px', height: '30px', padding: 0, border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                                                />
-                                                <input
-                                                    type="text"
-                                                    value={mapping.new}
-                                                    onChange={(e) => {
-                                                        const newPalette = [...cwTargetPalette];
-                                                        newPalette[idx].new = e.target.value;
-                                                        setCwTargetPalette(newPalette);
-                                                    }}
-                                                    style={{ width: '70px', fontSize: '0.8rem', fontFamily: 'monospace', padding: '0.25rem', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '4px' }}
-                                                />
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <button
-                                    className="st-btn"
-                                    onClick={() => setCwTargetPalette(cwExtractedPalette.map(p => ({ old: p.hex, new: p.hex })))}
-                                    style={{ flex: 1 }}
-                                >
-                                    Reset
-                                </button>
-                                <button
-                                    className="st-btn primary"
-                                    onClick={generateColorway}
-                                    disabled={isCwRecoloring}
-                                    style={{ flex: 2 }}
-                                >
-                                    {isCwRecoloring ? 'Generating...' : 'Generate (10 cr)'}
-                                </button>
-                            </div>
+                        <div className="st-comparison-card-body" style={{ position: 'relative' }}>
+                            <img src={preview} alt="Original" />
                         </div>
-                    )}
+                    </div>
+
+                    <div className="st-comparison-action-bridge">
+                        <button
+                            className={`st-extract-btn-creative ${!hasEnoughColorwayCredits ? 'insufficient-credits' : ''}`}
+                            onClick={generateColorway}
+                            disabled={isCwRecoloring || !cwExtractedPalette.length || !hasEnoughColorwayCredits}
+                            title={!hasEnoughColorwayCredits ? `Need ${colorwayCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Generate colorway'}
+                        >
+                            <div className={isCwRecoloring ? 'spin-icon' : ''}>
+                                <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={20} />
+                            </div>
+                            {isCwRecoloring ? 'Generating...' : hasEnoughColorwayCredits ? 'Recolor' : `Need ${colorwayCreditCost} credits`}
+                        </button>
+                        <span className="st-credit-badge">
+                            <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
+                            {colorwayCreditCost} credits
+                        </span>
+                    </div>
+
+                    <div className="st-comparison-card">
+                        <div className="st-comparison-card-head">
+                            <span>Latest Colorway</span>
+                            {cwUrl && (
+                                <button onClick={(e) => forceDownload(e, `${API}${cwUrl}`)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                    <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
+                                </button>
+                            )}
+                        </div>
+                        <div className="st-comparison-card-body">
+                            {cwUrl ? (
+                                <div className="st-result-reveal">
+                                    <img src={`${API}${cwUrl}`} alt="Result" />
+                                </div>
+                            ) : isCwRecoloring ? (
+                                <div className="st-ai-processing">
+                                    <div className="st-ai-sparkle-container">
+                                        <div className="st-ai-sparkle-icon">
+                                            <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={28} />
+                                        </div>
+                                        <div className="st-ai-ring" />
+                                        <div className="st-ai-ring" />
+                                        <div className="st-ai-ring" />
+                                    </div>
+                                    <span className="st-ai-phase-text">AI is recoloring pattern...</span>
+                                </div>
+                            ) : (
+                                <div style={{ textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />
+                                    <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>Ready to generate</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
 
-                <div className="st-panel st-panel-right" style={{ flex: '2 1 500px', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                    {cwUrl ? (
-                        <div className="st-preview-card" style={{ backgroundColor: 'var(--card-bg)', padding: '1rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text)' }}>Latest Colorway</h3>
-                            <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', backgroundColor: 'var(--bg)', borderRadius: '8px', overflow: 'hidden' }}>
-                                <img src={`${API}${cwUrl}`} alt="Recolored" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                            </div>
-                            <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
-                                <a href={`${API}${cwUrl}`} onClick={(e) => forceDownload(e, `${API}${cwUrl}`)} className="st-dl-btn">
-                                    <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={16} /> Download
-                                </a>
-                            </div>
+                {/* Color Mapping Editor - Below Workspace */}
+                <div style={{ marginTop: '2rem', backgroundColor: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border)', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div>
+                            <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text)', fontSize: '1.2rem' }}>Color Mapping Editor</h3>
+                            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Extract palette from original artwork and map to new target colors.</p>
                         </div>
-                    ) : uploaded ? (
-                        <div className="st-preview-card" style={{ backgroundColor: 'var(--card-bg)', padding: '1rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                            <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text)' }}>Original Artwork</h3>
-                            <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', backgroundColor: 'var(--bg)', borderRadius: '8px', overflow: 'hidden' }}>
-                                <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                        <button className="st-extract-btn-creative" onClick={extractColors} disabled={!uploaded || isCwExtracting} style={{ width: 'auto', padding: '0.5rem 1rem' }}>
+                            <div className={isCwExtracting ? 'spin-icon' : ''}>
+                                <I d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" s={16} />
                             </div>
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '400px', color: 'var(--text-muted)', border: '2px dashed var(--border)', borderRadius: '16px' }}>
-                            Upload an image to start recoloring
-                        </div>
-                    )}
+                            {isCwExtracting ? 'Extracting...' : 'Extract Colors'}
+                        </button>
+                    </div>
 
-                    {cwVariations.length > 0 && (
-                        <div className="st-variations-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
-                            <div style={{ gridColumn: '1 / -1' }}>
-                                <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text)', fontSize: '1.1rem' }}>Recent Variations</h3>
-                            </div>
-                            {cwVariations.map((v, i) => (
-                                <div key={i} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => { setCwUrl(v.url); setCwTargetPalette([...v.targetPalette]); }}>
-                                    <img src={`${API}${v.url}`} alt={`Variation ${i}`} style={{ width: '100%', display: 'block', aspectRatio: '1/1', objectFit: 'cover' }} />
+                    {cwExtractedPalette.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                            {cwTargetPalette.map((mapping, idx) => (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                                        <span style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: mapping.old, border: '1px solid var(--border)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)' }}></span>
+                                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontFamily: 'monospace', fontWeight: 600 }}>{mapping.old}</span>
+                                    </div>
+                                    <div style={{ color: 'var(--text-muted)' }}><I d="M14 5l7 7m0 0l-7 7m7-7H3" s={16} /></div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                                        <input
+                                            type="color"
+                                            value={mapping.new}
+                                            onChange={(e) => {
+                                                const newPalette = [...cwTargetPalette];
+                                                newPalette[idx].new = e.target.value;
+                                                setCwTargetPalette(newPalette);
+                                            }}
+                                            style={{ width: '36px', height: '36px', padding: 0, border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                                        />
+                                        <input
+                                            type="text"
+                                            value={mapping.new}
+                                            onChange={(e) => {
+                                                const newPalette = [...cwTargetPalette];
+                                                newPalette[idx].new = e.target.value;
+                                                setCwTargetPalette(newPalette);
+                                            }}
+                                            style={{ width: '75px', fontSize: '0.85rem', fontFamily: 'monospace', padding: '0.4rem', backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: '6px', fontWeight: 600 }}
+                                        />
+                                    </div>
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
-
+                
+                {/* Recent Variations */}
+                {cwVariations.length > 0 && (
+                    <div style={{ marginTop: '2rem' }}>
+                        <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text)', fontSize: '1.1rem' }}>Recent Variations</h3>
+                        <div className="st-variations-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem' }}>
+                            {cwVariations.map((v, i) => (
+                                <div key={i} style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'translateY(-2px)' } }} onClick={() => { setCwUrl(v.url); setCwTargetPalette([...v.targetPalette]); }}>
+                                    <img src={`${API}${v.url}`} alt={`Variation ${i}`} style={{ width: '100%', display: 'block', aspectRatio: '1/1', objectFit: 'cover' }} />
+                                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', padding: '0.5rem', display: 'flex', gap: '4px', overflowX: 'auto' }}>
+                                        {v.targetPalette.map((p, j) => (
+                                            <div key={j} style={{ width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0, backgroundColor: p.new, border: '1px solid rgba(255,255,255,0.2)' }} />
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
-        </div>
-    );
+        );
+
 }

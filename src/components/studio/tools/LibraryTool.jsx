@@ -1,56 +1,58 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API } from '../shared/helpers';
+import { API, forceDownload } from '../shared/helpers';
+import { createPortal } from 'react-dom';
 
 export default function LibraryTool(props) {
-    const {
-        uploaded, preview, activeProject, user, controls, setError, addBgTask, updateCreditsFromResponse,
-        setUploads, tool, currentToken, state
-    } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, currentToken } = props;
 
-    const [newPaletteName, setNewPaletteName] = useState('');
-    const [newPaletteColors, setNewPaletteColors] = useState(['#4f46e5', '#ec4899', '#f59e0b']);
-    const [isSavingPalette, setIsSavingPalette] = useState(false);
-    const [brandPalettesLoading, setBrandPalettesLoading] = useState(true);
     const [brandPalettes, setBrandPalettes] = useState([]);
+    const [brandPalettesLoading, setBrandPalettesLoading] = useState(false);
+    const [newPaletteName, setNewPaletteName] = useState('');
+    const [newPaletteColors, setNewPaletteColors] = useState(['#000000', '#ffffff']);
+    const [isSavingPalette, setIsSavingPalette] = useState(false);
 
-    useEffect(() => {
-        const fetchPalettes = async () => {
-            setBrandPalettesLoading(true);
-            try {
-                const res = await fetch(`${API}/api/brand-palettes`, {
-                    headers: { ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}) },
-                });
-                const data = await res.json();
-                if (res.ok && data.palettes) setBrandPalettes(data.palettes);
-            } catch (err) {
-                // Palettes failed to load, leave empty
-            } finally {
-                setBrandPalettesLoading(false);
-            }
-        };
-        fetchPalettes();
-    }, [currentToken]);
+    const fetchBrandPalettes = useCallback(async () => {
+        setBrandPalettesLoading(true);
+        try {
+            const r = await fetch(`${API}/api/brand-palettes?project_id=${activeProject.id}`, {
+                headers: { Authorization: `Bearer ${currentToken}` }
+            });
+            const d = await r.json();
+            if (d.success) setBrandPalettes(d.palettes);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setBrandPalettesLoading(false);
+        }
+    }, [activeProject.id, currentToken]);
 
     const saveBrandPalette = async () => {
-        if (!newPaletteName.trim() || isSavingPalette) return;
+        if (!newPaletteName.trim()) return;
         setIsSavingPalette(true);
         try {
-            const res = await fetch(`${API}/api/brand-palettes`, {
+            const r = await fetch(`${API}/api/brand-palettes`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
+                    Authorization: `Bearer ${currentToken}`
                 },
-                body: JSON.stringify({ name: newPaletteName, colors: newPaletteColors }),
+                body: JSON.stringify({
+                    projectId: activeProject.id,
+                    name: newPaletteName,
+                    colors: newPaletteColors
+                })
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Save failed');
-            setBrandPalettes(prev => [...prev, data.palette || { id: Date.now(), name: newPaletteName, colors: newPaletteColors }]);
-            setNewPaletteName('');
-            setNewPaletteColors(['#4f46e5', '#ec4899', '#f59e0b']);
-        } catch (err) {
-            setError(err.message || 'Failed to save palette');
+            const d = await r.json();
+            if (d.success) {
+                setNewPaletteName('');
+                setNewPaletteColors(['#000000', '#ffffff']);
+                fetchBrandPalettes();
+            } else {
+                setError(d.error || 'Failed to save palette');
+            }
+        } catch {
+            setError('Failed to save palette');
         } finally {
             setIsSavingPalette(false);
         }
@@ -58,21 +60,25 @@ export default function LibraryTool(props) {
 
     const deleteBrandPalette = async (id) => {
         try {
-            await fetch(`${API}/api/brand-palettes/${id}`, {
+            const r = await fetch(`${API}/api/brand-palettes/${id}`, {
                 method: 'DELETE',
-                headers: { ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}) },
+                headers: { Authorization: `Bearer ${currentToken}` }
             });
-            setBrandPalettes(prev => prev.filter(p => p.id !== id));
-        } catch (err) {
-            setError(err.message || 'Failed to delete palette');
+            const d = await r.json();
+            if (d.success) fetchBrandPalettes();
+        } catch {
+            setError('Failed to delete palette');
         }
     };
 
-    
-    return (
-        <>
+    useEffect(() => {
+        if (activeProject?.id) {
+            fetchBrandPalettes();
+        }
+    }, [activeProject?.id, fetchBrandPalettes]);
 
 
+            return (
                 <div style={{ padding: '2rem', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
                     <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)', marginBottom: '1.5rem' }}>Brand Library</h2>
 
@@ -153,7 +159,7 @@ export default function LibraryTool(props) {
                                 <p>Loading palettes...</p>
                             ) : brandPalettes.length === 0 ? (
                                 <div className="st-empty-canvas" style={{ minHeight: '200px' }}>
-                                    <span className="st-empty-icon" style={{ fontSize: '2rem' }}>🎨</span>
+                                    <span className="st-empty-icon" style={{ fontSize: '2rem' }}></span>
                                     <p>No brand palettes saved yet.</p>
                                 </div>
                             ) : (
@@ -181,7 +187,6 @@ export default function LibraryTool(props) {
                         </div>
                     </div>
                 </div>
-            
-        </>
-    );
+            );
+
 }

@@ -1,19 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
 
-export default function SeamlessTool({ uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse }) {
+export default function SeamlessTool({
+    uploaded,
+    preview,
+    activeProject,
+    user,
+    setError,
+    addBgTask,
+    updateCreditsFromResponse,
+    setUploads,
+    tool,
+    currentToken,
+    state,
+    creditPricing,
+    seamlessUrl: parentSeamlessUrl,
+    setSeamlessUrl: parentSetSeamlessUrl
+}) {
     // Local state
     const [seamlessMode, setSeamlessMode] = useState('generate');
     const [seamlessPrompt, setSeamlessPrompt] = useState('');
     const [seamlessTiles, setSeamlessTiles] = useState([]);
-    const [seamlessUrl, setSeamlessUrl] = useState(null);
+    const [localSeamlessUrl, setLocalSeamlessUrl] = useState(null);
     const [isSeamless, setIsSeamless] = useState(false);
     const [seamlessProgress, setSeamlessProgress] = useState(0);
     const [seamlessStatus, setSeamlessStatus] = useState('');
     const [isDrag, setIsDrag] = useState(false);
 
-    const fileRef = React.useRef(null);
+    const fileRef = useRef(null);
+
+    const seamlessUrl = parentSeamlessUrl !== undefined ? parentSeamlessUrl : localSeamlessUrl;
+    const setSeamlessUrl = parentSetSeamlessUrl !== undefined ? parentSetSeamlessUrl : setLocalSeamlessUrl;
+
+    const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
+    const seamlessCreditCost = creditPricing?.seamless || 80;
+    const hasEnoughSeamlessCredits = userRemainingCredits >= seamlessCreditCost;
 
     // Progress simulation
     useEffect(() => {
@@ -40,6 +62,48 @@ export default function SeamlessTool({ uploaded, preview, activeProject, user, s
             return () => clearTimeout(t);
         }
     }, [isSeamless]);
+
+    // File Upload Handler
+    const handleUpload = async (file) => {
+        if (!file) return;
+        setError('');
+        try {
+            const formData = new FormData();
+            formData.append('image', file);
+            formData.append('projectId', activeProject.id);
+            formData.append('userId', user.id);
+
+            const r = await fetch(`${API}/api/upload`, {
+                method: 'POST',
+                headers: { ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}) },
+                body: formData,
+            });
+            const d = await r.json();
+            if (d.success) {
+                setUploads(prev => ({
+                    ...prev,
+                    [tool]: {
+                        file: {
+                            ...file,
+                            filename: d.filename,
+                            originalName: file.name
+                        },
+                        url: prev[tool]?.url
+                    }
+                }));
+                updateCreditsFromResponse(d);
+            } else setError(d.error);
+        } catch {
+            setError('Backend upload failed.');
+        }
+    };
+
+    const handlePreUpload = (file) => {
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        setUploads(prev => ({ ...prev, [tool]: { file, url } }));
+        handleUpload(file);
+    };
 
     // Fix existing tile (offset + inpaint)
     const makeSeamless = async () => {
@@ -108,153 +172,258 @@ export default function SeamlessTool({ uploaded, preview, activeProject, user, s
         addBgTask('seamless', 'Generate Seamless Tiles', uploaded?.filename || 'text-prompt', trigger);
     };
 
-    const handleUpload = (file) => {
-        // Placeholder — parent handles upload via setUploads
-    };
-
     const loading = isSeamless;
+    const pipelineStep = seamlessProgress < 15 ? 1 : seamlessProgress < 55 ? 2 : seamlessProgress < 90 ? 3 : 4;
+    const pipelineStages = [
+        { label: 'Upload', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12' },
+        { label: 'AI Generate', icon: 'M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z' },
+        { label: 'Score', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
+        { label: 'Complete', icon: 'M5 13l4 4L19 7' }
+    ];
+    const promptChips = ['watercolor roses on cream', 'geometric aztec tribal', 'tropical palm leaves', 'ditsy floral vintage', 'abstract marble texture'];
+    const bestTileIndex = seamlessTiles.length > 0 ? seamlessTiles.reduce((best, tile, idx) => tile.score > seamlessTiles[best].score ? idx : best, 0) : -1;
 
     return (
-        <>
-            <div className="st-pattern-right">
-                <div className="st-pattern-right-title">
-                    <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z" s={20} />
-                    Seamless Pattern
-                </div>
-                <div className="st-btn-row" style={{ marginBottom: '0.75rem' }}>
-                    <button className={`st-grid-btn ${seamlessMode === 'generate' ? 'active' : ''}`} onClick={() => setSeamlessMode('generate')} style={{ flex: 1 }}>✨ Generate New</button>
-                    <button className={`st-grid-btn ${seamlessMode === 'fix' ? 'active' : ''}`} onClick={() => setSeamlessMode('fix')} style={{ flex: 1 }}>🔧 Fix Existing</button>
-                </div>
+        <div className="st-pattern-layout" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', padding: '2rem' }}>
+            {/* Spring-Physics Segmented Control */}
+            <div className="st-segmented-control">
+                <div className="st-segment-highlight" style={{ left: seamlessMode === 'generate' ? '4px' : '50%', width: 'calc(50% - 4px)' }} />
+                <button className={`st-segment-btn ${seamlessMode === 'generate' ? 'active' : ''}`} onClick={() => setSeamlessMode('generate')}>
+                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} />
+                    Generate New
+                </button>
+                <button className={`st-segment-btn ${seamlessMode === 'fix' ? 'active' : ''}`} onClick={() => setSeamlessMode('fix')}>
+                    <I d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" s={16} />
+                    Fix Existing
+                </button>
+            </div>
 
-                {seamlessMode === 'generate' ? (
-                    <>
-                        <p className="st-pattern-right-desc" style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>
-                            Generate natively seamless tiles from a text description. Uses AI with circular padding — tiles are seamless by construction.
-                        </p>
+            {seamlessMode === 'generate' ? (
+                /* ═══════ GENERATE NEW WORKSPACE ═══════ */
+                <div style={{ width: '100%', maxWidth: '800px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {/* Prompt Container */}
+                    <div className="st-prompt-container">
+                        <div className="st-prompt-label">
+                            <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={14} />
+                            Describe your pattern
+                        </div>
                         <textarea
+                            className="st-prompt-textarea"
                             value={seamlessPrompt}
                             onChange={e => setSeamlessPrompt(e.target.value)}
-                            placeholder="Describe the pattern... e.g. 'watercolor roses on cream linen background' or 'geometric art deco gold lines on navy'"
-                            style={{ width: '100%', minHeight: '70px', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', resize: 'vertical', fontFamily: 'inherit', background: '#f8fafc' }}
+                            placeholder="e.g. 'watercolor roses on cream linen background with soft petals'"
+                            maxLength={500}
                         />
-                        {uploaded?.filename && (
-                            <p style={{ fontSize: '0.75rem', color: '#6366f1', margin: '0.3rem 0' }}>📎 Reference image will guide the style</p>
-                        )}
-                    </>
-                ) : (
-                    <p className="st-pattern-right-desc">
-                        Upload a tile and let AI fix the edges using offset + inpaint. Best for images that are almost seamless already.
-                    </p>
-                )}
-
-                {isSeamless || seamlessProgress > 0 ? (
-                    <div style={{ marginTop: '1rem', width: '100%' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#64748b', marginBottom: '0.5rem', fontWeight: 500 }}>
-                            <span>{seamlessStatus}</span>
-                            <span>{Math.round(seamlessProgress)}%</span>
-                        </div>
-                        <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-                            <div style={{ width: `${seamlessProgress}%`, height: '100%', background: '#6366f1', transition: 'width 0.2s linear' }} />
-                        </div>
-                    </div>
-                ) : seamlessMode === 'generate' ? (
-                    <button className="st-pattern-right-btn" onClick={generateSeamless} disabled={!seamlessPrompt.trim()} style={{ marginTop: '0.5rem' }}>
-                        <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} />
-                        Generate Seamless Tiles
-                    </button>
-                ) : (
-                    <button className="st-pattern-right-btn" onClick={makeSeamless} disabled={(!uploaded && !preview && !activeProject?.heroImageUrl)}>
-                        <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z" s={16} />
-                        Fix Uploaded Tile
-                    </button>
-                )}
-
-                {seamlessTiles.length > 0 && (
-                    <div style={{ marginTop: '1rem' }}>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem', color: '#334155' }}>Generated Tiles (click to select)</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
-                            {seamlessTiles.map((tile, i) => (
-                                <div key={i} onClick={() => setSeamlessUrl(`${API}${tile.url}`)}
-                                    style={{ cursor: 'pointer', border: seamlessUrl === `${API}${tile.url}` ? '2px solid #6366f1' : '2px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
-                                    <img src={`${API}${tile.url}`} alt={`Tile ${i + 1}`} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover' }} />
-                                    <div style={{ position: 'absolute', bottom: 4, right: 4, background: tile.score >= 0.9 ? '#22c55e' : tile.score >= 0.75 ? '#eab308' : '#ef4444', color: '#fff', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                                        {Math.round(tile.score * 100)}%
-                                    </div>
-                                </div>
+                        <div className="st-prompt-charcount">{seamlessPrompt.length} / 500</div>
+                        {/* Suggestion Chips */}
+                        <div className="st-prompt-chips">
+                            {promptChips.map((chip, idx) => (
+                                <button key={idx} className="st-prompt-chip" onClick={() => setSeamlessPrompt(chip)}>{chip}</button>
                             ))}
                         </div>
-                    </div>
-                )}
-            </div>
-
-            <div className="st-pattern-layout">
-                <div
-                    className={`st-pattern-upload ${isDrag ? 'dragging' : ''}`}
-                    onClick={() => fileRef.current?.click()}
-                    onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                    onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                    onDragLeave={() => setIsDrag(false)}
-                >
-                    <div className="st-pattern-upload-icon">
-                        <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={20} />
-                    </div>
-                    <strong>Upload an image or drag &amp; drop</strong>
-                    <p>JPG, PNG &bull; Up to 50MB</p>
-                </div>
-
-                <div className="st-pattern-panels">
-                    <div className="st-pattern-panel">
-                        <div className="st-pattern-panel-label">Original</div>
-                        {preview ? (
-                            <img src={preview} alt="Original" className="st-pattern-image" />
-                        ) : (
-                            <>
-                                <svg className="st-pattern-empty-img" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <rect x="25" y="30" width="60" height="65" rx="8" fill="#F3F4F6" stroke="#E5E7EB" strokeWidth="2" transform="rotate(-10 25 30)" />
-                                    <rect x="40" y="25" width="60" height="65" rx="8" fill="#FFFFFF" stroke="#E5E7EB" strokeWidth="2" />
-                                    <circle cx="55" cy="45" r="6" fill="#E5E7EB" />
-                                    <path d="M40 70L55 55L75 75L85 65L100 80" stroke="#E5E7EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                                <div className="st-pattern-empty-title">No image uploaded</div>
-                            </>
+                        {/* Reference image indicator */}
+                        {uploaded?.filename && (
+                            <div className="st-prompt-ref">
+                                <I d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" s={14} />
+                                Reference: {uploaded.filename} will guide the style
+                            </div>
                         )}
                     </div>
 
-                    <div className="st-pattern-arrow">
-                        <I d="M5 12h14M12 5l7 7-7 7" s={18} />
-                    </div>
-
-                    <div className="st-pattern-panel">
-                        <div className="st-pattern-panel-label">Seamless Base Tile</div>
-                        {seamlessUrl ? (
-                            <>
-                                <img src={seamlessUrl} alt="Result" className="st-pattern-image" />
-                                <a href={seamlessUrl} onClick={(e) => forceDownload(e, seamlessUrl)} className="st-dl-btn" style={{ position: 'absolute', bottom: '1rem', right: '1rem' }}>Download</a>
-                            </>
-                        ) : loading ? (
-                            <div className="st-loading"><div className="st-spinner" /><span>Fixing seams...</span></div>
+                    {/* Action Area */}
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        {loading || seamlessProgress > 0 ? (
+                            /* Pipeline Progress Visualization */
+                            <div className="st-pipeline-progress">
+                                <div className="st-pipeline-stages">
+                                    {pipelineStages.map((stage, idx) => {
+                                        const stepNum = idx + 1;
+                                        const isActive = stepNum === pipelineStep;
+                                        const isCompleted = stepNum < pipelineStep;
+                                        return (
+                                            <React.Fragment key={idx}>
+                                                <div className={`st-pipeline-stage ${isCompleted ? 'completed' : ''} ${isActive ? 'active' : ''}`}>
+                                                    <div className="st-pipeline-icon">
+                                                        <I d={stage.icon} s={14} />
+                                                    </div>
+                                                    <span className="st-pipeline-label">{stage.label}</span>
+                                                </div>
+                                                {idx < pipelineStages.length - 1 && (
+                                                    <div className={`st-pipeline-connector ${isCompleted ? 'completed' : ''}`} />
+                                                )}
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                </div>
+                                <div className="st-pipeline-pct">{Math.round(seamlessProgress)}%</div>
+                                <div className="st-pipeline-status">{seamlessStatus}</div>
+                            </div>
                         ) : (
-                            <>
-                                <svg className="st-pattern-empty-img" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <rect x="35" y="30" width="60" height="60" rx="8" fill="#F9FAFB" stroke="#E5E7EB" strokeWidth="2" strokeDasharray="4 4" />
-                                    <path d="M50 45C50 45 55 50 60 45C65 40 70 45 70 45" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                    <path d="M45 60C45 60 50 55 55 60C60 65 65 60 65 60" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                    <path d="M55 75C55 75 60 70 65 75C70 80 75 75 75 75" stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                    <path d="M75 55L75 60M85 30L90 35M30 75L25 70" stroke="#C7D2FE" strokeWidth="2" strokeLinecap="round" />
-                                    <path d="M92 40L95 48L103 51L95 54L92 62L89 54L81 51L89 48Z" fill="#C7D2FE" />
-                                    <path d="M40 20L42 25L47 27L42 29L40 34L38 29L33 27L38 25Z" fill="#E0E7FF" />
-                                </svg>
-                                <div className="st-pattern-empty-title">Seamless pattern will appear here</div>
-                                <div className="st-pattern-empty-desc">Our AI will offset your image and seamlessly redraw the connections.</div>
-                                <button className="st-pattern-btn-outline" disabled={true}>
-                                    <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z" s={16} />
-                                    Make Seamless Base Tile
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                                <button
+                                    className={`st-extract-btn-creative ${!hasEnoughSeamlessCredits ? 'insufficient-credits' : ''}`}
+                                    onClick={generateSeamless}
+                                    disabled={!seamlessPrompt.trim() || !hasEnoughSeamlessCredits}
+                                    title={!hasEnoughSeamlessCredits ? `Need ${seamlessCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Generate seamless tiles'}
+                                >
+                                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={18} />
+                                    {hasEnoughSeamlessCredits ? 'Generate Seamless Tiles' : `Need ${seamlessCreditCost} credits`}
                                 </button>
-                            </>
+                                <span className="st-credit-badge">
+                                    <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
+                                    {seamlessCreditCost} credits
+                                </span>
+                                {!hasEnoughSeamlessCredits && (
+                                    <div className="st-credit-shortage">
+                                        {userRemainingCredits.toLocaleString()} credits remaining. Recharge to generate seamless tiles.
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
+
+                    {/* Generated Results */}
+                    {seamlessTiles.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                            {seamlessTiles.map((tile, i) => {
+                                const tileUrl = `${API}${tile.url}`;
+                                const isSelected = seamlessUrl === tileUrl;
+                                const isBest = i === bestTileIndex;
+                                const scoreClass = tile.score >= 0.9 ? 'excellent' : tile.score >= 0.75 ? 'good' : 'poor';
+                                return (
+                                    <div
+                                        key={i}
+                                        className={`st-tile-result-card ${isSelected ? 'selected' : ''}`}
+                                        onClick={() => { setSeamlessUrl(tileUrl); setUploads(prev => ({ ...prev, [tool]: { ...prev[tool], url: tileUrl } })); }}
+                                    >
+                                        <img src={tileUrl} alt={`Tile ${i + 1}`} />
+                                        <div className={`st-score-badge ${scoreClass}`}>
+                                            {Math.round(tile.score * 100)}%
+                                        </div>
+                                        {isBest && <div className="st-best-pick">AI Pick</div>}
+                                        <div className="st-tile-result-overlay">
+                                            <a href={tileUrl} onClick={(e) => { e.stopPropagation(); forceDownload(e, tileUrl); }}>
+                                                <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={16} />
+                                            </a>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
-            </div>
-        </>
+            ) : (
+                /* ═══════ FIX EXISTING WORKSPACE ═══════ */
+                <>
+                    {!preview ? (
+                        /* Creative Dropzone */
+                        <div
+                            className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
+                            onClick={() => fileRef.current?.click()}
+                            onDrop={(e) => { e.preventDefault(); setIsDrag(false); handlePreUpload(e.dataTransfer.files[0]); }}
+                            onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
+                            onDragLeave={() => setIsDrag(false)}
+                        >
+                            <div className="st-particles">
+                                <div className="st-particle" />
+                                <div className="st-particle" />
+                                <div className="st-particle" />
+                                <div className="st-particle" />
+                                <div className="st-particle" />
+                                <div className="st-particle" />
+                            </div>
+                            <div className="st-dropzone-icon-wrap">
+                                <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={36} />
+                            </div>
+                            <h2 className="st-dropzone-title">Upload a pattern tile to fix</h2>
+                            <p className="st-dropzone-desc">AI will analyze and fix edge seams using offset & inpaint</p>
+                            <div className="st-dropzone-badges">
+                                <span className="st-dropzone-badge">PNG</span>
+                                <span className="st-dropzone-badge">JPG</span>
+                                <span className="st-dropzone-badge">TIFF</span>
+                            </div>
+                        </div>
+                    ) : (
+                        /* Comparison Workspace */
+                        <div className="st-comparison-workspace">
+                            {/* Original Input Card */}
+                            <div className="st-comparison-card">
+                                <div className="st-comparison-card-head">
+                                    <span>Original Input</span>
+                                    <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }}>Replace</button>
+                                </div>
+                                <div className="st-comparison-card-body">
+                                    <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                </div>
+                            </div>
+
+                            {/* Action Bridge */}
+                            <div className="st-comparison-action-bridge">
+                                <button
+                                    className={`st-extract-btn-creative ${!hasEnoughSeamlessCredits ? 'insufficient-credits' : ''}`}
+                                    onClick={makeSeamless}
+                                    disabled={loading || (!uploaded && !preview && !activeProject?.heroImageUrl) || !hasEnoughSeamlessCredits}
+                                    title={!hasEnoughSeamlessCredits ? `Need ${seamlessCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Fix uploaded tile'}
+                                >
+                                    <I d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" s={18} />
+                                    {loading ? 'Fixing...' : hasEnoughSeamlessCredits ? 'Fix Uploaded Tile' : `Need ${seamlessCreditCost} credits`}
+                                </button>
+                                <span className="st-credit-badge">
+                                    <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
+                                    {seamlessCreditCost} credits
+                                </span>
+                            </div>
+
+                            {/* Seamless Result Card */}
+                            <div className="st-comparison-card">
+                                <div className="st-comparison-card-head">
+                                    <span>Seamless Result</span>
+                                    {seamlessUrl && (
+                                        <button onClick={(e) => forceDownload(e, seamlessUrl)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="st-comparison-card-body">
+                                    {seamlessUrl ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', alignItems: 'center' }}>
+                                            <img className="st-result-reveal" src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Seamless Result" style={{ maxWidth: '100%', maxHeight: '280px', objectFit: 'contain', borderRadius: '8px' }} />
+                                            <div className="st-tile-preview-2x2">
+                                                <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 1" />
+                                                <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 2" />
+                                                <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 3" />
+                                                <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 4" />
+                                            </div>
+                                            <a href={seamlessUrl} onClick={(e) => forceDownload(e, seamlessUrl)} className="st-extract-btn-creative" style={{ fontSize: '0.85rem', padding: '0.5rem 1.25rem' }}>
+                                                <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
+                                                Download Tile
+                                            </a>
+                                        </div>
+                                    ) : loading ? (
+                                        <div className="st-ai-processing">
+                                            <div className="st-ai-sparkle-container">
+                                                <div className="st-ai-sparkle-icon">
+                                                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={24} />
+                                                </div>
+                                                <div className="st-ai-ring" />
+                                                <div className="st-ai-ring" />
+                                                <div className="st-ai-ring" />
+                                            </div>
+                                            <div className="st-ai-phase-text">{seamlessStatus || 'AI is fixing seams...'}</div>
+                                        </div>
+                                    ) : (
+                                        <div style={{ textAlign: 'center', color: '#9ca3af', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '2rem 0' }}>
+                                            <I d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" s={48} />
+                                            <p>Seamless pattern will appear here.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+            <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0])} />
+        </div>
     );
 }

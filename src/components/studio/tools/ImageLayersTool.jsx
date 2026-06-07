@@ -1,262 +1,979 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API } from '../shared/helpers';
-
-const qwenLayerDemoActions = [
-    { label: 'Recolor', type: 'recolor', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', prompt: 'Change color to navy blue' },
-    { label: 'Revise', type: 'revise', icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z', prompt: 'Make it more detailed' },
-    { label: 'Replace', type: 'replace', icon: 'M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3', prompt: 'Replace with a rose' },
-    { label: 'Remove', type: 'remove', icon: 'M6 18L18 6M6 6l12 12', prompt: '' },
-    { label: 'Decompose', type: 'decompose', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5', prompt: '' },
-];
+import { API, forceDownload } from '../shared/helpers';
+import { createPortal } from 'react-dom';
+import * as fabric from 'fabric';
 
 export default function ImageLayersTool(props) {
-    const {
-        uploaded, preview, activeProject, user, controls, setError, addBgTask, updateCreditsFromResponse,
-        setUploads, tool, currentToken, state
-    } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, rightPanelEl, handleUpload, handlePreUpload, tool } = props;
 
+    const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
+    const imageLayersCreditCost = creditPricing.imageLayers || 100;
+    const hasEnoughImageLayersCredits = userRemainingCredits >= imageLayersCreditCost;
+    const layerEditCreditCost = creditPricing.imageLayerEdit || 15;
+    const hasEnoughLayerEditCredits = userRemainingCredits >= layerEditCreditCost;
+    const [isDrag, setIsDrag] = useState(false);
+    const fileRef = useRef(null);
+
+    const [imageLayersResults, setImageLayersResults] = useState([]);
     const [isImageLayering, setIsImageLayering] = useState(false);
     const [imageLayersNumLayers, setImageLayersNumLayers] = useState(4);
     const [imageLayersDescription, setImageLayersDescription] = useState('auto');
-    const [imageLayersResults, setImageLayersResults] = useState([]);
+
+    // New states for interactive editor
+    const fabricCanvasRef = useRef(null);
+    const canvasInstanceRef = useRef(null);
+    const baseCanvasLayoutRef = useRef(null);
     const [layersList, setLayersList] = useState([]);
     const [selectedLayerId, setSelectedLayerId] = useState(null);
-    const [isImageLayersFullscreen, setIsImageLayersFullscreen] = useState(false);
-    const [layerEditPrompt, setLayerEditPrompt] = useState('');
-    const [editType, setEditType] = useState('recolor');
-    const [isProcessingAI, setIsProcessingAI] = useState(false);
-    const [aiProcessingText, setAiProcessingText] = useState('Processing...');
-    const [layerCanvasZoom, setLayerCanvasZoomState] = useState(1);
-    const [isLayerMaskMode, setIsLayerMaskMode] = useState(false);
-    const [layerMaskBrushSize, setLayerMaskBrushSize] = useState(24);
-    const [recursiveLayerCount, setRecursiveLayerCount] = useState(3);
-    const [isExportingLayers, setIsExportingLayers] = useState(false);
-    const [isInpaintingLayer, setIsInpaintingLayer] = useState(false);
+    const [layerCanvasZoom, setLayerCanvasZoom] = useState(1);
     const [layerDragState, setLayerDragState] = useState({ draggingId: null, overId: null, position: null });
-    const [creditPricing] = useState({ imageLayers: 100 });
-    const fabricCanvasRef = useRef(null);
+    const [isExportingLayers, setIsExportingLayers] = useState(false);
+    const [isLayerMaskMode, setIsLayerMaskMode] = useState(false);
+    const [layerMaskBrushSize, setLayerMaskBrushSize] = useState(32);
+    const [isInpaintingLayer, setIsInpaintingLayer] = useState(false);
+    const [isImageLayersFullscreen, setIsImageLayersFullscreen] = useState(false);
 
-    const setImageLayerZoom = (val) => {
-        setLayerCanvasZoomState(Math.max(0.1, Math.min(5, val)));
-    };
+    // AI Edit states
+    const [layerEditPrompt, setLayerEditPrompt] = useState('');
+    const [isEditingLayer, setIsEditingLayer] = useState(false);
+    const [editType, setEditType] = useState('recolor'); // recolor | revise | replace | freeform
 
-    const resetImageLayerView = () => {
-        setLayerCanvasZoomState(1);
-    };
+    // Qwen recursive decomposition
+    const [recursiveLayerCount, setRecursiveLayerCount] = useState(4);
+    const [isProcessingAI, setIsProcessingAI] = useState(false);
+    const [aiProcessingText, setAiProcessingText] = useState('');
+    const qwenLayerDemoActions = [
+        {
+            label: 'Edit Text',
+            type: 'revise',
+            prompt: 'Change the selected text to "Qwen-Image"',
+            icon: 'M4 7V4h16v3M9 20h6M12 4v16',
+        },
+        {
+            label: 'Replace',
+            type: 'replace',
+            prompt: 'Replace the selected object with a friendly dog',
+            icon: 'M7 7h10v10H7zM3 12h4M17 12h4M12 3v4M12 17v4',
+        },
+        {
+            label: 'Recolor',
+            type: 'recolor',
+            prompt: 'Recolor the selected layer to cyan and violet',
+            icon: 'M12 22a7 7 0 007-7c0-5-7-13-7-13S5 10 5 15a7 7 0 007 7z',
+        },
+        {
+            label: 'Remove',
+            type: 'remove',
+            prompt: '',
+            icon: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
+        },
+        {
+            label: 'Decompose',
+            type: 'decompose',
+            prompt: '',
+            icon: 'M12 2L2 7l10 5 10-5-10-5zM2 12l10 5 10-5M2 17l10 5 10-5',
+        },
+        {
+            label: 'Inpaint',
+            type: 'inpaint',
+            prompt: 'Change only the painted area',
+            icon: 'M3 21v-4l11-11 4 4L7 21H3zM14 6l2-2a2 2 0 012.8 0l1.2 1.2a2 2 0 010 2.8l-2 2',
+        },
+    ];
 
     const generateImageLayers = async () => {
-        if (!uploaded || isImageLayering) return;
+        if (!uploaded) return;
+        if (!hasEnoughImageLayersCredits) {
+            setError(`Insufficient credits. Image Layers needs ${imageLayersCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setIsImageLayering(true);
         setImageLayersResults([]);
         setLayersList([]);
-        try {
-            const formData = new FormData();
-            formData.append('image', uploaded);
-            formData.append('numLayers', imageLayersNumLayers);
-            formData.append('description', imageLayersDescription);
-            const res = await fetch(`${API}/api/image-layers/decompose`, {
-                method: 'POST',
-                headers: { ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}) },
-                body: formData,
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Decomposition failed');
-            updateCreditsFromResponse(data);
-            const layers = (data.layers || []).map((l, i) => ({
-                id: i, url: l.url, name: l.name || `Layer ${i + 1}`, visible: true, locked: false, loadingName: false,
-            }));
-            setLayersList(layers);
-            setImageLayersResults(layers);
-        } catch (err) {
-            setError(err.message || 'Layer decomposition failed');
-        } finally {
-            setIsImageLayering(false);
+        if (canvasInstanceRef.current) {
+            canvasInstanceRef.current.clear();
         }
+        setError('');
+
+        const trigger = async () => {
+            const r = await fetch(`${API}/api/image-layers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: uploaded.filename,
+                    numLayers: imageLayersNumLayers,
+                    description: imageLayersDescription || 'auto',
+                    outputFormat: 'png',
+                    projectId: activeProject.id,
+                    userId: user.id
+                }),
+            });
+            const d = await r.json();
+            if (d.success) {
+                setImageLayersResults(d.layers);
+                updateCreditsFromResponse(d);
+
+                // Auto-caption layers in background
+                const initialLayersList = d.layers.map((l, i) => ({
+                    id: l.index,
+                    name: `Layer ${l.index + 1}`,
+                    url: l.url,
+                    filename: l.filename,
+                    x: l.x || 0,
+                    y: l.y || 0,
+                    width: l.width,
+                    height: l.height,
+                    sourceWidth: l.sourceWidth,
+                    sourceHeight: l.sourceHeight,
+                    visible: true,
+                    locked: false,
+                    fabricId: null,
+                    loadingName: true
+                }));
+                setLayersList(initialLayersList);
+
+                // Load into Fabric canvas
+                setTimeout(() => {
+                    initFabricCanvas(d.layers);
+                }, 100);
+                setIsImageLayering(false);
+
+                // Fetch captions async
+                d.layers.forEach(async (layer) => {
+                    try {
+                        const capRes = await fetch(`${API}/api/caption-layer`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filename: layer.filename })
+                        });
+                        const capData = await capRes.json();
+                        if (capData.success) {
+                            setLayersList(prev => prev.map(pl =>
+                                pl.id === layer.index ? { ...pl, name: capData.name, loadingName: false } : pl
+                            ));
+                        }
+                    } catch (e) {
+                        console.error("Caption error", e);
+                        setLayersList(prev => prev.map(pl =>
+                            pl.id === layer.index ? { ...pl, loadingName: false } : pl
+                        ));
+                    }
+                });
+
+                return { url: d.layers[0]?.url, urls: d.layers.map(l => l.url) };
+            } else {
+                setIsImageLayering(false);
+                throw new Error(d.error || 'Image layer decomposition failed');
+            }
+        };
+        addBgTask('imagelayers', `Image Layers: ${imageLayersNumLayers} layers`, uploaded.filename, trigger);
+    };
+
+    const initFabricCanvas = (layers) => {
+        if (!fabricCanvasRef.current) return;
+        if (canvasInstanceRef.current) {
+            canvasInstanceRef.current.dispose();
+        }
+
+        const parent = fabricCanvasRef.current.parentElement;
+        const w = parent ? parent.clientWidth : 800;
+        const h = parent ? parent.clientHeight : 600;
+
+        const canvas = new fabric.Canvas(fabricCanvasRef.current, {
+            width: w,
+            height: h,
+            preserveObjectStacking: true, // Keep z-index when selected
+        });
+        canvasInstanceRef.current = canvas;
+        setLayerCanvasZoom(1);
+        setIsLayerMaskMode(false);
+
+        const centerLoadedLayerGroup = () => {
+            const imageObjects = canvas.getObjects().filter(obj => obj.type === 'image');
+            if (!imageObjects.length) return;
+
+            const bounds = imageObjects.reduce((acc, obj) => {
+                const rect = obj.getBoundingRect();
+                return {
+                    minX: Math.min(acc.minX, rect.left),
+                    minY: Math.min(acc.minY, rect.top),
+                    maxX: Math.max(acc.maxX, rect.left + rect.width),
+                    maxY: Math.max(acc.maxY, rect.top + rect.height),
+                };
+            }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+
+            if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY)) return;
+
+            const groupWidth = bounds.maxX - bounds.minX;
+            const groupHeight = bounds.maxY - bounds.minY;
+            const offsetX = (canvas.getWidth() - groupWidth) / 2 - bounds.minX;
+            const offsetY = (canvas.getHeight() - groupHeight) / 2 - bounds.minY;
+
+            imageObjects.forEach((obj) => {
+                obj.set({
+                    left: obj.left + offsetX,
+                    top: obj.top + offsetY,
+                    initialLeft: obj.left + offsetX,
+                    initialTop: obj.top + offsetY,
+                    initialScaleX: obj.scaleX,
+                    initialScaleY: obj.scaleY,
+                    initialAngle: obj.angle || 0,
+                });
+                obj.setCoords();
+            });
+        };
+
+        canvas.on('mouse:wheel', (opt) => {
+            const delta = opt.e.deltaY;
+            let zoom = canvas.getZoom();
+            zoom *= 0.999 ** delta;
+            zoom = Math.max(0.25, Math.min(zoom, 5));
+            canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
+            setLayerCanvasZoom(Number(zoom.toFixed(2)));
+            opt.e.preventDefault();
+            opt.e.stopPropagation();
+        });
+        // Selection sync
+        canvas.on('selection:created', (e) => {
+            if (e.selected && e.selected.length > 0) {
+                setSelectedLayerId(e.selected[0].customId);
+            }
+        });
+        canvas.on('selection:updated', (e) => {
+            if (e.selected && e.selected.length > 0) {
+                setSelectedLayerId(e.selected[0].customId);
+            }
+        });
+        canvas.on('selection:cleared', () => {
+            setSelectedLayerId(null);
+        });
+        canvas.on('path:created', (e) => {
+            if (e.path) {
+                e.path.set({
+                    customType: 'inpaintMask',
+                    selectable: false,
+                    evented: false,
+                    excludeFromExport: true,
+                    stroke: 'rgba(103, 232, 249, 0.55)',
+                    fill: null,
+                });
+                e.path.setCoords();
+                canvas.renderAll();
+            }
+        });
+
+        const sourceWidth = Math.max(...layers.map(l => l.sourceWidth || l.width || 1), 1);
+        const sourceHeight = Math.max(...layers.map(l => l.sourceHeight || l.height || 1), 1);
+        const bounds = layers.reduce((acc, layer) => {
+            const x = Number.isFinite(Number(layer.x)) ? Number(layer.x) : 0;
+            const y = Number.isFinite(Number(layer.y)) ? Number(layer.y) : 0;
+            const width = Math.max(1, Number(layer.width || layer.sourceWidth || 1));
+            const height = Math.max(1, Number(layer.height || layer.sourceHeight || 1));
+            return {
+                minX: Math.min(acc.minX, x),
+                minY: Math.min(acc.minY, y),
+                maxX: Math.max(acc.maxX, x + width),
+                maxY: Math.max(acc.maxY, y + height),
+            };
+        }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+        const contentLeft = Number.isFinite(bounds.minX) ? bounds.minX : 0;
+        const contentTop = Number.isFinite(bounds.minY) ? bounds.minY : 0;
+        const contentWidth = Math.max(1, (Number.isFinite(bounds.maxX) ? bounds.maxX : sourceWidth) - contentLeft);
+        const contentHeight = Math.max(1, (Number.isFinite(bounds.maxY) ? bounds.maxY : sourceHeight) - contentTop);
+        const padding = 40;
+        const baseScale = Math.min((w - padding) / contentWidth, (h - padding) / contentHeight, 1);
+        const baseLeft = (w - contentWidth * baseScale) / 2 - contentLeft * baseScale;
+        const baseTop = (h - contentHeight * baseScale) / 2 - contentTop * baseScale;
+        baseCanvasLayoutRef.current = { sourceWidth, sourceHeight, contentLeft, contentTop, contentWidth, contentHeight, baseScale, baseLeft, baseTop };
+        // Load images
+        let loadedCount = 0;
+        layers.forEach((layer) => {
+            fabric.Image.fromURL(`${API}${layer.url}`, { crossOrigin: 'anonymous' }).then((img) => {
+                if (!canvasInstanceRef.current) return;
+                const layerLeft = baseLeft + (layer.x || 0) * baseScale;
+                const layerTop = baseTop + (layer.y || 0) * baseScale;
+
+                img.set({
+                    customId: layer.index,
+                    left: layerLeft,
+                    top: layerTop,
+                    scaleX: baseScale,
+                    scaleY: baseScale,
+                    initialLeft: layerLeft,
+                    initialTop: layerTop,
+                    initialScaleX: baseScale,
+                    initialScaleY: baseScale,
+                    initialAngle: 0,
+                    transparentCorners: false,
+                    cornerColor: 'rgba(139, 92, 246, 0.8)',
+                    borderColor: 'rgba(139, 92, 246, 0.8)',
+                    cornerSize: 8,
+                });
+
+                canvas.add(img);
+                img.setCoords();
+
+                setLayersList(prev => prev.map(pl =>
+                    pl.id === layer.index ? { ...pl, fabricId: img } : pl
+                ));
+
+                loadedCount++;
+                if (loadedCount === layers.length) {
+                    // Ensure they are ordered by index
+                    const objs = canvas.getObjects();
+                    objs.sort((a, b) => a.customId - b.customId);
+                    objs.forEach(o => { canvas.remove(o); canvas.add(o); });
+                    centerLoadedLayerGroup();
+                    canvas.renderAll();
+                }
+            }).catch(err => console.error("Error loading fabric image", err));
+        });
     };
 
     const handleEditLayer = async () => {
-        if (selectedLayerId === null || isProcessingAI) return;
-        if (!layerEditPrompt.trim() && editType !== 'remove' && editType !== 'decompose') return;
-        setIsProcessingAI(true);
-        setAiProcessingText(`Applying ${editType}...`);
-        try {
-            const layer = layersList.find(l => l.id === selectedLayerId);
-            const res = await fetch(`${API}/api/image-layers/edit`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
-                },
-                body: JSON.stringify({ layerUrl: layer?.url, editType, prompt: layerEditPrompt }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Edit failed');
-            updateCreditsFromResponse(data);
-            if (data.layer) {
-                setLayersList(prev => prev.map(l => l.id === selectedLayerId ? { ...l, url: data.layer.url, name: data.layer.name || l.name } : l));
-            }
-            setLayerEditPrompt('');
-        } catch (err) {
-            setError(err.message || 'Layer edit failed');
-        } finally {
-            setIsProcessingAI(false);
+        if (!selectedLayerId && selectedLayerId !== 0) return;
+        if (editType === 'inpaint') {
+            handleInpaintLayer();
+            return;
         }
-    };
+        if (editType === 'remove') {
+            applyCanvasTransform('delete');
+            setLayerEditPrompt('');
+            return;
+        }
+        if (editType === 'decompose') {
+            handleRecursiveDecompose();
+            return;
+        }
+        if (!layerEditPrompt) return;
+        if (!hasEnoughLayerEditCredits) {
+            setError(`Insufficient credits. Layer editing needs ${layerEditCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
 
-    const applyQwenLayerDemo = (demo) => {
-        setEditType(demo.type);
-        if (demo.prompt) setLayerEditPrompt(demo.prompt);
-    };
+        const layerData = layersList.find(l => l.id === selectedLayerId);
+        if (!layerData) return;
 
-    const applyCanvasTransform = (action) => {
-        // Canvas transforms are handled by fabric.js on the canvas ref
-        // This is a placeholder for the transform logic
-        console.log('Canvas transform:', action);
-    };
-
-    const resetLayersToBase = () => {
-        // Reset all layer positions on the fabric canvas
-        console.log('Resetting layers to base positions');
-    };
-
-    const clearLayerMask = () => {
-        // Clear the inpaint mask from the canvas
-        console.log('Clearing layer mask');
-    };
-
-    const handleInpaintLayer = async () => {
-        if (selectedLayerId === null || isInpaintingLayer || !layerEditPrompt.trim()) return;
-        setIsInpaintingLayer(true);
+        setIsEditingLayer(true);
         try {
-            // Inpaint logic placeholder
-            await new Promise(r => setTimeout(r, 2000));
-        } catch (err) {
-            setError(err.message || 'Inpaint failed');
+            const res = await fetch(`${API}/api/edit-layer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: layerData.filename,
+                    prompt: layerEditPrompt,
+                    editType: editType,
+                    projectId: activeProject.id,
+                    userId: user.id
+                })
+            });
+            const d = await res.json();
+            if (d.success) {
+                updateCreditsFromResponse(d);
+                // Replace image on canvas
+                const canvas = canvasInstanceRef.current;
+                const objToReplace = canvas.getObjects().find(o => o.customId === selectedLayerId);
+                if (objToReplace) {
+                    const oldZIndex = canvas.getObjects().indexOf(objToReplace);
+                    fabric.Image.fromURL(`${API}${d.resultUrl}?t=${Date.now()}`, { crossOrigin: 'anonymous' }).then((newImg) => {
+                        newImg.set({
+                            customId: selectedLayerId,
+                            left: objToReplace.left,
+                            top: objToReplace.top,
+                            scaleX: objToReplace.scaleX,
+                            scaleY: objToReplace.scaleY,
+                            angle: objToReplace.angle,
+                            flipX: objToReplace.flipX,
+                            flipY: objToReplace.flipY,
+                            initialLeft: objToReplace.initialLeft,
+                            initialTop: objToReplace.initialTop,
+                            initialScaleX: objToReplace.initialScaleX,
+                            initialScaleY: objToReplace.initialScaleY,
+                            initialAngle: objToReplace.initialAngle || 0,
+                            transparentCorners: false,
+                            cornerColor: 'rgba(139, 92, 246, 0.8)',
+                            borderColor: 'rgba(139, 92, 246, 0.8)',
+                            cornerSize: 8,
+                        });
+                        canvas.remove(objToReplace);
+                        canvas.insertAt(oldZIndex, newImg);
+                        canvas.setActiveObject(newImg);
+                        canvas.renderAll();
+
+                        // Update layers list url
+                        setLayersList(prev => prev.map(pl =>
+                            pl.id === selectedLayerId ? { ...pl, url: d.resultUrl, filename: d.resultUrl.split('/').pop() } : pl
+                        ));
+                    }).catch(err => console.error("Error editing fabric layer", err));
+                }
+            } else {
+                alert(d.error || 'Layer edit failed');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error editing layer');
         } finally {
-            setIsInpaintingLayer(false);
+            setIsEditingLayer(false);
         }
     };
 
     const handleRecursiveDecompose = async () => {
-        if (selectedLayerId === null || isProcessingAI) return;
+        if (!selectedLayerId && selectedLayerId !== 0) {
+            alert('Select a layer to decompose further.');
+            return;
+        }
+        if (!hasEnoughImageLayersCredits) {
+            setError(`Insufficient credits. Recursive decomposition needs ${imageLayersCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
+        const layerData = layersList.find(l => l.id === selectedLayerId);
+        const canvas = canvasInstanceRef.current;
+        const sourceObj = canvas?.getObjects().find(o => o.customId === selectedLayerId);
+        if (!layerData || !canvas || !sourceObj) return;
         setIsProcessingAI(true);
-        setAiProcessingText('Recursively decomposing...');
+        setAiProcessingText(`Qwen is decomposing "${layerData.name}" into ${recursiveLayerCount} layers...`);
         try {
-            const layer = layersList.find(l => l.id === selectedLayerId);
-            const res = await fetch(`${API}/api/image-layers/decompose`, {
+            const res = await fetch(`${API}/api/image-layers`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
-                },
-                body: JSON.stringify({ layerUrl: layer?.url, numLayers: recursiveLayerCount }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: layerData.filename,
+                    numLayers: recursiveLayerCount,
+                    description: imageLayersDescription || layerData.name || 'auto',
+                    outputFormat: 'png',
+                    projectId: activeProject.id,
+                    userId: user.id
+                })
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Recursive decompose failed');
-            updateCreditsFromResponse(data);
-        } catch (err) {
-            setError(err.message || 'Recursive decompose failed');
+            const d = await res.json();
+            if (!d.success) throw new Error(d.error || 'Recursive decomposition failed');
+            updateCreditsFromResponse(d);
+            const oldZIndex = canvas.getObjects().indexOf(sourceObj);
+            const baseId = Math.max(0, ...layersList.map(l => l.id)) + 1;
+            const childLayers = d.layers.map((layer, i) => ({
+                id: baseId + i,
+                name: `${layerData.name || 'Layer'} ${i + 1}`,
+                url: layer.url,
+                filename: layer.filename,
+                x: layer.x || 0,
+                y: layer.y || 0,
+                width: layer.width,
+                height: layer.height,
+                sourceWidth: layer.sourceWidth,
+                sourceHeight: layer.sourceHeight,
+                visible: true,
+                locked: false,
+                fabricId: null,
+                loadingName: true,
+                parentId: selectedLayerId
+            }));
+            canvas.remove(sourceObj);
+            setLayersList(prev => [...prev.filter(l => l.id !== selectedLayerId), ...childLayers]);
+            setSelectedLayerId(childLayers[0]?.id ?? null);
+            let loaded = 0;
+            childLayers.forEach((child, i) => {
+                fabric.Image.fromURL(`${API}${child.url}?t=${Date.now()}`, { crossOrigin: 'anonymous' }).then((img) => {
+                    const childLeft = sourceObj.left + (child.x || 0) * sourceObj.scaleX;
+                    const childTop = sourceObj.top + (child.y || 0) * sourceObj.scaleY;
+                    img.set({
+                        customId: child.id,
+                        left: childLeft,
+                        top: childTop,
+                        scaleX: sourceObj.scaleX,
+                        scaleY: sourceObj.scaleY,
+                        angle: sourceObj.angle,
+                        flipX: sourceObj.flipX,
+                        flipY: sourceObj.flipY,
+                        opacity: sourceObj.opacity,
+                        initialLeft: childLeft,
+                        initialTop: childTop,
+                        initialScaleX: sourceObj.scaleX,
+                        initialScaleY: sourceObj.scaleY,
+                        initialAngle: sourceObj.angle,
+                        transparentCorners: false,
+                        cornerColor: 'rgba(103, 232, 249, 0.9)',
+                        borderColor: 'rgba(103, 232, 249, 0.9)',
+                        cornerSize: 8,
+                    });
+                    canvas.insertAt(oldZIndex + i, img);
+                    loaded += 1;
+                    if (loaded === childLayers.length) {
+                        const firstChild = canvas.getObjects().find(o => o.customId === childLayers[0].id);
+                        if (firstChild) canvas.setActiveObject(firstChild);
+                        canvas.renderAll();
+                    }
+                    setLayersList(prev => prev.map(pl => pl.id === child.id ? { ...pl, fabricId: img } : pl));
+                }).catch(err => console.error('Error loading recursive layer', err));
+                fetch(`${API}/api/caption-layer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: child.filename })
+                })
+                    .then(r => r.json())
+                    .then(capData => {
+                        if (capData.success) {
+                            setLayersList(prev => prev.map(pl =>
+                                pl.id === child.id ? { ...pl, name: capData.name, loadingName: false } : pl
+                            ));
+                        }
+                    })
+                    .catch(() => {
+                        setLayersList(prev => prev.map(pl =>
+                            pl.id === child.id ? { ...pl, loadingName: false } : pl
+                        ));
+                    });
+            });
+        } catch (e) {
+            console.error(e);
+            alert(e.message || 'Error during recursive decomposition');
         } finally {
             setIsProcessingAI(false);
         }
     };
+    const setImageLayerZoom = (nextZoom) => {
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+        const zoom = Math.max(0.25, Math.min(nextZoom, 5));
+        canvas.zoomToPoint({ x: canvas.getWidth() / 2, y: canvas.getHeight() / 2 }, zoom);
+        setLayerCanvasZoom(Number(zoom.toFixed(2)));
+    };
+    const resetImageLayerView = () => {
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+        canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+        setLayerCanvasZoom(1);
+        canvas.renderAll();
+    };
+    const resetLayersToBase = () => {
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+        canvas.getObjects().forEach((obj) => {
+            if (obj.type === 'image') {
+                obj.set({
+                    left: obj.initialLeft ?? obj.left,
+                    top: obj.initialTop ?? obj.top,
+                    scaleX: obj.initialScaleX ?? obj.scaleX,
+                    scaleY: obj.initialScaleY ?? obj.scaleY,
+                    angle: obj.initialAngle ?? 0,
+                    flipX: false,
+                    flipY: false,
+                });
+                obj.setCoords();
+            }
+        });
+        canvas.discardActiveObject();
+        setSelectedLayerId(null);
+        canvas.renderAll();
+    };
+
+    useEffect(() => {
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+
+        canvas.isDrawingMode = isLayerMaskMode;
+        if (isLayerMaskMode) {
+            const brush = new fabric.PencilBrush(canvas);
+            brush.color = 'rgba(103, 232, 249, 0.55)';
+            brush.width = layerMaskBrushSize;
+            canvas.freeDrawingBrush = brush;
+            canvas.discardActiveObject();
+            canvas.selection = false;
+        } else {
+            canvas.selection = true;
+        }
+        canvas.renderAll();
+    }, [isLayerMaskMode, layerMaskBrushSize]);
+
+    const clearLayerMask = () => {
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+        canvas.getObjects()
+            .filter(obj => obj.customType === 'inpaintMask')
+            .forEach(obj => canvas.remove(obj));
+        canvas.renderAll();
+    };
+
+    const resizeImageLayerCanvas = useCallback(() => {
+        const canvas = canvasInstanceRef.current;
+        const el = fabricCanvasRef.current;
+        const parent = el?.parentElement;
+        if (!canvas || !parent) return;
+
+        const nextWidth = Math.max(320, parent.clientWidth);
+        const nextHeight = Math.max(280, parent.clientHeight);
+        const prevWidth = canvas.getWidth();
+        const prevHeight = canvas.getHeight();
+        const dx = (nextWidth - prevWidth) / 2;
+        const dy = (nextHeight - prevHeight) / 2;
+
+        canvas.setDimensions({ width: nextWidth, height: nextHeight });
+        canvas.getObjects().forEach((obj) => {
+            obj.set({
+                left: (obj.left || 0) + dx,
+                top: (obj.top || 0) + dy,
+            });
+            if (obj.initialLeft !== undefined) obj.initialLeft += dx;
+            if (obj.initialTop !== undefined) obj.initialTop += dy;
+            obj.setCoords();
+        });
+        canvas.renderAll();
+    }, []);
+
+    useEffect(() => {
+        if (!canvasInstanceRef.current) return;
+        const raf = requestAnimationFrame(resizeImageLayerCanvas);
+        return () => cancelAnimationFrame(raf);
+    }, [isImageLayersFullscreen, resizeImageLayerCanvas]);
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') setIsImageLayersFullscreen(false);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('resize', resizeImageLayerCanvas);
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('resize', resizeImageLayerCanvas);
+        };
+    }, [resizeImageLayerCanvas]);
+
+    const exportLayerMaskDataUrl = () => {
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return null;
+        const maskObjects = canvas.getObjects().filter(obj => obj.customType === 'inpaintMask');
+        if (!maskObjects.length) return null;
+
+        const viewportTransform = canvas.viewportTransform ? [...canvas.viewportTransform] : [1, 0, 0, 1, 0, 0];
+        const snapshots = canvas.getObjects().map(obj => ({
+            obj,
+            visible: obj.visible,
+            stroke: obj.stroke,
+            opacity: obj.opacity,
+            globalCompositeOperation: obj.globalCompositeOperation,
+        }));
+
+        canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+        canvas.backgroundColor = '#000000';
+        canvas.getObjects().forEach((obj) => {
+            if (obj.customType === 'inpaintMask') {
+                obj.set({ visible: true, stroke: '#ffffff', opacity: 1, globalCompositeOperation: 'source-over' });
+            } else {
+                obj.set({ visible: false });
+            }
+        });
+        canvas.renderAll();
+
+        const dataUrl = canvas.toDataURL({ format: 'png', multiplier: 1 });
+
+        snapshots.forEach(({ obj, visible, stroke, opacity, globalCompositeOperation }) => {
+            obj.set({ visible, stroke, opacity, globalCompositeOperation });
+        });
+        canvas.backgroundColor = '';
+        canvas.setViewportTransform(viewportTransform);
+        canvas.renderAll();
+
+        return dataUrl;
+    };
+
+    const syncLayersListToCanvasOrder = (canvas) => {
+        const orderedIds = canvas.getObjects()
+            .filter(o => o.customId !== undefined && o.customId !== null)
+            .map(o => o.customId);
+
+        setLayersList(prev => [...prev].sort((a, b) => {
+            const aIndex = orderedIds.indexOf(a.id);
+            const bIndex = orderedIds.indexOf(b.id);
+            return (aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex) -
+                (bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex);
+        }));
+    };
+
+    const reorderLayerStack = (dragId, targetId, position = 'before') => {
+        if (dragId === null || targetId === null || dragId === targetId) return;
+
+        const canvas = canvasInstanceRef.current;
+        const displayOrder = [...layersList].reverse();
+        const draggedLayer = displayOrder.find(layer => layer.id === dragId);
+        if (!draggedLayer || !displayOrder.some(layer => layer.id === targetId)) return;
+
+        const remainingDisplayOrder = displayOrder.filter(layer => layer.id !== dragId);
+        const targetIndex = remainingDisplayOrder.findIndex(layer => layer.id === targetId);
+        if (targetIndex === -1) return;
+
+        const insertIndex = position === 'after' ? targetIndex + 1 : targetIndex;
+        const nextDisplayOrder = [
+            ...remainingDisplayOrder.slice(0, insertIndex),
+            draggedLayer,
+            ...remainingDisplayOrder.slice(insertIndex),
+        ];
+        const nextCanvasOrder = [...nextDisplayOrder].reverse();
+
+        setLayersList(nextCanvasOrder);
+        setSelectedLayerId(dragId);
+
+        if (canvas) {
+            const objectMap = new Map(canvas.getObjects()
+                .filter(o => o.customId !== undefined && o.customId !== null)
+                .map(o => [o.customId, o]));
+
+            nextCanvasOrder.forEach((layer) => {
+                const obj = objectMap.get(layer.id);
+                if (obj) {
+                    canvas.remove(obj);
+                    canvas.add(obj);
+                }
+            });
+
+            const activeObj = objectMap.get(dragId);
+            if (activeObj) canvas.setActiveObject(activeObj);
+            canvas.renderAll();
+        }
+    };
+
+    const handleInpaintLayer = async () => {
+        if (!selectedLayerId && selectedLayerId !== 0) return;
+        if (!layerEditPrompt.trim()) {
+            alert('Enter an inpaint instruction first.');
+            return;
+        }
+        if (!hasEnoughLayerEditCredits) {
+            setError(`Insufficient credits. Layer inpaint needs ${layerEditCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
+
+        const canvas = canvasInstanceRef.current;
+        const layerData = layersList.find(l => l.id === selectedLayerId);
+        const objToReplace = canvas?.getObjects().find(o => o.customId === selectedLayerId);
+        const maskDataUrl = exportLayerMaskDataUrl();
+
+        if (!canvas || !layerData || !objToReplace) return;
+        if (!maskDataUrl) {
+            alert('Paint a mask on the canvas first.');
+            return;
+        }
+
+        setIsInpaintingLayer(true);
+        setIsProcessingAI(true);
+        setAiProcessingText('Qwen is inpainting the painted mask...');
+
+        try {
+            const res = await fetch(`${API}/api/inpaint-layer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: layerData.filename,
+                    prompt: layerEditPrompt,
+                    mask: maskDataUrl,
+                    canvasWidth: Math.round(canvas.getWidth()),
+                    canvasHeight: Math.round(canvas.getHeight()),
+                    transform: {
+                        x: objToReplace.left || 0,
+                        y: objToReplace.top || 0,
+                        scaleX: objToReplace.scaleX || 1,
+                        scaleY: objToReplace.scaleY || 1,
+                        angle: objToReplace.angle || 0,
+                        flipX: !!objToReplace.flipX,
+                        flipY: !!objToReplace.flipY,
+                        opacity: objToReplace.opacity ?? 1,
+                    },
+                    projectId: activeProject.id,
+                    userId: user.id
+                })
+            });
+            const d = await res.json();
+            if (!d.success) throw new Error(d.error || 'Layer inpaint failed');
+            updateCreditsFromResponse(d);
+
+            const oldZIndex = canvas.getObjects().indexOf(objToReplace);
+
+            fabric.Image.fromURL(`${API}${d.resultUrl}?t=${Date.now()}`, { crossOrigin: 'anonymous' }).then((newImg) => {
+                newImg.set({
+                    customId: selectedLayerId,
+                    left: 0,
+                    top: 0,
+                    scaleX: 1,
+                    scaleY: 1,
+                    angle: 0,
+                    flipX: false,
+                    flipY: false,
+                    initialLeft: 0,
+                    initialTop: 0,
+                    initialScaleX: 1,
+                    initialScaleY: 1,
+                    initialAngle: 0,
+                    transparentCorners: false,
+                    cornerColor: 'rgba(139, 92, 246, 0.8)',
+                    borderColor: 'rgba(139, 92, 246, 0.8)',
+                    cornerSize: 8,
+                });
+                canvas.remove(objToReplace);
+                canvas.insertAt(oldZIndex, newImg);
+                canvas.setActiveObject(newImg);
+                clearLayerMask();
+                canvas.renderAll();
+
+                setLayersList(prev => prev.map(pl =>
+                    pl.id === selectedLayerId
+                        ? { ...pl, url: d.resultUrl, filename: d.resultUrl.split('/').pop(), width: d.width, height: d.height }
+                        : pl
+                ));
+            }).catch(err => console.error('Error loading inpainted layer', err));
+        } catch (e) {
+            console.error(e);
+            alert(e.message || 'Layer inpaint failed');
+        } finally {
+            setIsInpaintingLayer(false);
+            setIsProcessingAI(false);
+            setAiProcessingText('');
+        }
+    };
 
     const handleComposeLayers = async () => {
-        if (isExportingLayers) return;
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+
+        const layerMap = new Map(layersList.map(layer => [layer.id, layer]));
+        const payloadLayers = canvas.getObjects()
+            .filter(obj => obj.customId !== undefined && obj.customId !== null)
+            .map((obj) => {
+                const layer = layerMap.get(obj.customId);
+                return {
+                    id: obj.customId,
+                    name: layer?.name,
+                    filename: layer?.filename,
+                    x: obj.left || 0,
+                    y: obj.top || 0,
+                    scaleX: obj.scaleX || 1,
+                    scaleY: obj.scaleY || 1,
+                    angle: obj.angle || 0,
+                    flipX: !!obj.flipX,
+                    flipY: !!obj.flipY,
+                    opacity: obj.opacity ?? 1,
+                    visible: obj.visible !== false,
+                };
+            })
+            .filter(layer => layer.filename);
+
+        if (!payloadLayers.length) return;
+
         setIsExportingLayers(true);
         try {
-            // Export/flatten logic placeholder
-            await new Promise(r => setTimeout(r, 1500));
-        } catch (err) {
-            setError(err.message || 'Export failed');
+            const res = await fetch(`${API}/api/compose-layers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    layers: payloadLayers,
+                    width: Math.round(canvas.getWidth()),
+                    height: Math.round(canvas.getHeight()),
+                    projectId: activeProject.id,
+                    userId: user.id,
+                }),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Layer export failed');
+            updateCreditsFromResponse(data);
+
+            const link = document.createElement('a');
+            link.href = `${API}${data.resultUrl}`;
+            link.download = data.resultUrl.split('/').pop() || 'composed_layers.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (e) {
+            console.error(e);
+            alert(e.message || 'Layer export failed');
         } finally {
             setIsExportingLayers(false);
         }
     };
 
-    const selectLayerFromPanel = (id) => {
-        setSelectedLayerId(id);
+    const applyCanvasTransform = (transformType) => {
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+        const obj = canvas.getActiveObject();
+        if (!obj) return;
+
+        if (transformType === 'flipH') {
+            obj.set('flipX', !obj.flipX);
+        } else if (transformType === 'flipV') {
+            obj.set('flipY', !obj.flipY);
+        } else if (transformType === 'rotRight') {
+            obj.rotate((obj.angle || 0) + 90);
+        } else if (transformType === 'rotLeft') {
+            obj.rotate((obj.angle || 0) - 90);
+        } else if (transformType === 'delete') {
+            canvas.remove(obj);
+            setLayersList(prev => prev.filter(l => l.id !== obj.customId));
+        } else if (transformType === 'front') {
+            canvas.remove(obj);
+            canvas.add(obj);
+            syncLayersListToCanvasOrder(canvas);
+        } else if (transformType === 'back') {
+            canvas.remove(obj);
+            canvas.insertAt(0, obj);
+            syncLayersListToCanvasOrder(canvas);
+        }
+        canvas.renderAll();
     };
 
     const toggleLayerVisibility = (id) => {
-        setLayersList(prev => prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l));
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+        const obj = canvas.getObjects().find(o => o.customId === id);
+        if (obj) {
+            const isVisible = obj.visible !== false;
+            obj.set('visible', !isVisible);
+            canvas.renderAll();
+            setLayersList(prev => prev.map(l => l.id === id ? { ...l, visible: !isVisible } : l));
+        }
     };
 
     const toggleLayerLock = (id) => {
-        setLayersList(prev => prev.map(l => l.id === id ? { ...l, locked: !l.locked } : l));
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+        const obj = canvas.getObjects().find(o => o.customId === id);
+        if (obj) {
+            const isLocked = obj.lockMovementX === true;
+            obj.set({
+                lockMovementX: !isLocked,
+                lockMovementY: !isLocked,
+                lockRotation: !isLocked,
+                lockScalingX: !isLocked,
+                lockScalingY: !isLocked,
+                selectable: !isLocked,
+                evented: !isLocked
+            });
+            if (!isLocked) canvas.discardActiveObject();
+            canvas.renderAll();
+            setLayersList(prev => prev.map(l => l.id === id ? { ...l, locked: !isLocked } : l));
+        }
     };
 
-    const reorderLayerStack = (draggedId, targetId, position) => {
-        setLayersList(prev => {
-            const copy = [...prev];
-            const dragIdx = copy.findIndex(l => l.id === draggedId);
-            const [dragged] = copy.splice(dragIdx, 1);
-            let targetIdx = copy.findIndex(l => l.id === targetId);
-            if (position === 'after') targetIdx += 1;
-            copy.splice(targetIdx, 0, dragged);
-            return copy;
-        });
+    const selectLayerFromPanel = (id) => {
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+        const obj = canvas.getObjects().find(o => o.customId === id);
+        if (obj && !obj.lockMovementX) {
+            canvas.setActiveObject(obj);
+            canvas.renderAll();
+        }
+        setSelectedLayerId(id);
     };
 
-    
+    const applyQwenLayerDemo = (demo) => {
+        setEditType(demo.type);
+        setLayerEditPrompt(demo.prompt);
+
+        if (selectedLayerId !== null || layersList.length === 0) return;
+
+        const fallbackLayer = [...layersList].reverse().find(layer => layer.visible !== false && !layer.locked) || [...layersList].reverse()[0];
+        if (fallbackLayer) selectLayerFromPanel(fallbackLayer.id);
+    };
+
+
+    const renderCanvasBlock = () => {
     return (
-        <>
-
-            <div className="st-ctrl">
-                <div className="st-qwen-side-card">
-                    <div className="st-qwen-eyebrow">Qwen model stack</div>
-                    <strong>Layered decomposition + Qwen layer editing</strong>
-                    <p>Qwen-native layer decomposition and isolated natural-language edits power this workspace.</p>
-                </div>
-                <div className="st-settings-group">
-                    <div className="st-group-title">QWEN DEMO ACTIONS</div>
-                    <div className="st-qwen-demo-grid compact">
-                        {qwenLayerDemoActions.map((demo) => (
-                            <button
-                                key={demo.label}
-                                className={`st-qwen-demo-card ${editType === demo.type ? 'active' : ''}`}
-                                onClick={() => applyQwenLayerDemo(demo)}
-                            >
-                                <I d={demo.icon} s={14} />
-                                <span>{demo.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                <div className="st-settings-group">
-                    <div className="st-group-title">LAYER SETTINGS</div>
-                    <label className="st-label">Number of Layers</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <input type="range" min="2" max="10" value={imageLayersNumLayers} onChange={(e) => setImageLayersNumLayers(+e.target.value)} className="st-range" style={{ flex: 1 }} />
-                        <span style={{ fontWeight: 600, fontSize: '1rem', color: '#6366f1', minWidth: '24px', textAlign: 'center' }}>{imageLayersNumLayers}</span>
-                    </div>
-                    <div className="st-range-labels"><span>2 layers</span><span>10 layers</span></div>
-                </div>
-                <div className="st-settings-group" style={{ marginTop: '0.75rem' }}>
-                    <label className="st-label">Description</label>
-                    <input
-                        type="text"
-                        value={imageLayersDescription}
-                        onChange={(e) => setImageLayersDescription(e.target.value)}
-                        placeholder="'auto' for AI caption, or describe the image"
-                        style={{ width: '100%', padding: '0.5rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontFamily: 'inherit', background: '#f8fafc' }}
-                    />
-                    <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.25rem' }}>Use "auto" to let AI describe the image, or provide your own description for better results.</p>
-                </div>
-                <div className="st-qwen-side-features">
-                    <span><I d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" s={13} /> Variable layer count</span>
-                    <span><I d="M4 4h16v16H4zM9 9h6v6H9z" s={13} /> Recursive decomposition</span>
-                    <span><I d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" s={13} /> Recolor, revise, replace</span>
-                    <span><I d="M5 9l7-7 7 7M5 15l7 7 7-7" s={13} /> Move and resize layers</span>
-                </div>
-                <button className="st-export-btn" onClick={generateImageLayers} disabled={isImageLayering || !uploaded} style={{ marginTop: '1rem' }}>
-                    {isImageLayering ? 'Qwen Decomposing...' : `Qwen Decompose into ${imageLayersNumLayers} Layers`}
-                </button>
-                <p className="st-generate-hint"><I d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" s={12} /> Uses ~{creditPricing.imageLayers || 100} credits</p>
-            </div>
-        
-
         <div className={`st-layer-editor ${isImageLayersFullscreen ? 'fullscreen' : ''}`}>
             {imageLayersResults.length > 0 ? (
                 <>
@@ -512,7 +1229,88 @@ export default function ImageLayersTool(props) {
                 </div>
             )}
         </div>
-    
+    );
+
+    };
+
+    const renderToolControls = () => {
+        if (tool === 'imagelayers') return (
+            <div className="st-ctrl">
+                <div className="st-qwen-side-card">
+                    <div className="st-qwen-eyebrow">Qwen model stack</div>
+                    <strong>Layered decomposition + Qwen layer editing</strong>
+                    <p>Qwen-native layer decomposition and isolated natural-language edits power this workspace.</p>
+                </div>
+                <div className="st-settings-group">
+                    <div className="st-group-title">QWEN DEMO ACTIONS</div>
+                    <div className="st-qwen-demo-grid compact">
+                        {qwenLayerDemoActions.map((demo) => (
+                            <button
+                                key={demo.label}
+                                className={`st-qwen-demo-card ${editType === demo.type ? 'active' : ''}`}
+                                onClick={() => applyQwenLayerDemo(demo)}
+                            >
+                                <I d={demo.icon} s={14} />
+                                <span>{demo.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="st-settings-group">
+                    <div className="st-group-title">LAYER SETTINGS</div>
+                    <label className="st-label">Number of Layers</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <input type="range" min="2" max="10" value={imageLayersNumLayers} onChange={(e) => setImageLayersNumLayers(+e.target.value)} className="st-range" style={{ flex: 1 }} />
+                        <span style={{ fontWeight: 600, fontSize: '1rem', color: '#6366f1', minWidth: '24px', textAlign: 'center' }}>{imageLayersNumLayers}</span>
+                    </div>
+                    <div className="st-range-labels"><span>2 layers</span><span>10 layers</span></div>
+                </div>
+                <div className="st-settings-group" style={{ marginTop: '0.75rem' }}>
+                    <label className="st-label">Description</label>
+                    <input
+                        type="text"
+                        value={imageLayersDescription}
+                        onChange={(e) => setImageLayersDescription(e.target.value)}
+                        placeholder="'auto' for AI caption, or describe the image"
+                        style={{ width: '100%', padding: '0.5rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontFamily: 'inherit', background: '#f8fafc' }}
+                    />
+                    <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.25rem' }}>Use "auto" to let AI describe the image, or provide your own description for better results.</p>
+                </div>
+                <div className="st-qwen-side-features">
+                    <span><I d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" s={13} /> Variable layer count</span>
+                    <span><I d="M4 4h16v16H4zM9 9h6v6H9z" s={13} /> Recursive decomposition</span>
+                    <span><I d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" s={13} /> Recolor, revise, replace</span>
+                    <span><I d="M5 9l7-7 7 7M5 15l7 7 7-7" s={13} /> Move and resize layers</span>
+                </div>
+                <button
+                    className={`st-export-btn ${!hasEnoughImageLayersCredits ? 'insufficient-credits' : ''}`}
+                    onClick={generateImageLayers}
+                    disabled={isImageLayering || !uploaded || !hasEnoughImageLayersCredits}
+                    title={!hasEnoughImageLayersCredits ? `Need ${imageLayersCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Decompose image into layers'}
+                    style={{ marginTop: '1rem' }}
+                >
+                    {isImageLayering ? 'Qwen Decomposing...' : hasEnoughImageLayersCredits ? `Qwen Decompose into ${imageLayersNumLayers} Layers` : `Need ${imageLayersCreditCost} credits`}
+                </button>
+                <p className="st-generate-hint"><I d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" s={12} /> Uses ~{imageLayersCreditCost} credits</p>
+                {!hasEnoughImageLayersCredits && (
+                    <div className="st-credit-shortage">
+                        {userRemainingCredits.toLocaleString()} credits remaining. Recharge to use Image Layers.
+                    </div>
+                )}
+            </div>
+        );
+
+    };
+
+    return (
+        <>
+            {renderCanvasBlock()}
+            {rightPanelEl && createPortal(
+                <div className="st-pl-right" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    {renderToolControls()}
+                </div>,
+                rightPanelEl
+            )}
         </>
     );
 }
