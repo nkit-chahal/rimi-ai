@@ -57,7 +57,8 @@ export default function MeasurementTool(props) {
     const realHeight = (imgHeight / pxPerUnit).toFixed(2);
 
     // Print settings calculations
-    const repeatWidth = (controls.printWidth || 12);
+    const repeatWidth = controls.printWidth || 12;
+    const repeatHeight = controls.printHeight ?? controls.printWidth ?? 12;
     const scaleFactor = (controls.scale || 100) / 100;
     const effectiveRepeatW = (repeatWidth * scaleFactor).toFixed(2); // Accounts for print scaling
 

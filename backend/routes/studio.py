@@ -101,7 +101,9 @@ def get_studio_state(project_id=1, user_id=None):
                      "backgroundClean": bool(controls["background_clean"]),
                      "exportFormat": controls["export_format"], "exportDpi": controls["export_dpi"],
                      "hBrush": controls["h_brush"], "vBrush": controls["v_brush"],
-                     "printWidth": controls["print_width"]},
+                     "printWidth": controls["print_width"],
+                     "printHeight": controls.get("print_height", controls["print_width"]),
+                     "fabricWidth": controls.get("fabric_width", 54)},
         "suggestion": suggestion["body"] if suggestion else None,
     }
 
@@ -126,6 +128,7 @@ def update_project_controls(project_id):
         "backgroundClean": ("background_clean", lambda v: 1 if v else 0),
         "exportFormat": ("export_format", str), "exportDpi": ("export_dpi", int),
         "hBrush": ("h_brush", int), "vBrush": ("v_brush", int), "printWidth": ("print_width", int),
+        "printHeight": ("print_height", int), "fabricWidth": ("fabric_width", int),
     }
 
     updates = []

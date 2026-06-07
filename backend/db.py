@@ -513,6 +513,8 @@ def init_db():
         # PostgreSQL: create all tables
         conn.executescript(_pg_schema_sql())
         conn.execute("ALTER TABLE exports ADD COLUMN IF NOT EXISTS user_id INTEGER")
+        conn.execute("ALTER TABLE project_controls ADD COLUMN IF NOT EXISTS print_height INTEGER NOT NULL DEFAULT 12")
+        conn.execute("ALTER TABLE project_controls ADD COLUMN IF NOT EXISTS fabric_width INTEGER NOT NULL DEFAULT 54")
         conn.commit()
     else:
         # SQLite: original schema + migration
@@ -752,6 +754,8 @@ def init_db():
         ensure_column("users", "status", "TEXT NOT NULL DEFAULT 'active'")
         ensure_column("projects", "user_id", "INTEGER REFERENCES users(id)")
         ensure_column("exports", "user_id", "INTEGER REFERENCES users(id)")
+        ensure_column("project_controls", "print_height", "INTEGER NOT NULL DEFAULT 12")
+        ensure_column("project_controls", "fabric_width", "INTEGER NOT NULL DEFAULT 54")
 
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
         conn.commit()

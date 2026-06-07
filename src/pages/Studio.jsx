@@ -95,7 +95,7 @@ const emptyState = {
     variations: [],
     metrics: { versions: 0, versionsDelta: 0, exports: 0, exportsDelta: 0, aiGenerations: 0, aiGenerationsDelta: 0, creditsUsed: 0, creditsDelta: 0 },
     health: { score: 0, label: '', tileSeamless: false, colorBalance: false, printReadiness: false, resolution: false, note: '' },
-    controls: { gridSize: 2, scale: 100, rotation: 0, repeatType: 'block', colorCleanup: true, edgeMatch: true, backgroundClean: false, exportFormat: 'PNG', exportDpi: 300, hBrush: 8, vBrush: 8, printWidth: 12 },
+    controls: { gridSize: 2, scale: 100, rotation: 0, repeatType: 'block', colorCleanup: true, edgeMatch: true, backgroundClean: false, exportFormat: 'PNG', exportDpi: 300, hBrush: 8, vBrush: 8, printWidth: 12, printHeight: 12, fabricWidth: 54 },
     suggestion: '',
 };
 
@@ -630,8 +630,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     currentToken,
                 );
                 if (d.success && d.state) {
-                    const { controls: _ignore, ...rest } = d.state;
-                    setState(prev => ({ ...prev, ...rest }));
+                    setState(prev => ({
+                        ...prev,
+                        ...d.state,
+                        controls: { ...prev.controls, ...d.state.controls },
+                    }));
                 }
             } catch {
                 console.warn('Control sync failed.');
@@ -1091,6 +1094,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             activeProject,
             user,
             controls,
+            updateControls,
             setError,
             setNotice: showNotice,
             addBgTask,
