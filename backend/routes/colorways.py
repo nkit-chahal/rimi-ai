@@ -102,7 +102,7 @@ def generate_colorways():
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
 
-    credits_per_colorway = credit_requirement('colorways', 10)
+    credits_per_colorway = credit_requirement('colorways', 3)
     required_credits = credits_per_colorway * count
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:

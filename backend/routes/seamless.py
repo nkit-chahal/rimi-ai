@@ -36,7 +36,7 @@ def generate_seamless():
     if user_id:
         try: user_id = int(user_id)
         except ValueError: user_id = None
-    required_credits = credit_requirement('seamless', 250)
+    required_credits = credit_requirement('seamless_texture', 84)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -171,7 +171,7 @@ def make_seamless():
     if user_id_raw:
         try: user_id_early = int(user_id_raw)
         except ValueError: pass
-    required_credits = credit_requirement('seamless', 250)
+    required_credits = credit_requirement('seamless', 58)
     ok, remaining, limit, used = check_credits(user_id_early, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -264,7 +264,9 @@ def make_seamless():
                         "output_format": "png", "steps": steps, "guidance": guidance,
                     })
                     duration = time.time() - t0
-                    credits_used = 121
+                    # Per-call vendor cost for admin cost-log only. Actual user
+                    # billing uses `required_credits` aggregated at end of route.
+                    credits_used = credit_requirement('seamless', 58)
                     cost_usd = 0.05
                     log_replicate_call(project_id, "black-forest-labs/flux-fill-pro", duration, credits_used, cost_usd)
                     replicate_calls.append((duration, credits_used))

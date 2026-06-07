@@ -21,7 +21,7 @@ import storage
 bp = Blueprint('color', __name__)
 
 
-def require_credits(user_id, tool_key='colorReduction', default=10):
+def require_credits(user_id, tool_key='colorReduction', default=3):
     if user_id:
         try:
             user_id = int(user_id)
@@ -65,7 +65,7 @@ def recolor_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, required_credits, error_response, status_code = require_credits(user_id, 'recolor', 10)
+    user_id, required_credits, error_response, status_code = require_credits(user_id, 'recolor', 3)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -108,7 +108,7 @@ def generate_tech_pack_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, required_credits, error_response, status_code = require_credits(user_id, 'techPack', 15)
+    user_id, required_credits, error_response, status_code = require_credits(user_id, 'techPack', 2)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(RESULTS_DIR, filename)
@@ -178,7 +178,7 @@ def color_reduce_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, required_credits, error_response, status_code = require_credits(user_id, 'colorReduction', 10)
+    user_id, required_credits, error_response, status_code = require_credits(user_id, 'colorReduction', 3)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -234,7 +234,7 @@ def layer_export_api():
     filename = os.path.basename(filename)
     if export_format not in ('zip', 'tiff'):
         return jsonify({'error': 'Format must be zip or tiff'}), 400
-    user_id, required_credits, error_response, status_code = require_credits(user_id, 'layerExport', 15)
+    user_id, required_credits, error_response, status_code = require_credits(user_id, 'layerExport', 2)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)

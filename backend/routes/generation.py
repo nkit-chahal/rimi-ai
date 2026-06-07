@@ -94,7 +94,7 @@ def extract_design():
         try: user_id = int(user_id)
         except ValueError: user_id = None
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
-    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 310))
+    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 148))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -281,7 +281,7 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
         output = replicate.run(model_id, input=replicate_input)
         duration = time.time() - start_time
 
-        credits_used = int(model_cfg.get('credits') or credit_requirement('extract', 310))
+        credits_used = int(model_cfg.get('credits') or credit_requirement('extract', 148))
         cost_usd = model_cfg['cost_per_image']
         log_replicate_call(project_id, model_id, duration, credits_used, cost_usd)
 
@@ -338,7 +338,7 @@ def extract_design_multi():
         try: user_id = int(user_id)
         except ValueError: user_id = None
 
-    required_credits = sum(int(m.get('credits') or credit_requirement('extract', 310)) for m in EXTRACT_MODELS)
+    required_credits = sum(int(m.get('credits') or credit_requirement('extract', 148)) for m in EXTRACT_MODELS)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -413,7 +413,7 @@ def extract_design_single():
     if not model_cfg:
         return jsonify({'error': f'Unknown model: {model_id}'}), 400
 
-    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 310))
+    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 148))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -466,7 +466,7 @@ def extract_edit():
         except ValueError: user_id = None
 
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
-    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 310))
+    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 148))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403

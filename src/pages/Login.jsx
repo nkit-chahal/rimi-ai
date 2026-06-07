@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { API } from '../components/studio/shared/helpers';
 
-export default function Login({ onLogin, onGoToLanding }) {
+export default function Login({ onLogin }) {
   const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -274,7 +274,7 @@ export default function Login({ onLogin, onGoToLanding }) {
       <div className="login-grid-overlay"></div>
 
       <div className="login-container">
-        <div className="login-brand" onClick={onGoToLanding ? onGoToLanding : undefined} style={onGoToLanding ? { cursor: 'pointer' } : undefined}>
+        <div className="login-brand">
           <span className="ln-logo-badge">RI</span>
           <span className="login-logo-text">RIMI AI</span>
         </div>

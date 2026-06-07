@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, apiFetch, forceDownload } from '../shared/helpers';
 import { createPortal } from 'react-dom';
 
 export default function DashboardTool(props) {
@@ -70,14 +70,16 @@ export default function DashboardTool(props) {
 
     useEffect(() => {
         if (tool === 'dashboard' && activeProject?.id) {
-            fetch(`${API}/api/pipeline-runs?project_id=${activeProject.id}`).then(r => r.json()).then(d => {
-                if (d.success) setPipelineRuns(d.runs);
-            }).catch(() => { });
+            if (currentToken) {
+                apiFetch(`/api/pipeline-runs?project_id=${activeProject.id}`, {}, currentToken)
+                    .then((d) => { if (d.success) setPipelineRuns(d.runs); })
+                    .catch(() => { });
+            }
             fetch(`${API}/api/workflows`).then(r => r.json()).then(d => {
                 if (d.success) setSavedProfiles(d.workflows);
             }).catch(() => { });
         }
-    }, [tool, activeProject?.id]);
+    }, [tool, activeProject?.id, currentToken]);
 
     const loadProfile = (profile) => {
         const steps = profile.steps.map((type, i) => ({

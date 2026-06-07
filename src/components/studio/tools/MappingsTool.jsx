@@ -206,7 +206,7 @@ export default function MappingsTool(props) {
 
     const generateMockups = async () => {
         if (!mappingPrint?.filename || mappingSelectedProducts.size === 0) return;
-        const requiredCredits = mappingSelectedProducts.size * (creditPricing.mappings || 58);
+        const requiredCredits = mappingSelectedProducts.size * (creditPricing.mappings || 148);
         if (userRemainingCredits < requiredCredits) {
             setError(`Insufficient credits. Mockup generation needs ${requiredCredits} credits, but you have ${userRemainingCredits} remaining.`);
             return;
@@ -258,7 +258,7 @@ export default function MappingsTool(props) {
     const filteredProducts = mappingProductSearch
         ? currentProducts.filter(p => p.name.toLowerCase().includes(mappingProductSearch.toLowerCase()))
         : currentProducts;
-    const mappingCreditCost = mappingSelectedProducts.size * (creditPricing.mappings || 58);
+    const mappingCreditCost = mappingSelectedProducts.size * (creditPricing.mappings || 148);
     const hasEnoughMappingCredits = userRemainingCredits >= mappingCreditCost;
 
     return (

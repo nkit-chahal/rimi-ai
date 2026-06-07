@@ -30,8 +30,8 @@ AI-powered textile and surface-pattern design studio. Upload artwork, extract pa
 ```
 RIMI_AI/
 ├── src/                      # React frontend
-│   ├── App.jsx               # Landing → Login → Studio routing
-│   ├── pages/                # Landing, Login, Studio
+│   ├── App.jsx               # Login → Studio routing
+│   ├── pages/                # Login, Studio
 │   └── components/studio/    # Tool panels, admin, shared helpers
 ├── backend/
 │   ├── server.py             # Flask app entry point

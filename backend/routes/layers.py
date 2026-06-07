@@ -45,7 +45,7 @@ def image_layers():
             user_id = int(user_id_raw)
         except ValueError:
             pass
-    required_credits = credit_requirement('imageLayers', 315)
+    required_credits = credit_requirement('imageLayers', 69)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -239,7 +239,7 @@ def edit_layer():
             user_id = int(user_id_raw)
         except ValueError:
             pass
-    required_credits = credit_requirement('imageLayerEdit', 75)
+    required_credits = credit_requirement('imageLayerEdit', 35)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -389,7 +389,7 @@ def inpaint_layer():
         except ValueError:
             pass
 
-    required_credits = credit_requirement('imageLayerEdit', 75)
+    required_credits = credit_requirement('imageLayerEdit', 35)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403

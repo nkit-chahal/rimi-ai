@@ -32,21 +32,34 @@ export default function InspireTool({
 
     const fileRef = useRef(null);
 
+    // Per-model credit costs.  IDs MUST match MODEL_TO_CREDITS keys in
+    // backend/routes/generation.py and Replicate's actual model slugs.
+    // Pricing rule (Option A, 4 credits per INR 1, ~57% gross margin):
+    //   credits = ceil(cost_usd * 1150)
     const allAvailableModels = [
-        { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'GI', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'replicate/imagen-4-fast', name: 'Imagen 4 Fast', sub: 'Google', brand: 'google', logo: 'I4', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'replicate/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest', brand: 'bfl', logo: 'F2', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'replicate/imagen-4-ultra', name: 'Imagen 4 Ultra', sub: 'Google', brand: 'google', logo: 'IU', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'replicate/grok-3-mini', name: 'Grok 3 Mini', sub: 'xAI', brand: 'xai', logo: 'G3', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'replicate/seedream-4.5', name: 'Seedream 4.5', sub: 'Stability', brand: 'stability', logo: 'SD', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'google/nano-banana-pro', name: 'Nano Banana Pro', sub: 'Google', brand: 'google', logo: 'NP', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' }
+        { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'GI', credits: 148, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/imagen-4-fast', name: 'Imagen 4 Fast', sub: 'Google', brand: 'google', logo: 'I4', credits: 23, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest', brand: 'bfl', logo: 'F2', credits: 35, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/imagen-4-ultra', name: 'Imagen 4 Ultra', sub: 'Google', brand: 'google', logo: 'IU', credits: 69, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'xai/grok-imagine-image', name: 'Grok Imagine', sub: 'xAI', brand: 'xai', logo: 'GR', credits: 23, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: 46, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', credits: 78, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/nano-banana-pro', name: 'Nano Banana Pro', sub: 'Google', brand: 'google', logo: 'NP', credits: 173, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'black-forest-labs/flux-schnell', name: 'Flux Schnell', sub: 'Black Forest', brand: 'bfl', logo: 'FS', credits: 4, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/nano-banana', name: 'Nano Banana', sub: 'Google', brand: 'google', logo: 'NB', credits: 45, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
     ];
 
     const promptChips = ['Botanical repeat', 'Hand-painted floral', 'Art deco geometric', 'Soft watercolor', 'Vintage textile', 'Tropical foliage'];
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
-    const inspireCreditCost = variants * Math.max(1, inspireModels.length) * (creditPricing?.inspire || 148);
+    // Sum per-model credits for every selected model and multiply by variants
+    // so cost reflects the true mix.  Cheap models (Flux Schnell = 4) cost far
+    // less than premium ones (Nano Banana Pro = 173).
+    const creditsPerVariant = inspireModels.reduce((sum, modelId) => {
+        const cfg = allAvailableModels.find(m => m.id === modelId);
+        return sum + (cfg?.credits || creditPricing?.inspire || 148);
+    }, 0) || (creditPricing?.inspire || 148);
+    const inspireCreditCost = variants * creditsPerVariant;
     const hasEnoughInspireCredits = userRemainingCredits >= inspireCreditCost;
 
     // File Upload Handler

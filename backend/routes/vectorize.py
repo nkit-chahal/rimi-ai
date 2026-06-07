@@ -224,7 +224,7 @@ def upscale():
             user_id_early = int(user_id_raw)
         except ValueError:
             pass
-    required_credits = credit_requirement('upscale', 50)
+    required_credits = credit_requirement('upscale', 23)
     ok, remaining, limit, used = check_credits(user_id_early, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403

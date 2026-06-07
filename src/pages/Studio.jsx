@@ -28,16 +28,21 @@ import MappingsTool from '../components/studio/tools/MappingsTool';
 
 // Shared icons & helpers
 import { I } from '../components/studio/shared/StudioIcons';
-import { API, forceDownload } from '../components/studio/shared/helpers';
+import { API, apiFetch, forceDownload } from '../components/studio/shared/helpers';
+import StudioCommandPalette from '../components/studio/shared/StudioCommandPalette';
 
 const GarmentPreview3D = lazy(() => import('../components/GarmentPreview3D'));
 
+// Pre-API fallback plans. Must mirror BILLING_PLANS in backend/routes/billing.py.
+// Pricing: 4 credits per INR 1  ->  ~57% gross margin / ~54% after Razorpay.
+// Live plan list arrives via /api/billing/overview and overrides this.
 const BILLING_PLAN_FALLBACK = [
-    { id: 'free', label: 'Free', description: 'Trial credits for testing the studio.', credits: 200, amount: 0, priceLabel: '₹0', badge: '', features: ['200 starting credits', 'Use any AI design tool', 'Razorpay recharge anytime'], checkoutEnabled: false },
-    { id: 'starter', label: 'Starter', description: 'Small production runs and evaluation.', credits: 5000, amount: 49900, priceLabel: '₹499', badge: '', features: ['5,000 AI credits', 'Good for quick pattern cleanup', 'Standard Razorpay checkout'], checkoutEnabled: true },
-    { id: 'creator', label: 'Creator', description: 'Best value for active textile workflows.', credits: 12000, amount: 99900, priceLabel: '₹999', badge: 'Popular', features: ['12,000 AI credits', 'Pattern extraction, vectorize, seamless', 'Additional credits through Razorpay'], checkoutEnabled: true },
-    { id: 'pro', label: 'Pro', description: 'For frequent studio use and client work.', credits: 50000, amount: 299900, priceLabel: '₹2,999', badge: '', features: ['50,000 AI credits', 'High-volume generation buffer', 'Works with all available AI tools'], checkoutEnabled: true },
-    { id: 'scale', label: 'Scale', description: 'Large credit top-up for production teams.', credits: 125000, amount: 699900, priceLabel: '₹6,999', badge: '', features: ['125,000 AI credits', 'Lowest listed per-credit rate', 'Designed for team production usage'], checkoutEnabled: true },
+    { id: 'free', label: 'Free Trial', description: 'Trial credits for testing the studio.', credits: 50, amount: 0, priceLabel: 'Free', badge: '', features: ['50 starting credits', 'Try cheap models (Flux Schnell, Vectorize Local)', 'Razorpay recharge anytime'], checkoutEnabled: false },
+    { id: 'starter', label: 'Starter', description: 'Small production runs and evaluation.', credits: 1996, amount: 49900, priceLabel: '₹499', badge: '', features: ['1,996 AI credits', '~13 Pattern Extractions (GPT Image 2)', '~34 Make-Seamless / Mockup runs'], checkoutEnabled: true },
+    { id: 'creator', label: 'Creator', description: 'Best value for active textile workflows.', credits: 3996, amount: 99900, priceLabel: '₹999', badge: 'Popular', features: ['3,996 AI credits', '~27 Pattern Extractions, ~68 Seamless runs', 'Recommended for active studios'], checkoutEnabled: true },
+    { id: 'pro', label: 'Pro', description: 'For frequent studio use and client work.', credits: 11996, amount: 299900, priceLabel: '₹2,999', badge: '', features: ['11,996 AI credits', 'High-volume generation buffer', 'All AI tools unlocked'], checkoutEnabled: true },
+    { id: 'scale', label: 'Scale', description: 'Large credit top-up for production teams.', credits: 27996, amount: 699900, priceLabel: '₹6,999', badge: '', features: ['27,996 AI credits', 'Best per-credit rate', 'Designed for team production usage'], checkoutEnabled: true },
+    { id: 'enterprise', label: 'Enterprise', description: 'For agencies and high-volume teams.', credits: 59996, amount: 1499900, priceLabel: '₹14,999', badge: '', features: ['59,996 AI credits', 'Priority support', 'Bulk seat licensing on request'], checkoutEnabled: true },
 ];
 
 const NAV = [
@@ -56,7 +61,7 @@ const NAV = [
             { id: 'colorways', label: 'Colorways', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z' },
             { id: 'colorway-manager', label: 'Colorway Manager', icon: 'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83' },
             { id: 'vectorpro', label: 'Vector Pro', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485' },
-            { id: 'mockup3d', label: '3D Mockup', icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.3 7l8.7 5 8.7-5M12 22V12' },
+            { id: 'mockup3d', label: '3D Mockup', icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.3 7l8.7 5 8.7-5M12 22V12', comingSoon: true },
         ],
     },
     {
@@ -96,16 +101,16 @@ const emptyState = {
 
 export default function Studio({ onBack, currentUser, currentToken, onLogout }) {
     const adminTools = ['admin-dashboard', 'admin-users', 'admin-projects', 'admin-logs', 'admin-credits'];
-    const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing'];
+    const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace'];
     const isAdmin = currentUser?.role === 'admin';
-    
+
     const [tool, _setTool] = useState(() => {
         const hash = window.location.hash.replace('#', '');
         const allowed = isAdmin ? adminTools : userTools;
         if (allowed.includes(hash)) return hash;
         return isAdmin ? 'admin-dashboard' : 'pattern';
     });
-    
+
     const setTool = useCallback((t) => {
         const allowed = isAdmin ? adminTools : userTools;
         if (!allowed.includes(t)) t = isAdmin ? 'admin-dashboard' : 'pattern';
@@ -117,15 +122,20 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [activeProjectId, setActiveProjectId] = useState(1);
     const [showProjectDropdown, setShowProjectDropdown] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
+    const [workspaceProjectName, setWorkspaceProjectName] = useState('');
+    const [editingProjectId, setEditingProjectId] = useState(null);
+    const [editingProjectName, setEditingProjectName] = useState('');
+    const [workspaceBusyId, setWorkspaceBusyId] = useState(null);
     const projectDropdownRef = useRef(null);
     const [controlTab, setControlTab] = useState('controls');
     const [uploads, setUploads] = useState({});
     const [isDrag, setIsDrag] = useState(false);
     const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
     const [isLoadingState, setIsLoadingState] = useState(true);
     const [paymentStatus, setPaymentStatus] = useState({ loadingPackId: null, message: '', error: '' });
     const [razorpayKeyId, setRazorpayKeyId] = useState(import.meta.env.VITE_RAZORPAY_KEY_ID || '');
-    
+
     const [billingOverview, setBillingOverview] = useState({
         loading: false,
         plans: BILLING_PLAN_FALLBACK,
@@ -142,6 +152,14 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [isSidebarHidden, setIsSidebarHidden] = useState(false);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
     const accountDropdownRef = useRef(null);
+    const [paletteOpen, setPaletteOpen] = useState(false);
+    const [paletteQuery, setPaletteQuery] = useState('');
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+    const showNotice = useCallback((message) => {
+        setNotice(message);
+        window.setTimeout(() => setNotice(''), 4000);
+    }, []);
 
     // Synchronized state urls for task manager view trigger
     const [enhUrl, setEnhUrl] = useState(null);
@@ -207,22 +225,27 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             resetDays: stateUserMatchesCurrent ? (state.user.resetDays ?? currentUser.resetDays) : currentUser.resetDays,
         }
         : state.user;
-    
+
     const activeProject = state.activeProject;
     const userRemainingCredits = Math.max(0, (user.creditsLimit || 0) - (user.creditsUsed || 0));
+    const hasLoadedUserCredits = !isLoadingState;
     const remainingCreditPercent = user.creditsLimit > 0
         ? Math.min(100, Math.round((userRemainingCredits / user.creditsLimit) * 100))
         : 0;
 
-    // Dynamic Credit Pricing
+    // Dynamic Credit Pricing  (fallback values mirror DEFAULT_CREDIT_PRICING in
+    // backend/db.py at the 4 credits/INR pricing tier, ~57% gross margin).
+    // The live values come from /api/credit-pricing on mount.
     const [creditPricing, setCreditPricing] = useState({
-        upload: 0, extract: 50, seamless: 80, repeat: 50, upscale: 60,
-        vectorize: 100, vectorizeLocal: 5, export: 0, inspire: 50,
-        mappings: 50, imageLayers: 100, colorways: 50, colorReduction: 10,
-        techPack: 15,
+        upload: 0, extract: 148, seamless: 58, repeat: 5, upscale: 23,
+        vectorize: 12, vectorizeLocal: 3, export: 0, inspire: 148,
+        mappings: 148, imageLayers: 69, imageLayerEdit: 35,
+        colorways: 3, recolor: 3, colorReduction: 3,
+        layerExport: 2, techPack: 2,
+        removeBg: 2, styleTransfer: 23, seamless_texture: 84,
     });
 
-    const repeatCreditCost = creditPricing.repeat || 50;
+    const repeatCreditCost = creditPricing.repeat || 5;
     const hasEnoughRepeatCredits = userRemainingCredits >= repeatCreditCost;
 
     const fetchCreditPricing = useCallback(() => {
@@ -253,18 +276,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     // Brand Palettes
     const [brandPalettes, setBrandPalettes] = useState([]);
     const [brandPalettesLoading, setBrandPalettesLoading] = useState(false);
-    
+
     const fetchBrandPalettes = useCallback(() => {
         if (!activeProject?.id) return;
         setBrandPalettesLoading(true);
-        fetch(`${API}/api/brand-palettes?projectId=${activeProject.id}`)
-            .then(r => r.json())
-            .then(d => {
+        apiFetch(`/api/brand-palettes?projectId=${activeProject.id}`, {}, currentToken)
+            .then((d) => {
                 if (d.palettes) setBrandPalettes(d.palettes);
                 setBrandPalettesLoading(false);
             })
             .catch(() => setBrandPalettesLoading(false));
-    }, [activeProject?.id]);
+    }, [activeProject?.id, currentToken]);
 
     useEffect(() => {
         if (activeProject?.id) fetchBrandPalettes();
@@ -468,27 +490,131 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     }, [showAccountDropdown]);
 
     const loadStudioState = useCallback(async (projectId = activeProjectId) => {
+        if (!currentToken) return;
         setError('');
         try {
-            const uid = currentUser?.id || '';
-            const r = await fetch(`${API}/api/studio-state?projectId=${projectId}${uid ? `&userId=${uid}` : ''}`);
-            const d = await r.json();
+            const d = await apiFetch(`/api/studio-state?projectId=${projectId}`, {}, currentToken);
             if (!d.success) throw new Error(d.error || 'Failed to load studio state');
             hasLoadedControls.current = false;
             setState(d.state);
             setActiveProjectId(d.state.activeProject.id);
             window.setTimeout(() => { hasLoadedControls.current = true; }, 0);
-        } catch {
-            console.warn('Backend is not connected.');
+        } catch (err) {
+            if (err.status !== 401) {
+                setError(err.message || 'Failed to load workspace.');
+            }
+            console.warn('Studio state load failed:', err.message);
         } finally {
             setIsLoadingState(false);
         }
-    }, [activeProjectId, currentUser?.id]);
+    }, [activeProjectId, currentToken]);
 
     useEffect(() => {
         if (!isAdmin) loadStudioState(1);
         else setIsLoadingState(false);
     }, [isAdmin, loadStudioState]);
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                setPaletteOpen(true);
+                setPaletteQuery('');
+            }
+            if (e.key === 'Escape') {
+                setPaletteOpen(false);
+                setMobileNavOpen(false);
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
+
+    const commandPaletteItems = useMemo(() => {
+        const sections = isAdmin ? ADMIN_NAV : NAV;
+        const items = sections.flatMap((section) =>
+            section.items.map((it) => ({
+                id: it.id,
+                label: it.label,
+                icon: it.icon,
+                section: section.section || 'Studio',
+            }))
+        );
+        if (!isAdmin) {
+            items.push({
+                id: 'workspace',
+                label: 'Workspace',
+                icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
+                section: 'Account',
+            });
+        }
+        return items;
+    }, [isAdmin]);
+
+    const createWorkspaceProject = async (name) => {
+        const trimmed = (name || '').trim();
+        if (!trimmed) return;
+        setWorkspaceBusyId('create');
+        setError('');
+        try {
+            const d = await apiFetch('/api/projects', {
+                method: 'POST',
+                body: JSON.stringify({ name: trimmed }),
+            }, currentToken);
+            if (!d.success || !d.projectId) throw new Error(d.error || 'Unable to create project');
+            setWorkspaceProjectName('');
+            showNotice('Project created.');
+            await loadStudioState(d.projectId);
+        } catch (err) {
+            if (err.status !== 401) setError(err.message || 'Project creation failed.');
+        } finally {
+            setWorkspaceBusyId(null);
+        }
+    };
+
+    const renameWorkspaceProject = async (projectId, name) => {
+        const trimmed = (name || '').trim();
+        if (!trimmed) return;
+        setWorkspaceBusyId(projectId);
+        setError('');
+        try {
+            const d = await apiFetch(`/api/projects/${projectId}`, {
+                method: 'PUT',
+                body: JSON.stringify({ name: trimmed }),
+            }, currentToken);
+            if (!d.success) throw new Error(d.error || 'Unable to rename project');
+            setEditingProjectId(null);
+            setEditingProjectName('');
+            showNotice('Project renamed.');
+            await loadStudioState(projectId);
+        } catch (err) {
+            if (err.status !== 401) setError(err.message || 'Project rename failed.');
+        } finally {
+            setWorkspaceBusyId(null);
+        }
+    };
+
+    const deleteWorkspaceProject = async (projectId) => {
+        const project = state.projects.find((p) => p.id === projectId);
+        if (state.projects.length <= 1) {
+            setError('Create another project before deleting your last workspace project.');
+            return;
+        }
+        if (!window.confirm(`Delete "${project?.name || 'this project'}" and its history? This cannot be undone.`)) return;
+        setWorkspaceBusyId(projectId);
+        setError('');
+        try {
+            const d = await apiFetch(`/api/projects/${projectId}`, { method: 'DELETE' }, currentToken);
+            if (!d.success) throw new Error(d.error || 'Unable to delete project');
+            const fallback = state.projects.find((p) => p.id !== projectId);
+            showNotice('Project deleted.');
+            await loadStudioState(fallback?.id || activeProjectId);
+        } catch (err) {
+            if (err.status !== 401) setError(err.message || 'Project deletion failed.');
+        } finally {
+            setWorkspaceBusyId(null);
+        }
+    };
 
     const updateControls = useCallback((patch) => {
         setState((current) => ({ ...current, controls: { ...current.controls, ...patch } }));
@@ -498,12 +624,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         if (!hasLoadedControls.current) return;
         const id = window.setTimeout(async () => {
             try {
-                const r = await fetch(`${API}/api/projects/${activeProject.id}/controls`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(controls),
-                });
-                const d = await r.json();
+                const d = await apiFetch(
+                    `/api/projects/${activeProject.id}/controls`,
+                    { method: 'PATCH', body: JSON.stringify(controls) },
+                    currentToken,
+                );
                 if (d.success && d.state) {
                     const { controls: _ignore, ...rest } = d.state;
                     setState(prev => ({ ...prev, ...rest }));
@@ -513,7 +638,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             }
         }, 350);
         return () => window.clearTimeout(id);
-    }, [controls, activeProject?.id]);
+    }, [controls, activeProject?.id, currentToken]);
 
     const handlePreUpload = (file, context) => {
         if (!file) return;
@@ -684,6 +809,129 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         );
     };
 
+    const renderWorkspaceManager = () => {
+        const projects = state.projects || [];
+        const thumbUrl = (url) => (url && url.startsWith('/') ? `${API}${url}` : (url || '/demo_geometric.png'));
+
+        return (
+            <div className="st-workspace-manager">
+                <div className="st-workspace-hero">
+                    <div className="st-workspace-hero-copy">
+                        <span className="st-workspace-kicker">Projects</span>
+                        <h2>Workspace</h2>
+                        <p>Create, rename, and switch between design projects. Each project keeps its own pipeline history, exports, and settings.</p>
+                    </div>
+                    <div className="st-workspace-hero-stats">
+                        <div className="st-workspace-stat-pill">
+                            <strong>{projects.length}</strong>
+                            <span>Projects</span>
+                        </div>
+                        <div className="st-workspace-stat-pill accent">
+                            <strong>{activeProject?.name || '—'}</strong>
+                            <span>Active</span>
+                        </div>
+                    </div>
+                </div>
+
+                <section className="st-workspace-panel">
+                    <div className="st-workspace-panel-head">
+                        <div>
+                            <h3>All projects</h3>
+                            <p>Open a project to continue working, or create a new one for a fresh design.</p>
+                        </div>
+                        <form
+                            className="st-workspace-create"
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                createWorkspaceProject(workspaceProjectName);
+                            }}
+                        >
+                            <input
+                                type="text"
+                                value={workspaceProjectName}
+                                onChange={(e) => setWorkspaceProjectName(e.target.value)}
+                                placeholder="New project name"
+                            />
+                            <button type="submit" disabled={!workspaceProjectName.trim() || workspaceBusyId === 'create'}>
+                                {workspaceBusyId === 'create' ? 'Creating…' : 'Create'}
+                            </button>
+                        </form>
+                    </div>
+                    <div className="st-workspace-project-list">
+                        {projects.length === 0 ? (
+                            <div className="st-workspace-empty">
+                                <I d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" s={28} />
+                                <strong>No projects yet</strong>
+                                <p>Create your first project to start designing.</p>
+                            </div>
+                        ) : (
+                            projects.map((project) => {
+                                const isActive = project.id === activeProject?.id;
+                                const isEditing = editingProjectId === project.id;
+                                const busy = workspaceBusyId === project.id;
+                                return (
+                                    <article key={project.id} className={`st-workspace-project ${isActive ? 'active' : ''}`}>
+                                        <img src={thumbUrl(project.thumbnailUrl)} alt="" />
+                                        <div className="st-workspace-project-main">
+                                            {isEditing ? (
+                                                <form
+                                                    className="st-workspace-edit"
+                                                    onSubmit={(e) => {
+                                                        e.preventDefault();
+                                                        renameWorkspaceProject(project.id, editingProjectName);
+                                                    }}
+                                                >
+                                                    <input
+                                                        type="text"
+                                                        value={editingProjectName}
+                                                        onChange={(e) => setEditingProjectName(e.target.value)}
+                                                        autoFocus
+                                                    />
+                                                    <button type="submit" disabled={!editingProjectName.trim() || busy}>Save</button>
+                                                    <button type="button" onClick={() => { setEditingProjectId(null); setEditingProjectName(''); }} disabled={busy}>Cancel</button>
+                                                </form>
+                                            ) : (
+                                                <>
+                                                    <div className="st-workspace-project-title">
+                                                        <h3>{project.name}</h3>
+                                                        {isActive && <span>Active</span>}
+                                                    </div>
+                                                    <p>{project.status || 'Draft'} · Updated {project.updatedLabel || 'recently'}</p>
+                                                </>
+                                            )}
+                                        </div>
+                                        {!isEditing && (
+                                            <div className="st-workspace-project-actions">
+                                                <button type="button" disabled={busy} onClick={() => loadStudioState(project.id)}>
+                                                    {isActive ? 'Open' : 'Switch'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() => { setEditingProjectId(project.id); setEditingProjectName(project.name); }}
+                                                >
+                                                    Rename
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="danger"
+                                                    disabled={busy || projects.length <= 1}
+                                                    onClick={() => deleteWorkspaceProject(project.id)}
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        )}
+                                    </article>
+                                );
+                            })
+                        )}
+                    </div>
+                </section>
+            </div>
+        );
+    };
+
     const renderBilling = () => {
         const usage = billingOverview.usage || {
             plan: user.plan || 'Free Trial',
@@ -844,6 +1092,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             user,
             controls,
             setError,
+            setNotice: showNotice,
             addBgTask,
             updateCreditsFromResponse,
             setUploads,
@@ -864,9 +1113,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         if (tool === 'admin-projects') return <AdminProjects renderBudgetBanner={renderBudgetBanner} adminProjectsLoading={state.projectsLoading} adminProjects={state.projects} />;
         if (tool === 'admin-logs') return <AdminLogs renderBudgetBanner={renderBudgetBanner} replicateLogsLoading={replicateLogsLoading} replicateLogs={replicateLogs} loginEvents={loginEvents} adminAuditEvents={adminAuditEvents} />;
         if (tool === 'admin-credits') return <AdminCredits renderBudgetBanner={renderBudgetBanner} adminUsers={adminUsers} adminSelectedUserId={adminSelectedUserId} setAdminSelectedUserId={setAdminSelectedUserId} adminUsersLoading={adminUsersLoading} currentToken={currentToken} fetchAdminUsers={fetchAdminUsers} />;
-        
+
+        if (tool === 'workspace') return renderWorkspaceManager();
         if (tool === 'billing') return renderBilling();
-        
+
         if (tool === 'dashboard') return <DashboardTool {...commonProps} />;
         if (tool === 'exports') return <ExportsTool {...commonProps} />;
         if (tool === 'pattern') return <PatternTool {...commonProps} enhUrl={enhUrl} setEnhUrl={setEnhUrl} />;
@@ -881,17 +1131,14 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         if (tool === 'measurement') return <MeasurementTool {...commonProps} />;
         if (tool === 'mappings') return <MappingsTool {...commonProps} />;
         if (tool === 'repeat') return <RepeatTool {...commonProps} repeatUrl={repeatUrl} setRepeatUrl={setRepeatUrl} isRepeat={isRepeat} setIsRepeat={setIsRepeat} />;
-        
-        if (tool === 'mockup3d') {
-            return (
-                <Mockup3DTool preview={preview} />
-            );
-        }
+
+        if (tool === 'mockup3d') return <Mockup3DTool />;
 
         return null;
     };
 
     const toolLabel = useMemo(() => {
+        if (tool === 'workspace') return 'Workspace';
         const items = [...NAV[0].items, ...NAV[1].items, ...NAV[2].items, ...ADMIN_NAV[0].items];
         return items.find(it => it.id === tool)?.label || 'Studio';
     }, [tool]);
@@ -925,11 +1172,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                         {section.items.map(it => (
                                             <button
                                                 key={it.id}
-                                                className={`st-nav-item ${tool === it.id ? 'active' : ''}`}
+                                                className={`st-nav-item ${tool === it.id ? 'active' : ''}${it.comingSoon ? ' coming-soon' : ''}`}
                                                 onClick={() => { setTool(it.id); setError(''); }}
                                             >
                                                 <I d={it.icon} s={18} />
                                                 <span>{it.label}</span>
+                                                {it.comingSoon && <span className="st-nav-soon-badge">Soon</span>}
                                             </button>
                                         ))}
                                     </div>
@@ -943,11 +1191,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                         {section.items.map(it => (
                                             <button
                                                 key={it.id}
-                                                className={`st-nav-item ${tool === it.id ? 'active' : ''}`}
+                                                className={`st-nav-item ${tool === it.id ? 'active' : ''}${it.comingSoon ? ' coming-soon' : ''}`}
                                                 onClick={() => { setTool(it.id); setError(''); }}
                                             >
                                                 <I d={it.icon} s={18} />
                                                 <span>{it.label}</span>
+                                                {it.comingSoon && <span className="st-nav-soon-badge">Soon</span>}
                                             </button>
                                         ))}
                                     </div>
@@ -975,7 +1224,15 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                     <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={14} />
                                     Credits Remaining
                                 </div>
-                                <div className="st-credits-text strong">{userRemainingCredits.toLocaleString()} <span>/ {user.creditsLimit.toLocaleString()}</span></div>
+                                <div className="st-credits-text strong">
+                                    {user.creditsLimit > 0 ? (
+                                        <>{userRemainingCredits.toLocaleString()} <span>/ {user.creditsLimit.toLocaleString()}</span></>
+                                    ) : user.creditsUsed > 0 ? (
+                                        <span style={{ fontSize: '0.88rem' }}>No credits allocated</span>
+                                    ) : (
+                                        <>0 <span>/ 0</span></>
+                                    )}
+                                </div>
                                 <div className="st-credits-bar">
                                     <div className="st-credits-fill" style={{ width: `${remainingCreditPercent}%` }} />
                                 </div>
@@ -984,6 +1241,15 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                         <I d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" s={12} />
                                         {Number(user.creditsUsed || 0).toLocaleString()} used
                                     </div>
+                                    {user.creditsLimit === 0 && user.creditsUsed > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setTool('billing')}
+                                            style={{ border: 0, background: 'transparent', color: 'var(--primary-hover)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                                        >
+                                            Upgrade
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -994,6 +1260,14 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             {/* Main Content Area */}
             <div className="st-main">
                 <header className={`st-topbar ${isSidebarHidden ? 'sidebar-toggle-visible' : ''}`}>
+                    <button
+                        type="button"
+                        className="st-mobile-menu-btn"
+                        aria-label="Open navigation"
+                        onClick={() => setMobileNavOpen(true)}
+                    >
+                        <I d="M4 6h16M4 12h16M4 18h16" s={18} />
+                    </button>
                     {isSidebarHidden && (
                         <button
                             className="st-sidebar-toggle topbar"
@@ -1050,18 +1324,19 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                             e.preventDefault();
                                             if (!newProjectName.trim()) return;
                                             try {
-                                                const r = await fetch(`${API}/api/projects`, {
+                                                const d = await apiFetch('/api/projects', {
                                                     method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
-                                                    body: JSON.stringify({ name: newProjectName.trim() })
-                                                });
-                                                const d = await r.json();
+                                                    body: JSON.stringify({ name: newProjectName.trim() }),
+                                                }, currentToken);
                                                 if (d.success && d.projectId) {
                                                     loadStudioState(d.projectId);
                                                     setNewProjectName('');
                                                     setShowProjectDropdown(false);
+                                                    showNotice('Project created.');
                                                 }
-                                            } catch (err) { console.error('Create project error:', err); }
+                                            } catch (err) {
+                                                if (err.status !== 401) setError(err.message || 'Project creation failed.');
+                                            }
                                         }}
                                     >
                                         <input
@@ -1093,9 +1368,25 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         )}
                     </div>
 
-                    <div className="st-search">
+                    <div
+                        className="st-search"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { setPaletteOpen(true); setPaletteQuery(''); }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setPaletteOpen(true);
+                                setPaletteQuery('');
+                            }
+                        }}
+                    >
                         <I d="M21 21l-4.3-4.3M10 18a8 8 0 100-16 8 8 0 000 16z" s={16} />
-                        <input placeholder="Search projects, patterns, tools..." />
+                        <input
+                            placeholder="Search projects, patterns, tools..."
+                            readOnly
+                            aria-label="Open command palette"
+                        />
                         <kbd>Ctrl K</kbd>
                     </div>
 
@@ -1215,57 +1506,76 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                 className="st-account-trigger"
                                 onClick={() => setShowAccountDropdown(!showAccountDropdown)}
                                 aria-expanded={showAccountDropdown}
-                                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}
+                                aria-haspopup="menu"
                             >
                                 <div className="st-avatar">{user?.initials || 'U'}</div>
                                 <div className="st-user-meta"><strong>{user?.name || 'User'}</strong><span>{user?.plan || 'Free'}</span></div>
                                 <I d="M6 9l6 6 6-6" s={13} />
                             </button>
                             {showAccountDropdown && (
-                                <div className="st-project-dropdown-menu" style={{ right: 0, left: 'auto', width: '280px', padding: '8px 0' }}>
-                                    <div className="st-project-balance-panel" style={{ margin: '8px 12px' }}>
-                                        <div className="st-project-balance-head">
-                                            <div>
-                                                <span className="st-project-balance-dot" />
-                                                <strong>Balance</strong>
-                                            </div>
+                                <div className="st-account-dropdown" role="menu">
+                                    <div className="st-account-dropdown-header">
+                                        <div className="st-avatar st-avatar-lg">{user?.initials || 'U'}</div>
+                                        <div className="st-account-dropdown-user">
+                                            <strong>{user?.name || 'User'}</strong>
+                                            <span>{user?.plan || 'Free'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="st-account-credits-card">
+                                        <div className="st-account-credits-top">
+                                            <span className="st-account-credits-label">
+                                                <I d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" s={14} />
+                                                Balance
+                                            </span>
                                             <button
                                                 type="button"
+                                                className="st-account-upgrade-btn"
                                                 onClick={() => { setTool('billing'); setShowAccountDropdown(false); }}
                                             >
                                                 Upgrade
                                             </button>
                                         </div>
-                                        <div className="st-project-balance-row">
-                                            <span>Total</span>
-                                            <strong>{Number(user?.creditsLimit || 0).toLocaleString()} credits</strong>
-                                        </div>
-                                        <div className="st-project-balance-row">
-                                            <span>Remaining</span>
-                                            <strong>{Number(userRemainingCredits || 0).toLocaleString()} credits</strong>
-                                        </div>
-                                        <div className="st-project-balance-bar">
-                                            <span style={{ width: `${remainingCreditPercent}%` }} />
-                                        </div>
+                                        {hasLoadedUserCredits ? (
+                                            <>
+                                                <div className="st-account-credits-grid">
+                                                    <div className="st-account-credits-stat">
+                                                        <em>Total</em>
+                                                        <strong>{Number(user?.creditsLimit || 0).toLocaleString()}</strong>
+                                                    </div>
+                                                    <div className="st-account-credits-stat">
+                                                        <em>Remaining</em>
+                                                        <strong>{Number(userRemainingCredits || 0).toLocaleString()}</strong>
+                                                    </div>
+                                                </div>
+                                                <div className="st-account-credits-bar" aria-hidden="true">
+                                                    <span style={{ width: `${remainingCreditPercent}%` }} />
+                                                </div>
+                                                <p className="st-account-credits-foot">
+                                                    {user.creditsLimit > 0
+                                                        ? `${Number(user.creditsUsed || 0).toLocaleString()} used this cycle`
+                                                        : user.creditsUsed > 0
+                                                            ? `${Number(user.creditsUsed || 0).toLocaleString()} used · no credits allocated`
+                                                            : 'No credits allocated yet'}
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <p className="st-account-credits-foot">Loading balance…</p>
+                                        )}
                                     </div>
-                                    <div className="st-project-workspace-panel" style={{ margin: '8px 12px' }}>
-                                        <span>Current workspace</span>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
-                                            <strong>My Workspace</strong>
-                                            <button
-                                                type="button"
-                                                onClick={() => { setTool('billing'); setShowAccountDropdown(false); }}
-                                                title="Open billing"
-                                            >
-                                                <I d="M7 7h10M7 12h10M7 17h6M17 7l-3-3m3 3l-3 3" s={14} />
-                                            </button>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid #e2e8f0', paddingTop: '10px', marginTop: '10px' }}>
-                                            <button type="button" className="danger" onClick={onLogout} style={{ flex: 1, height: 32, borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                                                <I d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" s={14} />
-                                                Sign Out
-                                            </button>
-                                        </div>
+                                    <div className="st-account-menu-actions">
+                                        <button type="button" onClick={() => { setTool('workspace'); setShowAccountDropdown(false); }}>
+                                            <I d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" s={16} />
+                                            <span>Workspace</span>
+                                            <em>{activeProject?.name || 'Projects'}</em>
+                                        </button>
+                                        <button type="button" onClick={() => { setTool('billing'); setShowAccountDropdown(false); }}>
+                                            <I d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" s={16} />
+                                            <span>Billing</span>
+                                        </button>
+                                        <button type="button" className="danger" onClick={onLogout}>
+                                            <I d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" s={16} />
+                                            <span>Sign out</span>
+                                        </button>
                                     </div>
                                 </div>
                             )}
@@ -1273,25 +1583,40 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     </div>
                 </header>
 
+                {(error || notice) && (
+                    <div className={`st-global-banner ${error ? 'error' : 'success'}`} role="alert">
+                        <span>{error || notice}</span>
+                        <button
+                            type="button"
+                            className="st-global-banner-dismiss"
+                            onClick={() => { setError(''); setNotice(''); }}
+                            aria-label="Dismiss message"
+                        >
+                            <I d="M6 18L18 6M6 6l12 12" s={14} />
+                        </button>
+                    </div>
+                )}
+
                 <div className={`st-workspace ${!['dashboard', 'repeat', 'vectorize', 'upscale', 'imagelayers'].includes(tool) ? 'full-width' : ''}`}>
                     <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
                         <div className="st-page-head">
                             <div>
                                 <h1 className="st-title">{toolLabel} {tool === 'library' && <span className="st-pro-badge">Pro</span>}</h1>
                                 {tool !== 'inspire' && <p>{
-                                    tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.' 
-                                    : tool === 'pattern' ? 'Extract clean, seamless patterns using the power of multiple AI models.' 
-                                    : tool === 'exports' ? 'View and download your recently exported assets.' 
-                                    : tool === 'billing' ? 'Buy AI credit packs through Razorpay Standard Checkout.' 
-                                    : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.' 
-                                    : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.' 
-                                    : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.' 
-                                    : 'Upload artwork and generate print-ready assets.'
+                                    tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.'
+                                        : tool === 'pattern' ? 'Extract clean, seamless patterns using the power of multiple AI models.'
+                                            : tool === 'exports' ? 'View and download your recently exported assets.'
+                                                : tool === 'billing' ? 'Buy AI credit packs through Razorpay Standard Checkout.'
+                                                    : tool === 'workspace' ? 'Manage projects, switch workspaces, and organize your design pipeline.'
+                                                        : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.'
+                                                        : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.'
+                                                            : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.'
+                                                                : 'Upload artwork and generate print-ready assets.'
                                 }</p>}
                             </div>
                         </div>
 
-                        {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && !tool.startsWith('admin')) && (
+                        {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'workspace' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && !tool.startsWith('admin')) && (
                             <div
                                 className={`st-upload ${isDrag ? 'dragging' : ''} ${preview ? 'has-image' : ''}`}
                                 onClick={() => fileRef.current?.click()}
@@ -1307,7 +1632,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             </div>
                         )}
                         <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0], 'tool')} />
-                        
+
                         {isLoadingState ? (
                             <div className="st-loading-layout" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '320px', gap: '1rem' }}>
                                 <div className="st-spinner" style={{ width: '36px', height: '36px', borderWidth: '3px' }} />
@@ -1322,6 +1647,61 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     )}
                 </div>
             </div>
+
+            {mobileNavOpen && (
+                <>
+                    <div className="st-mobile-nav-overlay" onClick={() => setMobileNavOpen(false)} role="presentation" />
+                    <nav className="st-mobile-nav-drawer" aria-label="Mobile navigation">
+                        <div className="st-mobile-nav-head">
+                            <span>RIMI AI</span>
+                            <button
+                                type="button"
+                                className="st-mobile-nav-close"
+                                onClick={() => setMobileNavOpen(false)}
+                                aria-label="Close navigation"
+                            >
+                                <I d="M6 18L18 6M6 6l12 12" s={18} />
+                            </button>
+                        </div>
+                        {(isAdmin ? ADMIN_NAV : NAV).map((section, idx) => (
+                            <div key={idx}>
+                                {section.section && <div className="st-mobile-nav-section">{section.section}</div>}
+                                {section.items.map((it) => (
+                                    <button
+                                        key={it.id}
+                                        type="button"
+                                        className={`st-mobile-nav-item ${tool === it.id ? 'active' : ''}`}
+                                        onClick={() => { setTool(it.id); setError(''); setMobileNavOpen(false); }}
+                                    >
+                                        <I d={it.icon} s={18} />
+                                        <span>{it.label}</span>
+                                        {it.comingSoon && <span className="st-nav-soon-badge">Soon</span>}
+                                    </button>
+                                ))}
+                            </div>
+                        ))}
+                        {!isAdmin && (
+                            <button
+                                type="button"
+                                className={`st-mobile-nav-item ${tool === 'workspace' ? 'active' : ''}`}
+                                onClick={() => { setTool('workspace'); setError(''); setMobileNavOpen(false); }}
+                            >
+                                <I d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" s={18} />
+                                <span>Workspace</span>
+                            </button>
+                        )}
+                    </nav>
+                </>
+            )}
+
+            <StudioCommandPalette
+                open={paletteOpen}
+                query={paletteQuery}
+                onQueryChange={setPaletteQuery}
+                onClose={() => setPaletteOpen(false)}
+                items={commandPaletteItems}
+                onSelect={(id) => { setTool(id); setError(''); }}
+            />
         </div>
     );
 }
