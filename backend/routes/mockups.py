@@ -15,7 +15,7 @@ from flask import Blueprint, request, jsonify
 from config import UPLOAD_DIR, RESULTS_DIR
 from auth import (
     log_export, log_replicate_call, check_credits,
-    get_updated_credits, record_activity,
+    credit_error_payload, credit_requirement, get_updated_credits, record_activity,
 )
 import storage
 
@@ -208,8 +208,9 @@ def generate_mockup():
     if not product_type: return jsonify({"error": "productType is required"}), 400
     if not pattern_filename and not pattern_url: return jsonify({"error": "patternFilename or patternUrl is required"}), 400
 
-    ok, remaining, limit, used = check_credits(user_id)
-    if not ok: return jsonify({"error": "Insufficient AI credits."}), 403
+    required_credits = credit_requirement('mappings', 50)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     try:
         pattern_img = _load_pattern_image(pattern_filename, pattern_url)
@@ -255,8 +256,9 @@ def generate_mockups_batch():
     if not pattern_filename: return jsonify({"error": "patternFilename is required"}), 400
     if not products: return jsonify({"error": "products must be a non-empty list"}), 400
 
-    ok, remaining, limit, used = check_credits(user_id)
-    if not ok: return jsonify({"error": "Insufficient AI credits."}), 403
+    required_credits = credit_requirement('mappings', 50, len(products))
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     try:
         pattern_img = _load_pattern_image(pattern_filename)

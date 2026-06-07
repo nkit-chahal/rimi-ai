@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from config import UPLOAD_DIR, RESULTS_DIR
 from db import db
 from auth import (
-    log_export, check_credits, get_updated_credits, record_activity,
+    log_export, check_credits, credit_error_payload, credit_requirement,
+    get_updated_credits, record_activity,
 )
 from color_utils import recolor_image
 import storage
@@ -101,9 +102,10 @@ def generate_colorways():
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
 
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('colorways', 50, count)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient credits', 'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     def hex_to_hsl(hex_str):
         hex_str = hex_str.lstrip('#')

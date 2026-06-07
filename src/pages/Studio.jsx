@@ -32,10 +32,12 @@ async function getCroppedImg(imageElement, crop, fileName) {
 
 const localApiHosts = new Set(['localhost', '127.0.0.1']);
 const API = import.meta.env.VITE_API_URL || (localApiHosts.has(window.location.hostname) ? 'http://localhost:3001' : '');
-const CREDIT_PACKS = [
-    { id: 'starter', label: 'Starter Credits', credits: 5000, amount: 49900 },
-    { id: 'pro', label: 'Pro Credits', credits: 12000, amount: 99900 },
-    { id: 'studio', label: 'Studio Credits', credits: 50000, amount: 299900 },
+const BILLING_PLAN_FALLBACK = [
+    { id: 'free', label: 'Free', description: 'Trial credits for testing the studio.', credits: 200, amount: 0, priceLabel: '₹0', badge: '', features: ['200 starting credits', 'Use any AI design tool', 'Razorpay recharge anytime'], checkoutEnabled: false },
+    { id: 'starter', label: 'Starter', description: 'Small production runs and evaluation.', credits: 5000, amount: 49900, priceLabel: '₹499', badge: '', features: ['5,000 AI credits', 'Good for quick pattern cleanup', 'Standard Razorpay checkout'], checkoutEnabled: true },
+    { id: 'creator', label: 'Creator', description: 'Best value for active textile workflows.', credits: 12000, amount: 99900, priceLabel: '₹999', badge: 'Popular', features: ['12,000 AI credits', 'Pattern extraction, vectorize, seamless', 'Additional credits through Razorpay'], checkoutEnabled: true },
+    { id: 'pro', label: 'Pro', description: 'For frequent studio use and client work.', credits: 50000, amount: 299900, priceLabel: '₹2,999', badge: '', features: ['50,000 AI credits', 'High-volume generation buffer', 'Works with all available AI tools'], checkoutEnabled: true },
+    { id: 'scale', label: 'Scale', description: 'Large credit top-up for production teams.', credits: 125000, amount: 699900, priceLabel: '₹6,999', badge: '', features: ['125,000 AI credits', 'Lowest listed per-credit rate', 'Designed for team production usage'], checkoutEnabled: true },
 ];
 
 const forceDownload = async (e, url) => {
@@ -270,6 +272,13 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [isLoadingState, setIsLoadingState] = useState(true);
     const [paymentStatus, setPaymentStatus] = useState({ loadingPackId: null, message: '', error: '' });
     const [razorpayKeyId, setRazorpayKeyId] = useState(import.meta.env.VITE_RAZORPAY_KEY_ID || '');
+    const [billingOverview, setBillingOverview] = useState({
+        loading: false,
+        plans: BILLING_PLAN_FALLBACK,
+        usage: null,
+        payments: [],
+        razorpayConfigured: false,
+    });
 
     const fileRef = useRef(null);
     const canvasRef = useRef(null);
@@ -278,6 +287,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [bgTasks, setBgTasks] = useState([]);
     const [showBgTasksDropdown, setShowBgTasksDropdown] = useState(false);
     const [isSidebarHidden, setIsSidebarHidden] = useState(false);
+    const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+    const accountDropdownRef = useRef(null);
 
     const addBgTask = (type, label, filename, triggerFn) => {
         const taskId = Date.now().toString();
@@ -531,8 +542,41 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         if (isAdmin && (tool === 'admin-credits' || tool === 'admin-dashboard')) fetchAdminBilling();
     }, [tool, fetchAdminBilling, isAdmin]);
 
+    const fetchBillingOverview = useCallback(() => {
+        if (!currentToken) return;
+        setBillingOverview(prev => ({ ...prev, loading: true }));
+        fetch(`${API}/api/billing/overview`, {
+            headers: { 'Authorization': `Bearer ${currentToken}` },
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    setBillingOverview({
+                        loading: false,
+                        plans: d.plans?.length ? d.plans : BILLING_PLAN_FALLBACK,
+                        usage: d.usage || null,
+                        payments: d.payments || [],
+                        razorpayConfigured: Boolean(d.razorpayConfigured),
+                    });
+                    if (d.usage) {
+                        updateCreditsFromResponse({
+                            creditsUsed: d.usage.creditsUsed,
+                            creditsLimit: d.usage.creditsLimit,
+                        });
+                    }
+                } else {
+                    throw new Error(d.error || 'Unable to load billing overview.');
+                }
+            })
+            .catch((err) => {
+                setBillingOverview(prev => ({ ...prev, loading: false }));
+                setPaymentStatus({ loadingPackId: null, message: '', error: err.message || 'Unable to load billing overview.' });
+            });
+    }, [currentToken]);
+
     useEffect(() => {
         if (tool !== 'billing' || !currentToken) return;
+        fetchBillingOverview();
         fetch(`${API}/api/billing/razorpay-config`, {
             headers: { 'Authorization': `Bearer ${currentToken}` },
         })
@@ -545,7 +589,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 }
             })
             .catch(() => setPaymentStatus({ loadingPackId: null, message: '', error: 'Unable to load Razorpay configuration.' }));
-    }, [tool, currentToken]);
+    }, [tool, currentToken, fetchBillingOverview]);
 
     useEffect(() => {
         if (isAdmin && tool === 'admin-credits') fetchAdminPricing();
@@ -615,6 +659,16 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         return () => document.removeEventListener('mousedown', handler);
     }, [showProjectDropdown]);
 
+    useEffect(() => {
+        const handler = (e) => {
+            if (accountDropdownRef.current && !accountDropdownRef.current.contains(e.target)) {
+                setShowAccountDropdown(false);
+            }
+        };
+        if (showAccountDropdown) document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showAccountDropdown]);
+
     const [prompt, setPrompt] = useState('');
     const [creativity, setCreativity] = useState(3);
     const [variants, setVariants] = useState(1);
@@ -645,7 +699,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [enabledModels, setEnabledModels] = useState(() => EXTRACT_MODEL_DEFS.reduce((acc, m) => ({ ...acc, [m.id]: true }), {}));
     const activeModels = EXTRACT_MODEL_DEFS.filter(m => enabledModels[m.id]);
     const activeModelCount = activeModels.length;
-    const creditsPerModel = 50;
+    const creditsPerModel = creditPricing.extract || 50;
+    const extractCreditCost = activeModelCount * creditsPerModel;
+    const hasEnoughExtractCredits = userRemainingCredits >= extractCreditCost;
     const [extractGalleryOpen, setExtractGalleryOpen] = useState(false);
     const [extractGalleryIndex, setExtractGalleryIndex] = useState(0);
     const [extractChatMessages, setExtractChatMessages] = useState({});
@@ -660,6 +716,26 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         ? (creditPricing.vectorize || 100)
         : (creditPricing.vectorizeLocal || 5);
     const hasEnoughVectorizeCredits = userRemainingCredits >= vectorizeCreditCost;
+    const seamlessCreditCost = creditPricing.seamless || 80;
+    const hasEnoughSeamlessCredits = userRemainingCredits >= seamlessCreditCost;
+    const upscaleCreditCost = creditPricing.upscale || 60;
+    const hasEnoughUpscaleCredits = userRemainingCredits >= upscaleCreditCost;
+    const imageLayersCreditCost = creditPricing.imageLayers || 100;
+    const hasEnoughImageLayersCredits = userRemainingCredits >= imageLayersCreditCost;
+    const repeatCreditCost = creditPricing.repeat || 50;
+    const hasEnoughRepeatCredits = userRemainingCredits >= repeatCreditCost;
+    const inspireCreditCost = variants * Math.max(1, inspireModels.length) * (creditPricing.inspire || 50);
+    const hasEnoughInspireCredits = userRemainingCredits >= inspireCreditCost;
+    const colorwayCreditCost = creditPricing.recolor || 10;
+    const hasEnoughColorwayCredits = userRemainingCredits >= colorwayCreditCost;
+    const colorReductionCreditCost = creditPricing.colorReduction || 10;
+    const hasEnoughColorReductionCredits = userRemainingCredits >= colorReductionCreditCost;
+    const techPackCreditCost = creditPricing.techPack || 15;
+    const hasEnoughTechPackCredits = userRemainingCredits >= techPackCreditCost;
+    const layerExportCreditCost = creditPricing.layerExport || 15;
+    const hasEnoughLayerExportCredits = userRemainingCredits >= layerExportCreditCost;
+    const layerEditCreditCost = creditPricing.imageLayerEdit || 15;
+    const hasEnoughLayerEditCredits = userRemainingCredits >= layerEditCreditCost;
 
     const [repeatUrl, setRepeatUrl] = useState(null);
     const [repeatMaskUrl, setRepeatMaskUrl] = useState(null);
@@ -758,6 +834,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const cwmGenerateColorways = async () => {
         if (!uploaded || cwmPalette.length === 0) return;
+        const requiredCredits = 4 * (creditPricing.colorways || 50);
+        if (userRemainingCredits < requiredCredits) {
+            setError(`Insufficient credits. Colorway generation needs ${requiredCredits} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setIsCwmGenerating(true);
         setError('');
         try {
@@ -920,6 +1001,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const generateMockups = async () => {
         if (!mappingPrint?.filename || mappingSelectedProducts.size === 0) return;
+        const requiredCredits = mappingSelectedProducts.size * (creditPricing.mappings || 50);
+        if (userRemainingCredits < requiredCredits) {
+            setError(`Insufficient credits. Mockup generation needs ${requiredCredits} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setIsMappingGenerating(true);
         setMappingResults([]);
         setError('');
@@ -985,6 +1071,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const generateColorway = async () => {
         if (!uploaded || cwTargetPalette.length === 0) return;
+        if (!hasEnoughColorwayCredits) {
+            setError(`Insufficient credits. Recolor needs ${colorwayCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setIsCwRecoloring(true);
         setError('');
 
@@ -1027,6 +1117,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const reduceColors = async () => {
         if (!uploaded) return;
+        if (!hasEnoughColorReductionCredits) {
+            setError(`Insufficient credits. Color reduction needs ${colorReductionCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setIsVpReducing(true);
         setError('');
         try {
@@ -1077,6 +1171,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [layerExportLoading, setLayerExportLoading] = useState(null);
     const exportLayers = async (format) => {
         if (!uploaded) return;
+        if (!hasEnoughLayerExportCredits) {
+            setError(`Insufficient credits. Layer export needs ${layerExportCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setLayerExportLoading(format);
         setError('');
         try {
@@ -1181,6 +1279,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const generateImageLayers = async () => {
         if (!uploaded) return;
+        if (!hasEnoughImageLayersCredits) {
+            setError(`Insufficient credits. Image Layers needs ${imageLayersCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setIsImageLayering(true);
         setImageLayersResults([]);
         setLayersList([]);
@@ -1440,6 +1542,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             return;
         }
         if (!layerEditPrompt) return;
+        if (!hasEnoughLayerEditCredits) {
+            setError(`Insufficient credits. Layer editing needs ${layerEditCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
 
         const layerData = layersList.find(l => l.id === selectedLayerId);
         if (!layerData) return;
@@ -1510,6 +1616,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const handleRecursiveDecompose = async () => {
         if (!selectedLayerId && selectedLayerId !== 0) {
             alert('Select a layer to decompose further.');
+            return;
+        }
+        if (!hasEnoughImageLayersCredits) {
+            setError(`Insufficient credits. Recursive decomposition needs ${imageLayersCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
             return;
         }
         const layerData = layersList.find(l => l.id === selectedLayerId);
@@ -1820,6 +1930,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         if (!selectedLayerId && selectedLayerId !== 0) return;
         if (!layerEditPrompt.trim()) {
             alert('Enter an inpaint instruction first.');
+            return;
+        }
+        if (!hasEnoughLayerEditCredits) {
+            setError(`Insufficient credits. Layer inpaint needs ${layerEditCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
             return;
         }
 
@@ -2183,6 +2297,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     const [techPackLoading, setTechPackLoading] = useState(null);
     const generateTechPack = async (filename) => {
+        if (!hasEnoughTechPackCredits) {
+            setError(`Insufficient credits. Tech pack generation needs ${techPackCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setTechPackLoading(filename);
         setError('');
         try {
@@ -2384,6 +2502,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const runPipeline = async () => {
         if (pipelineSteps.length === 0) return;
         setError('');
+        if (userRemainingCredits < estimatedCredits) {
+            setError(`Insufficient credits. This pipeline needs ${estimatedCredits} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
 
         const hasUpload = pipelineSteps[0]?.type === 'upload';
         if (!hasUpload) {
@@ -2811,6 +2933,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             setError('Enter a prompt');
             return;
         }
+        if (!hasEnoughInspireCredits) {
+            setError(`Insufficient credits. Inspiration generation needs ${inspireCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setIsGen(true);
         setError('');
         setGeneratedVariations([]);
@@ -2883,6 +3009,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const createRepeat = async () => {
         if (!uploaded && !preview) {
             setError('Upload an image first to export a repeat set.');
+            return;
+        }
+        if (!hasEnoughRepeatCredits) {
+            setError(`Insufficient credits. Repeat Set needs ${repeatCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
             return;
         }
 
@@ -2992,6 +3122,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
         const modelsToRun = EXTRACT_MODEL_DEFS.filter(m => enabledModels[m.id]);
         if (modelsToRun.length === 0) return;
+        const requiredCredits = modelsToRun.length * creditsPerModel;
+        if (userRemainingCredits < requiredCredits) {
+            setError(`Insufficient credits. Pattern extraction needs ${requiredCredits} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
 
         // Reset only enabled models to loading, clear disabled ones
         setExtractResults(EXTRACT_MODEL_DEFS.map(m => ({
@@ -3147,6 +3282,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             setError('Upload first');
             return;
         }
+        if (!hasEnoughUpscaleCredits) {
+            setError(`Insufficient credits. Super Resolution needs ${upscaleCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
+            return;
+        }
         setIsUpscaling(true);
         setError('');
         setUpscaleUrl(null);
@@ -3177,6 +3316,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         const activeUrl = preview || activeProject.heroImageUrl;
         if (!uploaded && !activeUrl) {
             setError('Upload an image first');
+            return;
+        }
+        if (!hasEnoughSeamlessCredits) {
+            setError(`Insufficient credits. Make Seamless needs ${seamlessCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
             return;
         }
 
@@ -3225,6 +3368,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const generateSeamless = async () => {
         if (!seamlessPrompt.trim()) {
             setError('Enter a description of the pattern you want to generate');
+            return;
+        }
+        if (!hasEnoughSeamlessCredits) {
+            setError(`Insufficient credits. Seamless generation needs ${seamlessCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
             return;
         }
         setIsSeamless(true);
@@ -3502,7 +3649,19 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             <div><label className="st-label-sm">Resolution</label><select value={controls.exportDpi} onChange={(e) => updateControls({ exportDpi: +e.target.value })} className="st-select"><option value={72}>72 DPI</option><option value={150}>150 DPI</option><option value={300}>300 DPI</option><option value={600}>600 DPI</option></select></div>
                         </div>
                     </div>
-                    <button className="st-export-btn" onClick={() => createRepeat()} disabled={isRepeat || (!uploaded && !preview)}>{isRepeat ? 'Processing...' : 'Export Repeat Set'}</button>
+                    <button
+                        className={`st-export-btn ${!hasEnoughRepeatCredits ? 'insufficient-credits' : ''}`}
+                        onClick={() => createRepeat()}
+                        disabled={isRepeat || (!uploaded && !preview) || !hasEnoughRepeatCredits}
+                        title={!hasEnoughRepeatCredits ? `Need ${repeatCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Export repeat set'}
+                    >
+                        {isRepeat ? 'Processing...' : hasEnoughRepeatCredits ? 'Export Repeat Set' : `Need ${repeatCreditCost} credits`}
+                    </button>
+                    {!hasEnoughRepeatCredits && (
+                        <div className="st-credit-shortage">
+                            {userRemainingCredits.toLocaleString()} credits remaining. Recharge to export a Repeat Set.
+                        </div>
+                    )}
                     {renderVariations(true)}
                     {tool === 'inspire' && (
                         <div className="st-chat-container">
@@ -3560,9 +3719,19 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     <button className={`st-grid-btn ${upscaleFactor === 'x2' ? 'active' : ''}`} onClick={() => setUpscaleFactor('x2')}>2x</button>
                     <button className={`st-grid-btn ${upscaleFactor === 'x4' ? 'active' : ''}`} onClick={() => setUpscaleFactor('x4')}>4x</button>
                 </div>
-                <button className="st-export-btn" onClick={upscale} disabled={isUpscaling || !uploaded}>
-                    {isUpscaling ? 'Upscaling...' : 'Enhance Resolution'}
+                <button
+                    className={`st-export-btn ${!hasEnoughUpscaleCredits ? 'insufficient-credits' : ''}`}
+                    onClick={upscale}
+                    disabled={isUpscaling || !uploaded || !hasEnoughUpscaleCredits}
+                    title={!hasEnoughUpscaleCredits ? `Need ${upscaleCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Enhance resolution'}
+                >
+                    {isUpscaling ? 'Upscaling...' : hasEnoughUpscaleCredits ? 'Enhance Resolution' : `Need ${upscaleCreditCost} credits`}
                 </button>
+                {!hasEnoughUpscaleCredits && (
+                    <div className="st-credit-shortage">
+                        {userRemainingCredits.toLocaleString()} credits remaining. Recharge to use Super Resolution.
+                    </div>
+                )}
             </div>
         );
         if (tool === 'imagelayers') return (
@@ -3613,10 +3782,21 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     <span><I d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" s={13} /> Recolor, revise, replace</span>
                     <span><I d="M5 9l7-7 7 7M5 15l7 7 7-7" s={13} /> Move and resize layers</span>
                 </div>
-                <button className="st-export-btn" onClick={generateImageLayers} disabled={isImageLayering || !uploaded} style={{ marginTop: '1rem' }}>
-                    {isImageLayering ? 'Qwen Decomposing...' : `Qwen Decompose into ${imageLayersNumLayers} Layers`}
+                <button
+                    className={`st-export-btn ${!hasEnoughImageLayersCredits ? 'insufficient-credits' : ''}`}
+                    onClick={generateImageLayers}
+                    disabled={isImageLayering || !uploaded || !hasEnoughImageLayersCredits}
+                    title={!hasEnoughImageLayersCredits ? `Need ${imageLayersCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Decompose image into layers'}
+                    style={{ marginTop: '1rem' }}
+                >
+                    {isImageLayering ? 'Qwen Decomposing...' : hasEnoughImageLayersCredits ? `Qwen Decompose into ${imageLayersNumLayers} Layers` : `Need ${imageLayersCreditCost} credits`}
                 </button>
-                <p className="st-generate-hint"><I d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" s={12} /> Uses ~{creditPricing.imageLayers || 100} credits</p>
+                <p className="st-generate-hint"><I d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" s={12} /> Uses ~{imageLayersCreditCost} credits</p>
+                {!hasEnoughImageLayersCredits && (
+                    <div className="st-credit-shortage">
+                        {userRemainingCredits.toLocaleString()} credits remaining. Recharge to use Image Layers.
+                    </div>
+                )}
             </div>
         );
         if (tool === 'seamless') return null;
@@ -3630,6 +3810,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         const filteredProducts = mappingProductSearch
             ? currentProducts.filter(p => p.name.toLowerCase().includes(mappingProductSearch.toLowerCase()))
             : currentProducts;
+        const mappingCreditCost = mappingSelectedProducts.size * (creditPricing.mappings || 50);
+        const hasEnoughMappingCredits = userRemainingCredits >= mappingCreditCost;
 
         return (
             <div className="st-map-wizard">
@@ -3988,12 +4170,15 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             </button>
                         ) : (
                             <button
-                                className="st-map-primary-btn"
-                                disabled={!mappingPrint || mappingSelectedProducts.size === 0 || isMappingGenerating}
+                                className={`st-map-primary-btn ${!hasEnoughMappingCredits ? 'insufficient-credits' : ''}`}
+                                disabled={!mappingPrint || mappingSelectedProducts.size === 0 || isMappingGenerating || !hasEnoughMappingCredits}
                                 onClick={generateMockups}
+                                title={!hasEnoughMappingCredits ? `Need ${mappingCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Generate mockups'}
                             >
                                 {isMappingGenerating ? (
                                     <><div className="st-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Generating...</>
+                                ) : !hasEnoughMappingCredits ? (
+                                    <>Need {mappingCreditCost} credits</>
                                 ) : (
                                     <><I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} /> Generate Mockups ({mappingSelectedProducts.size})</>
                                 )}
@@ -5029,15 +5214,20 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     </div>
 
                     <div className="st-comparison-action-bridge">
-                        <button className="st-extract-btn-creative" onClick={generateColorway} disabled={isCwRecoloring || !cwExtractedPalette.length}>
+                        <button
+                            className={`st-extract-btn-creative ${!hasEnoughColorwayCredits ? 'insufficient-credits' : ''}`}
+                            onClick={generateColorway}
+                            disabled={isCwRecoloring || !cwExtractedPalette.length || !hasEnoughColorwayCredits}
+                            title={!hasEnoughColorwayCredits ? `Need ${colorwayCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Generate colorway'}
+                        >
                             <div className={isCwRecoloring ? 'spin-icon' : ''}>
                                 <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={20} />
                             </div>
-                            {isCwRecoloring ? 'Generating...' : 'Recolor'}
+                            {isCwRecoloring ? 'Generating...' : hasEnoughColorwayCredits ? 'Recolor' : `Need ${colorwayCreditCost} credits`}
                         </button>
                         <span className="st-credit-badge">
                             <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                            10 credits
+                            {colorwayCreditCost} credits
                         </span>
                     </div>
 
@@ -5246,16 +5436,22 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                 </div>
 
                                 <button
-                                    className="st-extract-btn-creative"
+                                    className={`st-extract-btn-creative ${!hasEnoughColorReductionCredits ? 'insufficient-credits' : ''}`}
                                     onClick={reduceColors}
-                                    disabled={!uploaded || isVpReducing}
+                                    disabled={!uploaded || isVpReducing || !hasEnoughColorReductionCredits}
+                                    title={!hasEnoughColorReductionCredits ? `Need ${colorReductionCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Reduce and match colors'}
                                     style={{ width: '100%' }}
                                 >
                                     <div className={isVpReducing ? 'spin-icon' : ''}>
                                         <I d="M4 6h16M4 12h10M4 18h6" s={18} />
                                     </div>
-                                    {isVpReducing ? 'Reducing Colors...' : 'Reduce & Match'}
+                                    {isVpReducing ? 'Reducing Colors...' : hasEnoughColorReductionCredits ? 'Reduce & Match' : `Need ${colorReductionCreditCost} credits`}
                                 </button>
+                                {!hasEnoughColorReductionCredits && (
+                                    <div className="st-credit-shortage">
+                                        {userRemainingCredits.toLocaleString()} credits remaining. Recharge to reduce colors.
+                                    </div>
+                                )}
 
                                 {/* Layer Export buttons */}
                                 {vpPalette.length > 0 && (
@@ -5605,11 +5801,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                         ))}
                                     </div>
                                     <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                                        <button className="st-extract-btn-creative" onClick={cwmGenerateColorways} disabled={isCwmGenerating} style={{ width: '100%', padding: '0.85rem' }}>
+                                        <button
+                                            className={`st-extract-btn-creative ${userRemainingCredits < (4 * (creditPricing.colorways || 50)) ? 'insufficient-credits' : ''}`}
+                                            onClick={cwmGenerateColorways}
+                                            disabled={isCwmGenerating || userRemainingCredits < (4 * (creditPricing.colorways || 50))}
+                                            title={userRemainingCredits < (4 * (creditPricing.colorways || 50)) ? `Need ${4 * (creditPricing.colorways || 50)} credits. You have ${userRemainingCredits} remaining.` : 'Generate colorways'}
+                                            style={{ width: '100%', padding: '0.85rem' }}
+                                        >
                                             <div className={isCwmGenerating ? 'spin-icon' : ''}>
                                                 <I d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" s={20} />
                                             </div>
-                                            {isCwmGenerating ? 'Generating...' : 'Generate 4 Colorways'}
+                                            {isCwmGenerating ? 'Generating...' : userRemainingCredits < (4 * (creditPricing.colorways || 50)) ? `Need ${4 * (creditPricing.colorways || 50)} credits` : 'Generate 4 Colorways'}
                                         </button>
                                     </div>
                                     {cwmColorways.length > 0 && (
@@ -5832,11 +6034,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
                 body: JSON.stringify({
-                    amount: pack.amount,
-                    currency: 'INR',
                     receipt: `rimi_${user?.id || 'guest'}_${pack.id}_${Date.now()}`,
                     packId: pack.id,
-                    credits: pack.credits,
                 }),
             });
             const orderData = await orderRes.json().catch(() => ({}));
@@ -5849,7 +6048,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                 amount: orderData.amount,
                 currency: orderData.currency,
                 name: 'RIMI AI',
-                description: pack.label,
+                description: `${pack.credits.toLocaleString()} AI credits`,
                 order_id: orderData.order_id,
                 prefill: {
                     name: user?.name || '',
@@ -5883,6 +6082,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             error: '',
                         });
                         updateCreditsFromResponse(verifyData);
+                        fetchBillingOverview();
                         await loadStudioState(activeProject.id);
                     } catch (err) {
                         setPaymentStatus({
@@ -5912,67 +6112,156 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         }
     };
 
-    const renderBilling = () => (
-        <div style={{ padding: '2rem', display: 'grid', gap: '1.25rem' }}>
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                gap: '1rem',
-            }}>
-                {CREDIT_PACKS.map((pack) => {
-                    const isLoading = paymentStatus.loadingPackId === pack.id;
-                    return (
-                        <div
-                            key={pack.id}
-                            style={{
-                                border: '1px solid #e2e8f0',
-                                borderRadius: '8px',
-                                background: '#fff',
-                                padding: '1.25rem',
-                                display: 'grid',
-                                gap: '0.85rem',
-                                boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
-                            }}
-                        >
-                            <div>
-                                <h3 style={{ margin: 0, fontSize: '1rem', color: '#0f172a' }}>{pack.label}</h3>
-                                <p style={{ margin: '0.35rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>
-                                    {pack.credits.toLocaleString()} AI credits
-                                </p>
-                            </div>
-                            <strong style={{ fontSize: '1.6rem', color: '#111827' }}>
-                                Rs. {(pack.amount / 100).toLocaleString('en-IN')}
-                            </strong>
-                            <button
-                                className="st-btn"
-                                type="button"
-                                onClick={() => startRazorpayCheckout(pack)}
-                                disabled={isLoading}
-                                style={{ width: '100%', justifyContent: 'center' }}
-                            >
-                                {isLoading ? 'Processing...' : 'Pay with Razorpay'}
-                            </button>
-                        </div>
-                    );
-                })}
-            </div>
+    const renderBilling = () => {
+        const usage = billingOverview.usage || {
+            plan: user.plan || 'Free Trial',
+            creditsUsed: user.creditsUsed || 0,
+            creditsLimit: user.creditsLimit || 0,
+            creditsRemaining: userRemainingCredits,
+            usagePct: user.creditsLimit ? Math.min(100, Math.round(((user.creditsUsed || 0) / user.creditsLimit) * 100)) : 0,
+        };
+        const plans = billingOverview.plans?.length ? billingOverview.plans : BILLING_PLAN_FALLBACK;
+        const currentPlanName = (usage.plan || user.plan || 'Free').toLowerCase();
+        const formatDate = (value) => {
+            if (!value) return 'Pending';
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        };
 
-            {(paymentStatus.message || paymentStatus.error) && (
-                <div
-                    style={{
-                        padding: '0.85rem 1rem',
-                        borderRadius: '8px',
-                        border: `1px solid ${paymentStatus.error ? '#fecaca' : '#bbf7d0'}`,
-                        background: paymentStatus.error ? '#fef2f2' : '#f0fdf4',
-                        color: paymentStatus.error ? '#b91c1c' : '#166534',
-                        fontSize: '0.9rem',
-                    }}
-                >
-                    {paymentStatus.error || paymentStatus.message}
+        return (
+            <div className="st-billing-page">
+                <div className="st-billing-header">
+                    <div>
+                        <div className="st-billing-kicker">Subscription</div>
+                        <h2>Credits and Billing</h2>
+                        <p>Recharge AI credits through Razorpay Standard Checkout. Credits are added to your available limit after payment verification.</p>
+                    </div>
+                    <button className="st-billing-refresh" onClick={fetchBillingOverview} disabled={billingOverview.loading}>
+                        <I d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" s={16} />
+                        {billingOverview.loading ? 'Refreshing' : 'Refresh'}
+                    </button>
                 </div>
-            )}
-        </div>
-    );
+
+                <div className="st-billing-tabs" aria-label="Billing sections">
+                    <button className="active">RIMI Studio</button>
+                    <button disabled>API</button>
+                    <button disabled>Enterprise</button>
+                </div>
+
+                <div className="st-billing-summary-grid">
+                    <section className="st-billing-usage-card">
+                        <div className="st-billing-usage-row">
+                            <span>Credits used</span>
+                            <strong>{Number(usage.creditsUsed || 0).toLocaleString()} / {Number(usage.creditsLimit || 0).toLocaleString()} credits</strong>
+                        </div>
+                        <div className="st-billing-progress" aria-label={`${usage.usagePct || 0}% credits used`}>
+                            <span style={{ width: `${Math.min(100, usage.usagePct || 0)}%` }} />
+                        </div>
+                        <div className="st-billing-usage-foot">
+                            <span>{Number(usage.creditsRemaining || 0).toLocaleString()} credits remaining</span>
+                            <span>{usage.usagePct || 0}% used</span>
+                        </div>
+                    </section>
+
+                    <section className="st-billing-current-card">
+                        <div>
+                            <span>Current plan</span>
+                            <strong>{usage.plan || 'Free Trial'}</strong>
+                        </div>
+                        <div className={`st-billing-status ${billingOverview.razorpayConfigured ? 'ready' : 'missing'}`}>
+                            <I d={billingOverview.razorpayConfigured ? 'M20 6L9 17l-5-5' : 'M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z'} s={14} />
+                            {billingOverview.razorpayConfigured ? 'Razorpay ready' : 'Razorpay not configured'}
+                        </div>
+                    </section>
+                </div>
+
+                {(paymentStatus.message || paymentStatus.error) && (
+                    <div className={`st-billing-alert ${paymentStatus.error ? 'error' : 'success'}`}>
+                        {paymentStatus.error || paymentStatus.message}
+                    </div>
+                )}
+
+                <div className="st-billing-controls">
+                    <div className="st-billing-currency">
+                        <span>INR</span>
+                        <strong>India billing</strong>
+                    </div>
+                    <div className="st-billing-cycle">
+                        <button className="active">Credit packs</button>
+                        <button disabled>Monthly</button>
+                    </div>
+                </div>
+
+                <div className="st-billing-plans">
+                    {plans.map((pack) => {
+                        const isLoading = paymentStatus.loadingPackId === pack.id;
+                        const amount = Number(pack.amount || 0);
+                        const isCurrent = currentPlanName.includes((pack.label || '').toLowerCase());
+                        const priceLabel = pack.priceLabel || (amount ? `₹${(amount / 100).toLocaleString('en-IN')}` : '₹0');
+                        return (
+                            <article key={pack.id} className={`st-billing-plan ${pack.badge ? 'highlighted' : ''}`}>
+                                <div className="st-billing-plan-top">
+                                    <div>
+                                        <h3>{pack.label}</h3>
+                                        <p>{pack.description}</p>
+                                    </div>
+                                    {pack.badge && <span className="st-billing-badge">{pack.badge}</span>}
+                                </div>
+                                <div className="st-billing-price">
+                                    <strong>{priceLabel}</strong>
+                                    <span>{amount ? 'one-time' : 'trial'}</span>
+                                </div>
+                                <button
+                                    className={`st-billing-pay ${pack.badge ? 'primary' : ''}`}
+                                    type="button"
+                                    onClick={() => startRazorpayCheckout(pack)}
+                                    disabled={isLoading || !pack.checkoutEnabled || !billingOverview.razorpayConfigured}
+                                >
+                                    {isLoading ? 'Processing...' : isCurrent && !pack.checkoutEnabled ? 'Current plan' : pack.checkoutEnabled ? 'Pay with Razorpay' : 'Included'}
+                                </button>
+                                <div className="st-billing-credit-line">
+                                    <strong>{Number(pack.credits || 0).toLocaleString()}</strong>
+                                    <span>AI credits</span>
+                                </div>
+                                <ul>
+                                    {(pack.features || []).map((feature) => (
+                                        <li key={feature}><I d="M20 6L9 17l-5-5" s={14} /> {feature}</li>
+                                    ))}
+                                </ul>
+                            </article>
+                        );
+                    })}
+                </div>
+
+                <section className="st-billing-history">
+                    <div className="st-billing-section-head">
+                        <div>
+                            <h3>Payment history</h3>
+                            <p>Recent Razorpay orders and credit recharges.</p>
+                        </div>
+                    </div>
+                    {billingOverview.payments?.length ? (
+                        <div className="st-billing-table">
+                            {billingOverview.payments.map((payment) => (
+                                <div className="st-billing-row" key={payment.id}>
+                                    <div>
+                                        <strong>{payment.packLabel}</strong>
+                                        <span>{payment.orderId}</span>
+                                    </div>
+                                    <div>{Number(payment.credits || 0).toLocaleString()} credits</div>
+                                    <div>₹{(Number(payment.amount || 0) / 100).toLocaleString('en-IN')}</div>
+                                    <div><span className={`st-billing-pill ${payment.status}`}>{payment.status}</span></div>
+                                    <div>{formatDate(payment.paidAt || payment.createdAt)}</div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="st-billing-empty">No Razorpay payments yet.</div>
+                    )}
+                </section>
+            </div>
+        );
+    };
 
     const renderCanvas = () => {
         if (tool === 'admin-dashboard') return renderAdminDashboard();
@@ -6323,8 +6612,13 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                     <I d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" s={18} /> Save Profile
                                 </button>
                             )}
-                            <button className="st-pl-run-btn" disabled={pipelineRunning || pipelineSteps.length === 0} onClick={runPipeline}>
-                                {pipelineRunning ? <><div className="st-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Running...</> : <><I d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" s={18} /> Run Pipeline</>}
+                            <button
+                                className={`st-pl-run-btn ${userRemainingCredits < estimatedCredits ? 'insufficient-credits' : ''}`}
+                                disabled={pipelineRunning || pipelineSteps.length === 0 || userRemainingCredits < estimatedCredits}
+                                onClick={runPipeline}
+                                title={userRemainingCredits < estimatedCredits ? `Need ${estimatedCredits} credits. You have ${userRemainingCredits} remaining.` : 'Run pipeline'}
+                            >
+                                {pipelineRunning ? <><div className="st-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Running...</> : userRemainingCredits < estimatedCredits ? <>Need {estimatedCredits} credits</> : <><I d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" s={18} /> Run Pipeline</>}
                             </button>
                         </div>
                     </div>
@@ -6871,21 +7165,27 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
                     {/* === EXTRACT BUTTON === */}
                     <button
-                        className="st-extract-btn-creative"
+                        className={`st-extract-btn-creative ${!hasEnoughExtractCredits ? 'insufficient-credits' : ''}`}
                         onClick={extractDesignMulti}
-                        disabled={anyLoading || !preview || activeModelCount === 0}
+                        disabled={anyLoading || !preview || activeModelCount === 0 || !hasEnoughExtractCredits}
+                        title={!hasEnoughExtractCredits ? `Need ${extractCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Extract pattern with selected AI models'}
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
                             <div className={anyLoading ? 'spin-icon' : ''}>
                                 <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={20} />
                             </div>
-                            {anyLoading ? `Extracting with ${activeModelCount} AI...` : activeModelCount === 0 ? 'Select Models Above' : `Extract Pattern with AI`}
+                            {anyLoading ? `Extracting with ${activeModelCount} AI...` : activeModelCount === 0 ? 'Select Models Above' : hasEnoughExtractCredits ? `Extract Pattern with AI` : `Need ${extractCreditCost} credits`}
                             {!anyLoading && <span style={{ fontSize: '1rem' }}>→</span>}
                         </div>
                         <span style={{ fontSize: '0.72rem', opacity: 0.8, fontWeight: 500 }}>
-                            {activeModelCount} model{activeModelCount !== 1 ? 's' : ''} selected · ~{activeModelCount * creditsPerModel} credits
+                            {activeModelCount} model{activeModelCount !== 1 ? 's' : ''} selected · ~{extractCreditCost} credits
                         </span>
                     </button>
+                    {!hasEnoughExtractCredits && (
+                        <div className="st-credit-shortage">
+                            {userRemainingCredits.toLocaleString()} credits remaining. Deselect models or recharge to run this extraction.
+                        </div>
+                    )}
 
                     {/* === EXTRACTION RESULTS === */}
                     <div className="st-pattern-results-section">
@@ -7207,14 +7507,24 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                     </div>
                                 ) : (
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                                        <button className="st-extract-btn-creative" onClick={generateSeamless} disabled={!seamlessPrompt.trim()}>
+                                        <button
+                                            className={`st-extract-btn-creative ${!hasEnoughSeamlessCredits ? 'insufficient-credits' : ''}`}
+                                            onClick={generateSeamless}
+                                            disabled={!seamlessPrompt.trim() || !hasEnoughSeamlessCredits}
+                                            title={!hasEnoughSeamlessCredits ? `Need ${seamlessCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Generate seamless tiles'}
+                                        >
                                             <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={18} />
-                                            Generate Seamless Tiles
+                                            {hasEnoughSeamlessCredits ? 'Generate Seamless Tiles' : `Need ${seamlessCreditCost} credits`}
                                         </button>
                                         <span className="st-credit-badge">
                                             <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                                            {creditPricing.seamless || 80} credits
+                                            {seamlessCreditCost} credits
                                         </span>
+                                        {!hasEnoughSeamlessCredits && (
+                                            <div className="st-credit-shortage">
+                                                {userRemainingCredits.toLocaleString()} credits remaining. Recharge to generate seamless tiles.
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -7296,13 +7606,18 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
                                     {/* Action Bridge */}
                                     <div className="st-comparison-action-bridge">
-                                        <button className="st-extract-btn-creative" onClick={makeSeamless} disabled={loading || (!uploaded && !preview && !activeProject?.heroImageUrl)}>
+                                        <button
+                                            className={`st-extract-btn-creative ${!hasEnoughSeamlessCredits ? 'insufficient-credits' : ''}`}
+                                            onClick={makeSeamless}
+                                            disabled={loading || (!uploaded && !preview && !activeProject?.heroImageUrl) || !hasEnoughSeamlessCredits}
+                                            title={!hasEnoughSeamlessCredits ? `Need ${seamlessCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Fix uploaded tile'}
+                                        >
                                             <I d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" s={18} />
-                                            {loading ? 'Fixing...' : 'Fix Uploaded Tile'}
+                                            {loading ? 'Fixing...' : hasEnoughSeamlessCredits ? 'Fix Uploaded Tile' : `Need ${seamlessCreditCost} credits`}
                                         </button>
                                         <span className="st-credit-badge">
                                             <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                                            {creditPricing.seamless || 80} credits
+                                            {seamlessCreditCost} credits
                                         </span>
                                     </div>
 
@@ -7735,7 +8050,8 @@ if (tool === 'imagelayers') {
                 const toolTitle = tool === 'vectorize' ? 'vectorize' : 'upscale';
                 const toolLabel = tool === 'vectorize' ? 'Vectorize' : 'Upscale';
                 const actionFunc = tool === 'vectorize' ? vectorize : upscale;
-                const creditCost = tool === 'vectorize' ? vectorizeCreditCost : (creditPricing.upscale || 10);
+                const creditCost = tool === 'vectorize' ? vectorizeCreditCost : upscaleCreditCost;
+                const hasEnoughToolCredits = tool === 'vectorize' ? hasEnoughVectorizeCredits : hasEnoughUpscaleCredits;
                 
                 if (!preview) {
                     return (
@@ -7787,11 +8103,16 @@ if (tool === 'imagelayers') {
                             </div>
 
                             <div className="st-comparison-action-bridge">
-                                <button className="st-extract-btn-creative" onClick={actionFunc} disabled={loading || !preview}>
+                                <button
+                                    className={`st-extract-btn-creative ${!hasEnoughToolCredits ? 'insufficient-credits' : ''}`}
+                                    onClick={actionFunc}
+                                    disabled={loading || !preview || !hasEnoughToolCredits}
+                                    title={!hasEnoughToolCredits ? `Need ${creditCost} credits. You have ${userRemainingCredits} remaining.` : toolLabel}
+                                >
                                     <div className={loading ? 'spin-icon' : ''}>
                                         <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={20} />
                                     </div>
-                                    {loading ? 'Processing...' : toolLabel}
+                                    {loading ? 'Processing...' : hasEnoughToolCredits ? toolLabel : `Need ${creditCost} credits`}
                                 </button>
                                 <span className="st-credit-badge">
                                     <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
@@ -8021,9 +8342,14 @@ if (tool === 'imagelayers') {
                                             <I d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" s={13} />
                                             {isDesc ? 'Analyzing' : 'Auto-Describe'}
                                         </button>
-                                        <button className="st-inspire-primary-btn" onClick={generate} disabled={isGen || !prompt.trim()}>
+                                        <button
+                                            className={`st-inspire-primary-btn ${!hasEnoughInspireCredits ? 'insufficient-credits' : ''}`}
+                                            onClick={generate}
+                                            disabled={isGen || !prompt.trim() || !hasEnoughInspireCredits}
+                                            title={!hasEnoughInspireCredits ? `Need ${inspireCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Generate inspirations'}
+                                        >
                                             <I d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" s={14} />
-                                            {isGen ? 'Generating' : 'Generate'}
+                                            {isGen ? 'Generating' : hasEnoughInspireCredits ? 'Generate' : `Need ${inspireCreditCost} credits`}
                                         </button>
                                     </div>
                                 </div>
@@ -8266,15 +8592,7 @@ if (tool === 'imagelayers') {
                                 <I d="M6 9l6 6 6-6" s={14} />
                             </button>
                             {showProjectDropdown && (
-                                <div
-                                    className="st-project-dropdown-menu"
-                                    style={{
-                                        position: 'absolute', top: '100%', left: 0, marginTop: '4px',
-                                        minWidth: '240px', background: '#fff', border: '1px solid #e2e8f0',
-                                        borderRadius: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
-                                        zIndex: 9999, overflow: 'hidden'
-                                    }}
-                                >
+                                <div className="st-project-dropdown-menu">
                                     <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
                                         {state.projects.map((p) => (
                                             <button
@@ -8539,16 +8857,71 @@ if (tool === 'imagelayers') {
                             </div>
                             <button className="st-icon-btn"><I d="M18 8a6 6 0 00-12 0c0 7-3 7-3 7h18s-3 0-3-7M13.7 21a2 2 0 01-3.4 0" /></button>
                             {/* <button className="st-icon-btn"><I d="M9.1 9a3 3 0 115.8 1c0 2-3 2-3 4M12 17h.01" /></button> */}
-                            <div className="st-avatar">{user.initials}</div>
-                            <div className="st-user-meta"><strong>{user.name}</strong><span>{user.plan}</span></div>
-                            <button className="st-nav-logout-btn" onClick={onLogout} title="Log Out Session">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '5px' }}>
-                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                                    <polyline points="16 17 21 12 16 7"></polyline>
-                                    <line x1="21" y1="12" x2="9" y2="12"></line>
-                                </svg>
-                                Logout
-                            </button>
+                            <div className="st-account-wrap" ref={accountDropdownRef}>
+                                <button
+                                    className="st-account-trigger"
+                                    type="button"
+                                    onClick={() => setShowAccountDropdown(prev => !prev)}
+                                    aria-expanded={showAccountDropdown}
+                                >
+                                    <div className="st-avatar">{user.initials}</div>
+                                    <div className="st-user-meta"><strong>{user.name}</strong><span>{user.plan}</span></div>
+                                    <I d="M6 9l6 6 6-6" s={13} />
+                                </button>
+                                {showAccountDropdown && (
+                                    <div className="st-account-dropdown">
+                                        <div className="st-project-balance-panel">
+                                            <div className="st-project-balance-head">
+                                                <div>
+                                                    <span className="st-project-balance-dot" />
+                                                    <strong>Balance</strong>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setTool('billing'); setShowAccountDropdown(false); }}
+                                                >
+                                                    Upgrade
+                                                </button>
+                                            </div>
+                                            <div className="st-project-balance-row">
+                                                <span>Total</span>
+                                                <strong>{Number(user.creditsLimit || 0).toLocaleString()} credits</strong>
+                                            </div>
+                                            <div className="st-project-balance-row">
+                                                <span>Remaining</span>
+                                                <strong>{Number(userRemainingCredits || 0).toLocaleString()} credits</strong>
+                                            </div>
+                                            <div className="st-project-balance-bar">
+                                                <span style={{ width: `${remainingCreditPercent}%` }} />
+                                            </div>
+                                        </div>
+                                        <div className="st-project-workspace-panel">
+                                            <span>Current workspace</span>
+                                            <div>
+                                                <strong>My Workspace</strong>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setTool('billing'); setShowAccountDropdown(false); }}
+                                                    title="Open billing"
+                                                >
+                                                    <I d="M7 7h10M7 12h10M7 17h6M17 7l-3-3m3 3l-3 3" s={14} />
+                                                </button>
+                                            </div>
+                                            <em>{user.plan || 'Free plan'}</em>
+                                        </div>
+                                        <div className="st-account-menu-actions">
+                                            <button type="button" onClick={() => { setTool('billing'); setShowAccountDropdown(false); }}>
+                                                <I d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM12 6v12M8 10h6a2 2 0 010 4h-4a2 2 0 000 4h6" s={15} />
+                                                Billing
+                                            </button>
+                                            <button type="button" className="danger" onClick={onLogout}>
+                                                <I d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" s={15} />
+                                                Logout
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </header>
                     <div className={`st-workspace ${tool === 'pattern' || tool === 'seamless' || tool === 'inspire' || tool === 'library' || tool === 'exports' || tool === 'billing' || tool === 'mappings' || tool === 'colorway-manager' || tool === 'measurement' || tool.startsWith('admin') ? 'full-width' : ''}`}>

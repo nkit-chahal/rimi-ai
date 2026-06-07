@@ -8,7 +8,10 @@ from datetime import datetime, timezone
 
 from config import UPLOAD_DIR, RESULTS_DIR
 from db import db
-from auth import check_credits, record_activity, get_updated_credits, log_export
+from auth import (
+    check_credits, credit_error_payload, credit_requirement,
+    record_activity, get_updated_credits, log_export,
+)
 from color_utils import extract_palette, recolor_image
 from pantone_utils import match_to_pantone, quantize_and_save
 from layer_utils import export_zip, export_tiff
@@ -18,16 +21,16 @@ import storage
 bp = Blueprint('color', __name__)
 
 
-def require_credits(user_id):
+def require_credits(user_id, tool_key='colorReduction', default=10):
     if user_id:
         try:
             user_id = int(user_id)
         except ValueError:
             user_id = None
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement(tool_key, default)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return user_id, jsonify({'error': 'Insufficient AI credits. Please recharge to continue.',
-                                 'creditsUsed': used, 'creditsLimit': limit}), 403
+        return user_id, jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
     return user_id, None, None
 
 
@@ -62,7 +65,7 @@ def recolor_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, error_response, status_code = require_credits(user_id)
+    user_id, error_response, status_code = require_credits(user_id, 'recolor', 10)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -105,7 +108,7 @@ def generate_tech_pack_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, error_response, status_code = require_credits(user_id)
+    user_id, error_response, status_code = require_credits(user_id, 'techPack', 15)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(RESULTS_DIR, filename)
@@ -142,7 +145,7 @@ def generate_tech_pack_api():
     )
     conn.commit()
     conn.close()
-    record_activity(project_id, 'export', 1, 5, user_id=user_id)
+    record_activity(project_id, 'export', 1, credit_requirement('techPack', 15), user_id=user_id)
     updated_credits = get_updated_credits(user_id)
     return jsonify({'success': True, 'resultUrl': f"/results/{pdf_filename}", **updated_credits})
 
@@ -175,7 +178,7 @@ def color_reduce_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, error_response, status_code = require_credits(user_id)
+    user_id, error_response, status_code = require_credits(user_id, 'colorReduction', 10)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -231,7 +234,7 @@ def layer_export_api():
     filename = os.path.basename(filename)
     if export_format not in ('zip', 'tiff'):
         return jsonify({'error': 'Format must be zip or tiff'}), 400
-    user_id, error_response, status_code = require_credits(user_id)
+    user_id, error_response, status_code = require_credits(user_id, 'layerExport', 15)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)

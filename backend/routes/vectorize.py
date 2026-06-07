@@ -9,6 +9,7 @@ from config import UPLOAD_DIR, RESULTS_DIR
 from auth import (
     log_export, log_replicate_call, check_credits,
     get_credit_price, get_updated_credits, record_activity,
+    credit_error_payload, credit_requirement,
 )
 import storage
 
@@ -223,10 +224,10 @@ def upscale():
             user_id_early = int(user_id_raw)
         except ValueError:
             pass
-    ok, remaining, limit, used = check_credits(user_id_early)
+    required_credits = credit_requirement('upscale', 60)
+    ok, remaining, limit, used = check_credits(user_id_early, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits. Contact your admin to increase your credit limit.',
-                        'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
     
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400

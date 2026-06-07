@@ -12,7 +12,10 @@ from PIL import Image, ImageDraw, ImageChops, ImageFilter
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client
 from db import db
-from auth import check_credits, record_activity, get_updated_credits, log_export, log_replicate_call
+from auth import (
+    check_credits, credit_error_payload, credit_requirement,
+    record_activity, get_updated_credits, log_export, log_replicate_call,
+)
 import replicate
 import storage
 
@@ -33,9 +36,10 @@ def generate_seamless():
     if user_id:
         try: user_id = int(user_id)
         except ValueError: user_id = None
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('seamless', 80)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits.', 'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
     if not user_prompt:
         return jsonify({'error': 'Prompt is required'}), 400
     try:
@@ -167,9 +171,10 @@ def make_seamless():
     if user_id_raw:
         try: user_id_early = int(user_id_raw)
         except ValueError: pass
-    ok, remaining, limit, used = check_credits(user_id_early)
+    required_credits = credit_requirement('seamless', 80)
+    ok, remaining, limit, used = check_credits(user_id_early, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits.', 'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
     if not filename and not image_url:
         return jsonify({'error': 'Filename or imageUrl is required'}), 400
     try:

@@ -15,6 +15,96 @@ bp = Blueprint("billing", __name__)
 
 RAZORPAY_ORDERS_URL = "https://api.razorpay.com/v1/orders"
 
+BILLING_PLANS = [
+    {
+        "id": "free",
+        "label": "Free",
+        "description": "Trial credits for testing the studio.",
+        "credits": 200,
+        "amount": 0,
+        "currency": "INR",
+        "badge": "",
+        "features": [
+            "200 starting credits",
+            "Use any AI design tool",
+            "Razorpay recharge anytime",
+        ],
+        "disabled": True,
+    },
+    {
+        "id": "starter",
+        "label": "Starter",
+        "description": "Small production runs and evaluation.",
+        "credits": 5000,
+        "amount": 49900,
+        "currency": "INR",
+        "badge": "",
+        "features": [
+            "5,000 AI credits",
+            "Good for quick pattern cleanup",
+            "Standard Razorpay checkout",
+        ],
+    },
+    {
+        "id": "creator",
+        "label": "Creator",
+        "description": "Best value for active textile workflows.",
+        "credits": 12000,
+        "amount": 99900,
+        "currency": "INR",
+        "badge": "Popular",
+        "features": [
+            "12,000 AI credits",
+            "Pattern extraction, vectorize, seamless",
+            "Additional credits through Razorpay",
+        ],
+    },
+    {
+        "id": "pro",
+        "label": "Pro",
+        "description": "For frequent studio use and client work.",
+        "credits": 50000,
+        "amount": 299900,
+        "currency": "INR",
+        "badge": "",
+        "features": [
+            "50,000 AI credits",
+            "High-volume generation buffer",
+            "Works with all available AI tools",
+        ],
+    },
+    {
+        "id": "scale",
+        "label": "Scale",
+        "description": "Large credit top-up for production teams.",
+        "credits": 125000,
+        "amount": 699900,
+        "currency": "INR",
+        "badge": "",
+        "features": [
+            "125,000 AI credits",
+            "Lowest listed per-credit rate",
+            "Designed for team production usage",
+        ],
+    },
+]
+
+
+def _billing_plan_map():
+    return {plan["id"]: plan for plan in BILLING_PLANS}
+
+
+def _public_plan(plan):
+    amount = int(plan["amount"])
+    credits = int(plan["credits"])
+    return {
+        **plan,
+        "price": amount / 100,
+        "priceLabel": f"₹{amount // 100:,}" if amount else "₹0",
+        "pricePerCredit": round((amount / 100) / credits, 4) if amount and credits else 0,
+        "checkoutEnabled": amount > 0 and not plan.get("disabled", False),
+    }
+
 
 def _razorpay_credentials():
     key_id = os.getenv("RAZORPAY_KEY_ID", "").strip()
@@ -28,23 +118,20 @@ def _razorpay_credentials():
 @login_required
 def create_order():
     data = request.get_json() or {}
+    pack_id = str(data.get("packId") or "").strip()[:40]
+    plan = _billing_plan_map().get(pack_id)
+    if not plan:
+        return jsonify({"success": False, "error": "Unknown credit pack"}), 400
 
-    try:
-        amount = int(data.get("amount", 0))
-    except (TypeError, ValueError):
-        return jsonify({"success": False, "error": "amount must be an integer in paise"}), 400
+    amount = int(plan["amount"])
+    credits = int(plan["credits"])
 
     if amount < 100:
-        return jsonify({"success": False, "error": "amount must be at least 100 paise"}), 400
+        return jsonify({"success": False, "error": "This plan does not require checkout"}), 400
 
-    currency = str(data.get("currency") or "INR").upper()
+    currency = str(plan.get("currency") or "INR").upper()
     receipt = str(data.get("receipt") or f"receipt_{int(time.time())}")[:40]
-    pack_id = str(data.get("packId") or "").strip()[:40] or None
     user_id = g.current_user["id"]
-    try:
-        credits = int(data.get("credits", 0))
-    except (TypeError, ValueError):
-        credits = 0
 
     key_id, key_secret = _razorpay_credentials()
     if not key_id or not key_secret:
@@ -53,7 +140,7 @@ def create_order():
     try:
         response = requests.post(
             RAZORPAY_ORDERS_URL,
-            json={"amount": amount, "currency": currency, "receipt": receipt},
+            json={"amount": amount, "currency": currency, "receipt": receipt, "notes": {"pack_id": pack_id, "credits": credits}},
             auth=(key_id, key_secret),
             timeout=20,
         )
@@ -89,6 +176,66 @@ def create_order():
         "amount": order["amount"],
         "currency": order["currency"],
         "key_id": key_id,
+        "pack": _public_plan(plan),
+    })
+
+
+@bp.route("/api/billing/overview", methods=["GET"])
+@login_required
+def billing_overview():
+    user_id = g.current_user["id"]
+    with db_lock:
+        conn = db()
+        try:
+            user = conn.execute(
+                "SELECT id, plan, credits_used, credits_limit FROM users WHERE id = ?",
+                (user_id,)
+            ).fetchone()
+            payment_rows = conn.execute(
+                """
+                SELECT id, provider_order_id, provider_payment_id, amount, currency, credits, pack_id, status, created_at, paid_at
+                FROM payments
+                WHERE user_id = ?
+                ORDER BY id DESC
+                LIMIT 8
+                """,
+                (user_id,)
+            ).fetchall()
+        finally:
+            conn.close()
+
+    credits_used = int(user["credits_used"] if user else 0)
+    credits_limit = int(user["credits_limit"] if user else 0)
+    payments = []
+    plan_lookup = _billing_plan_map()
+    for row in payment_rows:
+        plan = plan_lookup.get(row["pack_id"] or "")
+        payments.append({
+            "id": row["id"],
+            "orderId": row["provider_order_id"],
+            "paymentId": row["provider_payment_id"],
+            "amount": row["amount"],
+            "currency": row["currency"],
+            "credits": row["credits"],
+            "packId": row["pack_id"],
+            "packLabel": plan["label"] if plan else (row["pack_id"] or "Credits"),
+            "status": row["status"],
+            "createdAt": row["created_at"],
+            "paidAt": row["paid_at"],
+        })
+
+    return jsonify({
+        "success": True,
+        "razorpayConfigured": bool(_razorpay_credentials()[0] and _razorpay_credentials()[1]),
+        "plans": [_public_plan(plan) for plan in BILLING_PLANS],
+        "usage": {
+            "plan": user["plan"] if user else "Free Trial",
+            "creditsUsed": credits_used,
+            "creditsLimit": credits_limit,
+            "creditsRemaining": max(0, credits_limit - credits_used),
+            "usagePct": min(100, round((credits_used / credits_limit) * 100, 1)) if credits_limit else 0,
+        },
+        "payments": payments,
     })
 
 
@@ -149,9 +296,10 @@ def verify_payment():
                     (payment_id, paid_at, payment["id"])
                 )
                 if payment["user_id"] and payment["credits"] > 0:
+                    plan = _billing_plan_map().get(payment["pack_id"] or "")
                     conn.execute(
-                        "UPDATE users SET credits_limit = credits_limit + ? WHERE id = ?",
-                        (payment["credits"], payment["user_id"])
+                        "UPDATE users SET credits_limit = credits_limit + ?, plan = ? WHERE id = ?",
+                        (payment["credits"], plan["label"] if plan else "Paid Credits", payment["user_id"])
                     )
                     conn.execute(
                         """

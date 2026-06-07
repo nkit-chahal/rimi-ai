@@ -8,7 +8,10 @@ import requests as http_requests
 from flask import Blueprint, request, jsonify
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client, safe_filename
-from auth import check_credits, record_activity, get_updated_credits, log_export, log_replicate_call
+from auth import (
+    check_credits, credit_error_payload, credit_requirement,
+    record_activity, get_updated_credits, log_export, log_replicate_call,
+)
 import replicate
 import storage
 
@@ -90,10 +93,10 @@ def extract_design():
     if user_id:
         try: user_id = int(user_id)
         except ValueError: user_id = None
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('extract', 50)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits. Contact your admin to increase your credit limit.',
-                        'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
     try:
         print(f"  [Extract Design] Processing {filename} with openai/gpt-image-2...")
         with open(filepath, "rb") as img_file:
@@ -296,9 +299,10 @@ def extract_design_multi():
         try: user_id = int(user_id)
         except ValueError: user_id = None
 
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('extract', 50, len(EXTRACT_MODELS))
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits.', 'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     # Read and encode image once
     with open(filepath, "rb") as img_file:
@@ -366,9 +370,10 @@ def extract_design_single():
         try: user_id = int(user_id)
         except ValueError: user_id = None
 
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('extract', 50)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits.', 'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     # Find the model config
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), None)
@@ -422,9 +427,10 @@ def extract_edit():
         try: user_id = int(user_id)
         except ValueError: user_id = None
 
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('extract', 50)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits.', 'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     try:
         # Load the existing result image
@@ -556,10 +562,10 @@ def generate_inspirations():
     if user_id:
         try: user_id = int(user_id)
         except ValueError: user_id = None
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('inspire', 50, count)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits. Contact your admin to increase your credit limit.',
-                        'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     if use_seamless:
         try:

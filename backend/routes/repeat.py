@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify
 from PIL import Image, ImageOps
 
 from config import UPLOAD_DIR, RESULTS_DIR
-from auth import check_credits, get_updated_credits, record_activity, log_export
+from auth import check_credits, credit_error_payload, credit_requirement, get_updated_credits, record_activity, log_export
 import storage
 
 bp = Blueprint('repeat', __name__)
@@ -31,10 +31,10 @@ def create_repeat_set():
             user_id = int(user_id)
         except ValueError:
             user_id = None
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('repeat', 50)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits. Please recharge to continue.',
-                        'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
     try:
         if image_url and image_url.startswith('http'):
             resp = http_requests.get(image_url, timeout=30)
@@ -81,7 +81,7 @@ def create_repeat_set():
         result_path = os.path.join(RESULTS_DIR, result_name)
         tiled.save(result_path, save_format, quality=95, dpi=(dpi, dpi))
         storage.sync_to_s3(result_path)
-        record_activity(project_id, 'export', 1, 50, user_id=user_id)
+        record_activity(project_id, 'export', 1, required_credits, user_id=user_id)
         updated_credits = get_updated_credits(user_id)
         input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
         log_export(project_id, result_name, input_fn, "Repeat Set",

@@ -130,6 +130,24 @@ def get_credit_price(tool_key, default=0):
         conn.close()
 
 
+def credit_requirement(tool_key, default=1, quantity=1):
+    try:
+        quantity = max(1, int(quantity))
+    except (TypeError, ValueError):
+        quantity = 1
+    return max(1, int(get_credit_price(tool_key, default)) * quantity)
+
+
+def credit_error_payload(required, remaining, limit, used):
+    return {
+        "error": f"Insufficient AI credits. This action needs {required} credits, but you have {remaining} remaining.",
+        "creditsUsed": used,
+        "creditsLimit": limit,
+        "creditsRequired": required,
+        "creditsRemaining": remaining,
+    }
+
+
 def record_activity(project_id, activity_type='export', count=1, credits=50, user_id=None):
     user_id = resolve_user_id(user_id)
     credits = int(credits)

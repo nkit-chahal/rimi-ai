@@ -8,7 +8,7 @@ from flask import Blueprint, request, jsonify
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client
 from auth import (
     log_export, log_replicate_call, check_credits,
-    get_updated_credits, record_activity,
+    credit_error_payload, credit_requirement, get_updated_credits, record_activity,
     save_rgba_content_layer, rgba_layer_to_green_matte,
     green_matte_to_rgba, remove_background_with_rmbg,
     decode_data_url_image,
@@ -45,10 +45,10 @@ def image_layers():
             user_id = int(user_id_raw)
         except ValueError:
             pass
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('imageLayers', 100)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits. Contact your admin to increase your credit limit.',
-                        'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
@@ -239,10 +239,10 @@ def edit_layer():
             user_id = int(user_id_raw)
         except ValueError:
             pass
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('imageLayerEdit', 15)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits.',
-                        'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     if not filename or not user_prompt:
         return jsonify({'error': 'Filename and prompt are required'}), 400
@@ -389,10 +389,10 @@ def inpaint_layer():
         except ValueError:
             pass
 
-    ok, remaining, limit, used = check_credits(user_id)
+    required_credits = credit_requirement('imageLayerEdit', 15)
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return jsonify({'error': 'Insufficient AI credits.',
-                        'creditsUsed': used, 'creditsLimit': limit}), 403
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     if not filename or not user_prompt or not mask_data_url:
         return jsonify({'error': 'Filename, prompt, and mask are required'}), 400
