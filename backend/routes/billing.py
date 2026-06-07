@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timezone
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from db import db, db_lock
 from middleware import login_required
@@ -40,10 +40,7 @@ def create_order():
     currency = str(data.get("currency") or "INR").upper()
     receipt = str(data.get("receipt") or f"receipt_{int(time.time())}")[:40]
     pack_id = str(data.get("packId") or "").strip()[:40] or None
-    try:
-        user_id = int(data.get("userId")) if data.get("userId") else None
-    except (TypeError, ValueError):
-        user_id = None
+    user_id = g.current_user["id"]
     try:
         credits = int(data.get("credits", 0))
     except (TypeError, ValueError):
@@ -91,6 +88,18 @@ def create_order():
         "order_id": order["id"],
         "amount": order["amount"],
         "currency": order["currency"],
+        "key_id": key_id,
+    })
+
+
+@bp.route("/api/billing/razorpay-config", methods=["GET"])
+@login_required
+def razorpay_config():
+    key_id, key_secret = _razorpay_credentials()
+    return jsonify({
+        "success": True,
+        "configured": bool(key_id and key_secret),
+        "keyId": key_id if key_id else "",
     })
 
 

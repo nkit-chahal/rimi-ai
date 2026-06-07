@@ -32,8 +32,6 @@ async function getCroppedImg(imageElement, crop, fileName) {
 
 const localApiHosts = new Set(['localhost', '127.0.0.1']);
 const API = import.meta.env.VITE_API_URL || (localApiHosts.has(window.location.hostname) ? 'http://localhost:3001' : '');
-const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID || '';
-
 const CREDIT_PACKS = [
     { id: 'starter', label: 'Starter Credits', credits: 5000, amount: 49900 },
     { id: 'pro', label: 'Pro Credits', credits: 12000, amount: 99900 },
@@ -271,6 +269,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [error, setError] = useState('');
     const [isLoadingState, setIsLoadingState] = useState(true);
     const [paymentStatus, setPaymentStatus] = useState({ loadingPackId: null, message: '', error: '' });
+    const [razorpayKeyId, setRazorpayKeyId] = useState(import.meta.env.VITE_RAZORPAY_KEY_ID || '');
 
     const fileRef = useRef(null);
     const canvasRef = useRef(null);
@@ -531,6 +530,22 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     useEffect(() => {
         if (isAdmin && (tool === 'admin-credits' || tool === 'admin-dashboard')) fetchAdminBilling();
     }, [tool, fetchAdminBilling, isAdmin]);
+
+    useEffect(() => {
+        if (tool !== 'billing' || !currentToken) return;
+        fetch(`${API}/api/billing/razorpay-config`, {
+            headers: { 'Authorization': `Bearer ${currentToken}` },
+        })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success && d.keyId) {
+                    setRazorpayKeyId(d.keyId);
+                } else if (d.success && !d.configured) {
+                    setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay is not configured on the backend.' });
+                }
+            })
+            .catch(() => setPaymentStatus({ loadingPackId: null, message: '', error: 'Unable to load Razorpay configuration.' }));
+    }, [tool, currentToken]);
 
     useEffect(() => {
         if (isAdmin && tool === 'admin-credits') fetchAdminPricing();
@@ -5792,7 +5807,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const startRazorpayCheckout = async (pack) => {
         setPaymentStatus({ loadingPackId: pack.id, message: '', error: '' });
 
-        if (!RAZORPAY_KEY_ID) {
+        if (!razorpayKeyId) {
             setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay key id is not configured.' });
             return;
         }
@@ -5805,12 +5820,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         try {
             const orderRes = await fetch(`${API}/api/create-order`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
                 body: JSON.stringify({
                     amount: pack.amount,
                     currency: 'INR',
                     receipt: `rimi_${user?.id || 'guest'}_${pack.id}_${Date.now()}`,
-                    userId: user?.id,
                     packId: pack.id,
                     credits: pack.credits,
                 }),
@@ -5821,7 +5835,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             }
 
             const checkout = new window.Razorpay({
-                key: RAZORPAY_KEY_ID,
+                key: orderData.key_id || razorpayKeyId,
                 amount: orderData.amount,
                 currency: orderData.currency,
                 name: 'RIMI AI',
@@ -5842,7 +5856,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         setPaymentStatus({ loadingPackId: pack.id, message: 'Verifying payment...', error: '' });
                         const verifyRes = await fetch(`${API}/api/verify-payment`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
                             body: JSON.stringify({
                                 razorpay_order_id: response.razorpay_order_id,
                                 razorpay_payment_id: response.razorpay_payment_id,
