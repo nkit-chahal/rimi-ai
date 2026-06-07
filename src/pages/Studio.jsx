@@ -3537,9 +3537,19 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             <input type="range" min="2" max="256" value={vecColors} onChange={(e) => setVecColors(Number(e.target.value))} />
                         </div>
                     )}
-                    <button className="st-export-btn" onClick={vectorize} disabled={isVec || (!uploaded && !preview && !activeProject?.heroImageUrl) || !hasEnoughVectorizeCredits}>
+                    <button
+                        className={`st-export-btn ${!hasEnoughVectorizeCredits ? 'insufficient-credits' : ''}`}
+                        onClick={vectorize}
+                        disabled={isVec || (!uploaded && !preview && !activeProject?.heroImageUrl) || !hasEnoughVectorizeCredits}
+                        title={!hasEnoughVectorizeCredits ? `Need ${vectorizeCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Vectorize image'}
+                    >
                         {isVec ? 'Vectorizing...' : hasEnoughVectorizeCredits ? 'Vectorize Image' : `Need ${vectorizeCreditCost} credits`}
                     </button>
+                    {!hasEnoughVectorizeCredits && (
+                        <div className="st-credit-shortage">
+                            {userRemainingCredits.toLocaleString()} credits remaining. Switch to Local or recharge to use Cloud API.
+                        </div>
+                    )}
                 </div>
             </div>
         );

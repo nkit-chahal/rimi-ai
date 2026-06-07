@@ -2276,6 +2276,32 @@ input[type=range]::-moz-range-track {
   box-shadow: 0 6px 20px rgba(139, 92, 246, 0.35);
 }
 
+.st-export-btn:disabled {
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.st-export-btn.insufficient-credits {
+  background: #e5e7eb;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+  box-shadow: none;
+}
+
+.st-credit-shortage {
+  margin-top: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.74rem;
+  font-weight: 750;
+  line-height: 1.35;
+  text-align: center;
+}
+
 /* Misc Textarea & Errors */
 .st-textarea {
   width: 100%;

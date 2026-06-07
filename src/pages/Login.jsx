@@ -282,11 +282,11 @@ export default function Login({ onLogin, onGoToLanding }) {
 
         <div className="login-card">
           <div className="login-header">
-            <h2>{mode === 'signin' ? 'Welcome Back' : mode === 'signup' ? 'Create Account' : mode === 'googleSetup' ? 'Finish Google Signup' : 'Verify Email'}</h2>
+            <h2>{mode === 'signin' ? 'Welcome Back' : mode === 'googleSetup' ? 'Finish Google Signup' : 'Verify Email'}</h2>
             <p>{mode === 'verify' ? `Enter the code sent to ${pendingEmail}.` : mode === 'googleSetup' ? `Verified Google email: ${googleSignupEmail}` : 'Access the generative pattern intelligence studio.'}</p>
           </div>
 
-          {mode !== 'verify' && mode !== 'googleSetup' && (
+          {false && mode !== 'verify' && mode !== 'googleSetup' && (
             <div className="login-mode-tabs">
               <button type="button" className={mode === 'signin' ? 'active' : ''} onClick={() => switchMode('signin')}>Sign in</button>
               <button type="button" className={mode === 'signup' ? 'active' : ''} onClick={() => switchMode('signup')}>Sign up</button>
@@ -316,7 +316,7 @@ export default function Login({ onLogin, onGoToLanding }) {
             </form>
           )}
 
-          {mode === 'signup' && (
+          {false && mode === 'signup' && (
             <form onSubmit={handleSignup} className="login-form">
               {renderStatus()}
               <div className="login-field">
