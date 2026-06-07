@@ -12,6 +12,7 @@ const AdminUsers = ({
     const [showCreateUserModal, setShowCreateUserModal] = useState(false);
     const [createUserForm, setCreateUserForm] = useState({ email: '', password: '', name: '', role: 'user', plan: 'Business Studio', creditsLimit: '25000', freeGenerations: '10' });
     const [createUserFeedback, setCreateUserFeedback] = useState('');
+    const [deleteFeedback, setDeleteFeedback] = useState('');
 
     const handleCreateUser = () => {
         const { email, password, name, role, plan, creditsLimit, freeGenerations } = createUserForm;
@@ -41,7 +42,10 @@ const AdminUsers = ({
             .then(r => r.json())
             .then(d => {
                 if (d.success) fetchAdminUsers();
-                else alert(d.error || 'Failed to delete user');
+                else {
+                    setDeleteFeedback('✗ ' + (d.error || 'Failed to delete user'));
+                    setTimeout(() => setDeleteFeedback(''), 5000);
+                }
             });
     };
 
@@ -49,6 +53,7 @@ const AdminUsers = ({
         <div className="admin-workspace-panel animate-fade-in">
             {renderBudgetBanner && renderBudgetBanner()}
             {createUserFeedback && <div style={{ padding: '8px 16px', marginBottom: '12px', borderRadius: '8px', background: createUserFeedback.startsWith('✓') ? '#22c55e20' : '#ef444420', color: createUserFeedback.startsWith('✓') ? '#22c55e' : '#ef4444', fontSize: '13px', fontWeight: 500 }}>{createUserFeedback}</div>}
+            {deleteFeedback && <div style={{ padding: '8px 16px', marginBottom: '12px', borderRadius: '8px', background: deleteFeedback.startsWith('✓') ? '#22c55e20' : '#ef444420', color: deleteFeedback.startsWith('✓') ? '#22c55e' : '#ef4444', fontSize: '13px', fontWeight: 500 }}>{deleteFeedback}</div>}
             <div className="admin-card glassmorphism-card replicate-logs-section">
                 <div className="admin-card-header" style={{ justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

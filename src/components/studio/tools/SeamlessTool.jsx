@@ -29,17 +29,19 @@ export default function SeamlessTool({
     const [isDrag, setIsDrag] = useState(false);
 
     const fileRef = useRef(null);
+    const hasActiveSeamlessRun = useRef(false);
 
     const seamlessUrl = parentSeamlessUrl !== undefined ? parentSeamlessUrl : localSeamlessUrl;
     const setSeamlessUrl = parentSetSeamlessUrl !== undefined ? parentSetSeamlessUrl : setLocalSeamlessUrl;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
-    const seamlessCreditCost = creditPricing?.seamless || 80;
+    const seamlessCreditCost = creditPricing?.seamless || 58;
     const hasEnoughSeamlessCredits = userRemainingCredits >= seamlessCreditCost;
 
     // Progress simulation
     useEffect(() => {
         if (isSeamless) {
+            hasActiveSeamlessRun.current = true;
             setSeamlessProgress(0);
             setSeamlessStatus('Assessing seams...');
             const startTime = Date.now();
@@ -55,12 +57,19 @@ export default function SeamlessTool({
                 setSeamlessStatus(status);
             }, 200);
             return () => clearInterval(interval);
-        } else {
-            setSeamlessProgress(100);
-            setSeamlessStatus('Complete!');
-            const t = setTimeout(() => { setSeamlessProgress(0); setSeamlessStatus(''); }, 2000);
-            return () => clearTimeout(t);
         }
+
+        if (!hasActiveSeamlessRun.current) {
+            setSeamlessProgress(0);
+            setSeamlessStatus('');
+            return undefined;
+        }
+
+        hasActiveSeamlessRun.current = false;
+        setSeamlessProgress(100);
+        setSeamlessStatus('Complete!');
+        const t = setTimeout(() => { setSeamlessProgress(0); setSeamlessStatus(''); }, 2000);
+        return () => clearTimeout(t);
     }, [isSeamless]);
 
     // File Upload Handler

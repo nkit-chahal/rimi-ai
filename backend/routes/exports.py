@@ -1,15 +1,50 @@
 """Exports routes: download proxy, list exports, delete exports."""
 import os
 import json
-from flask import Blueprint, request, jsonify, send_from_directory, Response, abort
+from urllib.parse import urlparse
+from flask import Blueprint, request, jsonify, send_from_directory, Response, abort, g
 
 from config import UPLOAD_DIR, RESULTS_DIR, USE_S3
-from db import db, db_lock, resolve_input_url, iso_to_epoch
+from db import db, db_lock, iso_to_epoch
+from middleware import login_required
 import storage
 
 bp = Blueprint('exports', __name__)
 
 PREVIEWS_DIR = os.path.join(RESULTS_DIR, 'previews')
+
+
+def resolve_export_input_url(input_filename):
+    """Resolve an export source image only when the backing file is available."""
+    if not input_filename:
+        return None
+
+    if input_filename.startswith('http://') or input_filename.startswith('https://'):
+        return input_filename
+
+    if input_filename.startswith('/'):
+        parsed_path = urlparse(input_filename).path
+        filename = os.path.basename(parsed_path)
+        if parsed_path.startswith('/uploads/'):
+            return parsed_path if storage.file_exists('uploads', filename) else None
+        if parsed_path.startswith('/results/'):
+            return parsed_path if storage.file_exists('results', filename) else None
+
+        public_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public')
+        public_path = parsed_path.lstrip('/')
+        return parsed_path if os.path.exists(os.path.join(public_dir, public_path)) else None
+
+    safe_name = os.path.basename(input_filename)
+    if storage.file_exists('uploads', safe_name):
+        return f'/uploads/{safe_name}'
+    if storage.file_exists('results', safe_name):
+        return f'/results/{safe_name}'
+
+    public_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public')
+    if os.path.exists(os.path.join(public_dir, safe_name)):
+        return f'/{safe_name}'
+
+    return None
 
 
 def get_preview(filename):
@@ -114,6 +149,7 @@ def download():
 
 # --------------- Exports ---------------
 @bp.route('/api/exports')
+@login_required
 def list_exports():
     """
     Returns a list of all logged exports from the database,
@@ -121,9 +157,41 @@ def list_exports():
     settings, pipeline logs, file size, type, etc.
     """
     try:
+        current_user = g.current_user
+        user_id = current_user["id"]
+        is_admin = current_user.get("role") == "admin"
         conn = db()
-        # Retrieve all exports from SQLite database
-        rows = conn.execute("SELECT * FROM exports ORDER BY created_at DESC").fetchall()
+        project_id = request.args.get('project_id', type=int)
+        if is_admin and not project_id:
+            rows = conn.execute("SELECT e.* FROM exports e ORDER BY e.created_at DESC").fetchall()
+        elif is_admin and project_id:
+            rows = conn.execute(
+                "SELECT e.* FROM exports e WHERE e.project_id = ? ORDER BY e.created_at DESC",
+                (project_id,),
+            ).fetchall()
+        elif project_id:
+            rows = conn.execute(
+                """
+                SELECT e.*
+                FROM exports e
+                LEFT JOIN projects p ON p.id = e.project_id
+                WHERE e.project_id = ?
+                  AND (e.user_id = ? OR (e.user_id IS NULL AND p.user_id = ?))
+                ORDER BY e.created_at DESC
+                """,
+                (project_id, user_id, user_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT e.*
+                FROM exports e
+                LEFT JOIN projects p ON p.id = e.project_id
+                WHERE e.user_id = ? OR (e.user_id IS NULL AND p.user_id = ?)
+                ORDER BY e.created_at DESC
+                """,
+                (user_id, user_id),
+            ).fetchall()
         conn.close()
         
         files = []
@@ -162,6 +230,8 @@ def list_exports():
                     pipeline_steps = json.loads(row['pipeline_steps_json'])
                 except Exception:
                     pass
+
+            input_url = resolve_export_input_url(row['input_filename'])
             
             files.append({
                 'id': filename,
@@ -176,7 +246,8 @@ def list_exports():
                 'timestamp': mtime,
                 'createdAt': row['created_at'],
                 'inputFilename': row['input_filename'],
-                'inputUrl': resolve_input_url(row['input_filename']),
+                'inputUrl': input_url,
+                'inputMissing': bool(row['input_filename'] and not input_url),
                 'toolType': row['tool_type'],
                 'settings': settings,
                 'pipelineRunId': row['pipeline_run_id'],
@@ -190,6 +261,7 @@ def list_exports():
 
 
 @bp.route('/api/exports', methods=['DELETE'])
+@login_required
 def delete_exports():
     """
     Deletes one or more export files from the results directory and the database.
@@ -203,6 +275,9 @@ def delete_exports():
 
     deleted = []
     errors = []
+    current_user = g.current_user
+    user_id = current_user["id"]
+    is_admin = current_user.get("role") == "admin"
     
     with db_lock:
         conn = db()
@@ -212,10 +287,22 @@ def delete_exports():
                 safe_name = os.path.basename(filename)
                 filepath = os.path.join(RESULTS_DIR, safe_name)
                 
-                db_exists = conn.execute("SELECT 1 FROM exports WHERE filename = ?", (safe_name,)).fetchone()
+                if is_admin:
+                    db_exists = conn.execute("SELECT 1 FROM exports WHERE filename = ?", (safe_name,)).fetchone()
+                else:
+                    db_exists = conn.execute(
+                        """
+                        SELECT 1
+                        FROM exports e
+                        LEFT JOIN projects p ON p.id = e.project_id
+                        WHERE e.filename = ?
+                          AND (e.user_id = ? OR (e.user_id IS NULL AND p.user_id = ?))
+                        """,
+                        (safe_name, user_id, user_id),
+                    ).fetchone()
                 disk_exists = os.path.isfile(filepath)
                 
-                if db_exists or disk_exists:
+                if db_exists:
                     try:
                         if disk_exists:
                             os.remove(filepath)

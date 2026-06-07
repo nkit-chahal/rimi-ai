@@ -93,7 +93,8 @@ def extract_design():
     if user_id:
         try: user_id = int(user_id)
         except ValueError: user_id = None
-    required_credits = credit_requirement('extract', 50)
+    model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
+    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 310))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -110,8 +111,8 @@ def extract_design():
             "input_images": [data_uri], "aspect_ratio": "1:1"
         })
         duration = time.time() - start_time
-        credits_used = max(10, int(round(duration * 12)))
-        cost_usd = duration * 0.00115
+        cost_usd = 0.128
+        credits_used = required_credits
         log_replicate_call(project_id, "openai/gpt-image-2", duration, credits_used, cost_usd)
         image_urls = [str(url) for url in output] if isinstance(output, list) else [str(output)]
         print(f"  [Extract Design] Done! Generated {len(image_urls)} tiles. Downloading locally...")
@@ -136,24 +137,32 @@ def extract_design():
         return jsonify({'error': f'Failed to extract design: {str(e)}'}), 500
 
 
+# ---------------------------------------------------------------------------
+# Per-model credit pricing  (Option A: 4 credits per INR 1, ~57% gross margin)
+# Formula: credits = ceil(cost_usd * 1150)  (15% safety markup over raw vendor
+# cost to absorb Groq side-calls, invoice variance and failed retries).
+# Must stay in sync with DEFAULT_CREDIT_PRICING in backend/db.py.
+# ---------------------------------------------------------------------------
 EXTRACT_MODELS = [
     {
         'id': 'openai/gpt-image-2',
-        'name': 'GPT Image',
+        'name': 'GPT Image 2',
         'prompt': 'A perfectly flat, 2D seamless repeating pattern tile of the exact fabric design, motif, and colors seen in the input image. Extract the design out of the outfit. High resolution, perfectly flat texture.',
         'input_key': 'input_images',
         'input_list': True,
         'supports_image': True,
         'cost_per_image': 0.128,
+        'credits': 148,
     },
     {
         'id': 'google/imagen-4-ultra',
-        'name': 'Imagen 4',
+        'name': 'Imagen 4 Ultra',
         'prompt': '',  # Will be generated from image description
         'input_key': None,
         'input_list': False,
         'supports_image': False,
         'cost_per_image': 0.06,
+        'credits': 69,
     },
     {
         'id': 'black-forest-labs/flux-2-pro',
@@ -162,18 +171,48 @@ EXTRACT_MODELS = [
         'input_key': None,
         'input_list': False,
         'supports_image': False,
-        'cost_per_image': 0.09,
+        'cost_per_image': 0.030,  # ~2 MP per run at $0.015/MP I/O + $0.015/run
+        'credits': 35,
     },
     {
         'id': 'bytedance/seedream-4.5',
-        'name': 'SeDream',
+        'name': 'Seedream 4.5',
         'prompt': '',  # Will be generated from image description
         'input_key': None,
         'input_list': False,
         'supports_image': False,
         'cost_per_image': 0.04,
+        'credits': 46,
     },
 ]
+
+# ---------------------------------------------------------------------------
+# Per-model credit lookup for Inspirations (and other multi-model endpoints).
+# Replaces the old flat `credit_requirement('inspire', 310)`.
+# ---------------------------------------------------------------------------
+MODEL_TO_CREDITS = {
+    'openai/gpt-image-2':              148,
+    'openai/gpt-image-1.5':            157,
+    'google/imagen-4-ultra':           69,
+    'google/imagen-4-fast':            23,
+    'google/nano-banana':              45,
+    'google/nano-banana-2':            78,
+    'google/nano-banana-pro':          173,
+    'google/upscaler':                 23,
+    'bytedance/seedream-4.5':          46,
+    'black-forest-labs/flux-schnell':  4,
+    'black-forest-labs/flux-fill-pro': 58,
+    'black-forest-labs/flux-2-pro':    35,
+    'black-forest-labs/flux-2-flex':   156,
+    'qwen/qwen-image-edit':            35,
+    'qwen/qwen-image-layered':         69,
+    'recraft-ai/recraft-vectorize':    12,
+    'xai/grok-imagine-image':          23,
+    'replicate/seamless-texture':      84,
+    'fofr/style-transfer':             23,
+    'lucataco/remove-bg':              2,
+}
+DEFAULT_INSPIRE_CREDITS = 148  # safe default = GPT-Image-2 rate
 
 
 def _describe_image_for_extraction(data_uri):
@@ -242,7 +281,7 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
         output = replicate.run(model_id, input=replicate_input)
         duration = time.time() - start_time
 
-        credits_used = max(5, int(round(duration * 10)))
+        credits_used = int(model_cfg.get('credits') or credit_requirement('extract', 310))
         cost_usd = model_cfg['cost_per_image']
         log_replicate_call(project_id, model_id, duration, credits_used, cost_usd)
 
@@ -299,7 +338,7 @@ def extract_design_multi():
         try: user_id = int(user_id)
         except ValueError: user_id = None
 
-    required_credits = credit_requirement('extract', 50, len(EXTRACT_MODELS))
+    required_credits = sum(int(m.get('credits') or credit_requirement('extract', 310)) for m in EXTRACT_MODELS)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -370,15 +409,14 @@ def extract_design_single():
         try: user_id = int(user_id)
         except ValueError: user_id = None
 
-    required_credits = credit_requirement('extract', 50)
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
-    if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
-
-    # Find the model config
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), None)
     if not model_cfg:
         return jsonify({'error': f'Unknown model: {model_id}'}), 400
+
+    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 310))
+    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    if not ok:
+        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     # Read and encode image
     with open(filepath, "rb") as img_file:
@@ -427,7 +465,8 @@ def extract_edit():
         try: user_id = int(user_id)
         except ValueError: user_id = None
 
-    required_credits = credit_requirement('extract', 50)
+    model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
+    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 310))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -446,9 +485,6 @@ def extract_edit():
         encoded = base64.b64encode(image_bytes).decode('utf-8')
         data_uri = f"data:image/png;base64,{encoded}"
 
-        # Find model config
-        model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
-
         edit_prompt = f"Edit this pattern tile: {prompt}. Keep it as a flat 2D seamless repeating pattern tile, high resolution."
 
         replicate_input = {"prompt": edit_prompt, "aspect_ratio": "1:1"}
@@ -462,7 +498,7 @@ def extract_edit():
         output = replicate.run(model_id, input=replicate_input)
         duration = time.time() - start_time
 
-        credits_used = max(5, int(round(duration * 10)))
+        credits_used = required_credits
         cost_usd = model_cfg['cost_per_image']
         log_replicate_call(project_id, model_id, duration, credits_used, cost_usd)
 
@@ -562,7 +598,16 @@ def generate_inspirations():
     if user_id:
         try: user_id = int(user_id)
         except ValueError: user_id = None
-    required_credits = credit_requirement('inspire', 50, count)
+    requested_models = data.get('models') or ['openai/gpt-image-2']
+    requested_model_count = 1 if use_seamless else max(1, len(requested_models))
+    # Up-front credit check uses the most expensive selected model so the user
+    # is never undercharged.  Per-call deduction inside the loop uses the
+    # actual model via MODEL_TO_CREDITS.
+    _max_model_credits = max(
+        (MODEL_TO_CREDITS.get(m, DEFAULT_INSPIRE_CREDITS) for m in requested_models),
+        default=DEFAULT_INSPIRE_CREDITS,
+    )
+    required_credits = _max_model_credits * count * requested_model_count
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -578,8 +623,8 @@ def generate_inspirations():
                        "num_inference_steps": 28, "guidance_scale": 3.0, "output_format": "png"}
             )
             duration = time.time() - start_time
-            credits_used = max(10, int(round(duration * 12)))
-            cost_usd = duration * 0.00115
+            cost_usd = duration * 0.001525
+            credits_used = required_credits
             log_replicate_call(project_id, "replicate/seamless-texture", duration, credits_used, cost_usd)
             total_credits += credits_used
             for idx, out_url in enumerate(output if isinstance(output, list) else [output]):
@@ -589,7 +634,7 @@ def generate_inspirations():
             print(f"  [Inspirations] FSTL generation error: {e}")
             errors.append(str(e))
     else:
-        models = data.get('models', ['openai/gpt-image-2'])
+        models = requested_models
         if not models:
             models = ['openai/gpt-image-2']
         
@@ -669,11 +714,7 @@ def generate_inspirations():
                         # like fofr/style-transfer (L40S) or seamless-texture (H100)
                         cost_usd = duration * 0.001525 
                     
-                    # Add 20% profit margin for user billing
-                    retail_usd = cost_usd * 1.20
-                    
-                    # 1000 credits = $1.00 scale for accuracy (charged based on retail price)
-                    credits_used = max(10, int(round(retail_usd * 1000)))
+                    credits_used = MODEL_TO_CREDITS.get(model_id, DEFAULT_INSPIRE_CREDITS)
                     
                     # Log actual cost to vendor, but deduct retail credits from user
                     log_replicate_call(project_id, model_id, duration, credits_used, cost_usd)

@@ -64,7 +64,7 @@ const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
         ctx.fillRect(0, 0, offscreen.width, offscreen.height);
         // Draw the white strokes over it
         ctx.drawImage(c, 0, 0);
-        
+
         onComplete(offscreen.toDataURL('image/png'));
     };
 
@@ -73,10 +73,10 @@ const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
             <div style={{ background: '#1e1e2e', padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '90vw', maxHeight: '90vh' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ margin: 0, color: 'white' }}>Paint Custom Mask</h3>
-                    <button onClick={onCancel} style={{ background: 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}><I d="M6 18L18 6M6 6l12 12" s={24}/></button>
+                    <button onClick={onCancel} style={{ background: 'transparent', color: 'white', border: 'none', cursor: 'pointer' }}><I d="M6 18L18 6M6 6l12 12" s={24} /></button>
                 </div>
                 <p style={{ margin: 0, color: '#a1a1aa', fontSize: '14px' }}>Brush over the area where you want the pattern to be applied.</p>
-                
+
                 <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                     <label style={{ color: 'white', fontSize: '14px' }}>Brush Size: {brushSize}px</label>
                     <input type="range" min="5" max="100" value={brushSize} onChange={e => setBrushSize(parseInt(e.target.value))} style={{ flex: 1 }} />
@@ -84,7 +84,7 @@ const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
                 </div>
 
                 <div style={{ position: 'relative', overflow: 'auto', flex: 1, border: '1px solid #3f3f46', borderRadius: '8px', background: `url(${imageUrl})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }}>
-                    <canvas 
+                    <canvas
                         ref={canvasRef}
                         onMouseDown={startDraw}
                         onMouseMove={draw}
@@ -206,7 +206,7 @@ export default function MappingsTool(props) {
 
     const generateMockups = async () => {
         if (!mappingPrint?.filename || mappingSelectedProducts.size === 0) return;
-        const requiredCredits = mappingSelectedProducts.size * (creditPricing.mappings || 50);
+        const requiredCredits = mappingSelectedProducts.size * (creditPricing.mappings || 58);
         if (userRemainingCredits < requiredCredits) {
             setError(`Insufficient credits. Mockup generation needs ${requiredCredits} credits, but you have ${userRemainingCredits} remaining.`);
             return;
@@ -253,388 +253,412 @@ export default function MappingsTool(props) {
     // ===== COLORWAYS FUNCTIONS =====
 
 
-        const STEPS = ['Upload Print', 'Select Category', 'Choose Products', 'Map & Preview'];
-        const currentProducts = MAPPING_PRODUCTS[mappingCategory] || [];
-        const filteredProducts = mappingProductSearch
-            ? currentProducts.filter(p => p.name.toLowerCase().includes(mappingProductSearch.toLowerCase()))
-            : currentProducts;
-        const mappingCreditCost = mappingSelectedProducts.size * (creditPricing.mappings || 50);
-        const hasEnoughMappingCredits = userRemainingCredits >= mappingCreditCost;
+    const STEPS = ['Upload Print', 'Select Category', 'Choose Products', 'Map & Preview'];
+    const currentProducts = MAPPING_PRODUCTS[mappingCategory] || [];
+    const filteredProducts = mappingProductSearch
+        ? currentProducts.filter(p => p.name.toLowerCase().includes(mappingProductSearch.toLowerCase()))
+        : currentProducts;
+    const mappingCreditCost = mappingSelectedProducts.size * (creditPricing.mappings || 58);
+    const hasEnoughMappingCredits = userRemainingCredits >= mappingCreditCost;
 
-        return (
-            <div className="st-map-wizard">
-                {/* Step indicator */}
-                <div className="st-map-steps">
-                    {STEPS.map((label, i) => (
-                        <React.Fragment key={i}>
-                            <div
-                                className={`st-map-step ${mappingStep === i + 1 ? 'active' : ''} ${mappingStep > i + 1 ? 'completed' : ''}`}
-                                onClick={() => { if (i + 1 < mappingStep || (i + 1 === 2 && mappingPrint)) setMappingStep(i + 1); }}
-                            >
-                                <div className="st-map-step-num">
-                                    {mappingStep > i + 1 ? <I d="M5 13l4 4L19 7" s={14} /> : i + 1}
-                                </div>
-                                <span className="st-map-step-label">{label}</span>
+    return (
+        <div className="st-map-wizard">
+            {/* Step indicator */}
+            <div className="st-map-steps">
+                {STEPS.map((label, i) => (
+                    <React.Fragment key={i}>
+                        <div
+                            className={`st-map-step ${mappingStep === i + 1 ? 'active' : ''} ${mappingStep > i + 1 ? 'completed' : ''}`}
+                            onClick={() => { if (i + 1 < mappingStep || (i + 1 === 2 && mappingPrint)) setMappingStep(i + 1); }}
+                        >
+                            <div className="st-map-step-num">
+                                {mappingStep > i + 1 ? <I d="M5 13l4 4L19 7" s={14} /> : i + 1}
                             </div>
-                            {i < STEPS.length - 1 && (
-                                <div className={`st-map-step-line ${mappingStep > i + 1 ? 'done' : ''}`} />
+                            <span className="st-map-step-label">{label}</span>
+                        </div>
+                        {i < STEPS.length - 1 && (
+                            <div className={`st-map-step-line ${mappingStep > i + 1 ? 'done' : ''}`} />
+                        )}
+                    </React.Fragment>
+                ))}
+            </div>
+
+            {/* Step 1: Upload Print */}
+            {mappingStep === 1 && (
+                <div className="st-map-section">
+                    <h2 className="st-map-section-title">Upload Your Print</h2>
+                    <p className="st-map-section-desc">Upload a high quality print or pattern</p>
+                    <div className="st-map-upload-row">
+                        <div
+                            className={`st-map-upload-zone ${mappingPrintPreview ? 'has-image' : ''}`}
+                            onClick={() => !mappingPrintPreview && mapFileRef.current?.click()}
+                            onDrop={(e) => { e.preventDefault(); handleMappingUpload(e.dataTransfer.files[0]); }}
+                            onDragOver={(e) => e.preventDefault()}
+                        >
+                            {mappingPrintPreview ? (
+                                <>
+                                    <div className="st-map-upload-icon" style={{ background: '#dcfce7', color: '#16a34a' }}>
+                                        <I d="M5 13l4 4L19 7" s={24} />
+                                    </div>
+                                    <h3>Print uploaded successfully!</h3>
+                                    <p>{mappingPrint?.file?.name || 'pattern.png'}</p>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="st-map-upload-icon">
+                                        <I d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" s={24} />
+                                    </div>
+                                    <h3>Drag & drop your image here</h3>
+                                    <p>or</p>
+                                    <button className="st-map-upload-btn" type="button">Upload Image</button>
+                                    <p className="st-map-upload-formats">Supports: PNG, JPG, SVG (Max 50MB)</p>
+                                </>
                             )}
-                        </React.Fragment>
-                    ))}
-                </div>
-
-                {/* Step 1: Upload Print */}
-                {mappingStep === 1 && (
-                    <div className="st-map-section">
-                        <h2 className="st-map-section-title">Upload Your Print</h2>
-                        <p className="st-map-section-desc">Upload a high quality print or pattern</p>
-                        <div className="st-map-upload-row">
-                            <div
-                                className={`st-map-upload-zone ${mappingPrintPreview ? 'has-image' : ''}`}
-                                onClick={() => !mappingPrintPreview && mapFileRef.current?.click()}
-                                onDrop={(e) => { e.preventDefault(); handleMappingUpload(e.dataTransfer.files[0]); }}
-                                onDragOver={(e) => e.preventDefault()}
-                            >
-                                {mappingPrintPreview ? (
-                                    <>
-                                        <div className="st-map-upload-icon" style={{ background: '#dcfce7', color: '#16a34a' }}>
-                                            <I d="M5 13l4 4L19 7" s={24} />
-                                        </div>
-                                        <h3>Print uploaded successfully!</h3>
-                                        <p>{mappingPrint?.file?.name || 'pattern.png'}</p>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="st-map-upload-icon">
-                                            <I d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" s={24} />
-                                        </div>
-                                        <h3>Drag & drop your image here</h3>
-                                        <p>or</p>
-                                        <button className="st-map-upload-btn" type="button">Upload Image</button>
-                                        <p className="st-map-upload-formats">Supports: PNG, JPG, SVG (Max 50MB)</p>
-                                    </>
-                                )}
-                            </div>
-                            <input ref={mapFileRef} type="file" accept=".jpg,.jpeg,.png,.webp,.svg" hidden onChange={(e) => handleMappingUpload(e.target.files[0])} />
-
-                            <div className="st-map-print-preview">
-                                <div className="st-map-print-preview-title">Print Preview</div>
-                                {mappingPrintPreview ? (
-                                    <>
-                                        <img className="st-map-print-img" src={mappingPrintPreview} alt="Print Preview" />
-                                        <div className="st-map-print-info">
-                                            <div className="st-map-print-name">
-                                                Print Name
-                                                <span>{mappingPrint?.file?.name || 'pattern.png'}</span>
-                                            </div>
-                                            <button className="st-map-replace-btn" onClick={() => mapFileRef.current?.click()}>Replace</button>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="st-map-print-empty">
-                                        <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={32} />
-                                        <span>Upload a print to preview</span>
-                                    </div>
-                                )}
-                            </div>
                         </div>
-                    </div>
-                )}
+                        <input ref={mapFileRef} type="file" accept=".jpg,.jpeg,.png,.webp,.svg" hidden onChange={(e) => handleMappingUpload(e.target.files[0])} />
 
-                {/* Step 2: Select Category */}
-                {mappingStep === 2 && (
-                    <div className="st-map-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '360px' }}>
-                        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                            <h2 className="st-map-section-title" style={{ fontSize: '1.15rem' }}>What are you creating?</h2>
-                            <p className="st-map-section-desc" style={{ margin: 0 }}>Choose a product category to see available mockup templates</p>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', width: '100%', maxWidth: '720px' }}>
-                            {MAPPING_CATEGORIES.map(cat => {
-                                const active = mappingCategory === cat.id;
-                                const productCount = (MAPPING_PRODUCTS[cat.id] || []).length;
-                                return (
-                                    <div
-                                        key={cat.id}
-                                        onClick={() => { setMappingCategory(cat.id); setMappingSelectedProducts(new Set()); }}
-                                        style={{
-                                            border: active ? `2px solid ${cat.color}` : '2px solid #e5e7eb',
-                                            borderRadius: '16px', padding: '20px 16px', cursor: 'pointer',
-                                            background: active ? `${cat.color}08` : '#fff',
-                                            transition: 'all 0.25s ease', position: 'relative',
-                                            textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center',
-                                            boxShadow: active ? `0 4px 20px ${cat.color}15` : '0 1px 3px rgba(0,0,0,0.04)',
-                                        }}
-                                    >
-                                        {active && (
-                                            <div style={{ position: 'absolute', top: '10px', right: '10px', width: '22px', height: '22px', borderRadius: '50%', background: cat.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <I d="M5 13l4 4L19 7" s={12} style={{ color: '#fff' }} />
-                                            </div>
-                                        )}
-                                        <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: active ? `${cat.color}18` : '#f3f4f6', color: active ? cat.color : '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px', transition: 'all 0.25s ease' }}>
-                                            <I d={cat.icon} s={24} />
+                        <div className="st-map-print-preview">
+                            <div className="st-map-print-preview-title">Print Preview</div>
+                            {mappingPrintPreview ? (
+                                <>
+                                    <img className="st-map-print-img" src={mappingPrintPreview} alt="Print Preview" />
+                                    <div className="st-map-print-info">
+                                        <div className="st-map-print-name">
+                                            Print Name
+                                            <span>{mappingPrint?.file?.name || 'pattern.png'}</span>
                                         </div>
-                                        <div style={{ fontSize: '0.88rem', fontWeight: 750, color: '#1f2937', marginBottom: '4px' }}>{cat.label}</div>
-                                        <div style={{ fontSize: '0.7rem', color: '#6b7280', lineHeight: 1.4, marginBottom: '10px' }}>{cat.desc}</div>
-                                        <span style={{ fontSize: '0.65rem', fontWeight: 600, padding: '3px 10px', borderRadius: '8px', background: active ? `${cat.color}12` : '#f3f4f6', color: active ? cat.color : '#9ca3af' }}>
-                                            {cat.id === 'custom' ? 'Unlimited' : `${productCount} products`}
-                                        </span>
+                                        <button className="st-map-replace-btn" onClick={() => mapFileRef.current?.click()}>Replace</button>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* Step 3: Choose Products or Customizer */}
-                {mappingStep === 3 && (
-                    <div className="st-map-section">
-                        <h2 className="st-map-section-title">{mappingCategory === 'custom' ? 'Custom Mask & Settings' : 'Choose Products'}</h2>
-                        <p className="st-map-section-desc">{mappingCategory === 'custom' ? 'Upload a product photo, paint a mask, and adjust settings' : 'Select the products you want to map this print on'}</p>
-
-                        {mappingCategory !== 'custom' ? (
-                            <>
-                                <div className="st-map-products-header">
-                                    <div className="st-map-selected-count">{mappingSelectedProducts.size} product{mappingSelectedProducts.size !== 1 ? 's' : ''} selected</div>
-                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                        <div className="st-map-products-search">
-                                            <I d="M21 21l-4.3-4.3M10 18a8 8 0 100-16 8 8 0 000 16z" s={16} />
-                                            <input placeholder="Search products..." value={mappingProductSearch} onChange={e => setMappingProductSearch(e.target.value)} />
-                                        </div>
-                                        {mappingSelectedProducts.size > 0 && (
-                                            <button className="st-map-clear-btn" onClick={() => setMappingSelectedProducts(new Set())}>Clear All</button>
-                                        )}
-                                    </div>
+                                </>
+                            ) : (
+                                <div className="st-map-print-empty">
+                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={32} />
+                                    <span>Upload a print to preview</span>
                                 </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
-                                <div className="st-map-products-grid">
-                                    {filteredProducts.map(product => (
-                                        <div
-                                            key={product.id}
-                                            className={`st-map-product ${mappingSelectedProducts.has(product.id) ? 'selected' : ''}`}
-                                            onClick={() => { toggleMappingProduct(product.id); }}
-                                            style={{ overflow: 'hidden' }}
-                                        >
-                                            <div className="st-map-product-check">
-                                                <I d="M5 13l4 4L19 7" s={14} />
-                                            </div>
-                                            <div className="st-map-product-image-container" style={{ width: '100%', height: '120px', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                {product.image ? (
-                                                    <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                                ) : (
-                                                    <div className="st-map-product-icon">
-                                                        <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={28} />
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="st-map-product-name">{product.name}</div>
-                                        </div>
-                                    ))}
-                                    {filteredProducts.length === 0 && (
-                                        <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                            No products available in this category yet.
+            {/* Step 2: Select Category */}
+            {mappingStep === 2 && (
+                <div className="st-map-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '360px' }}>
+                    <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                        <h2 className="st-map-section-title" style={{ fontSize: '1.15rem' }}>What are you creating?</h2>
+                        <p className="st-map-section-desc" style={{ margin: 0 }}>Choose a product category to see available mockup templates</p>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', width: '100%', maxWidth: '720px' }}>
+                        {MAPPING_CATEGORIES.map(cat => {
+                            const active = mappingCategory === cat.id;
+                            const productCount = (MAPPING_PRODUCTS[cat.id] || []).length;
+                            return (
+                                <div
+                                    key={cat.id}
+                                    onClick={() => { setMappingCategory(cat.id); setMappingSelectedProducts(new Set()); }}
+                                    style={{
+                                        border: active ? `2px solid ${cat.color}` : '2px solid #e5e7eb',
+                                        borderRadius: '16px', padding: '20px 16px', cursor: 'pointer',
+                                        background: active ? `${cat.color}08` : '#fff',
+                                        transition: 'all 0.25s ease', position: 'relative',
+                                        textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                                        boxShadow: active ? `0 4px 20px ${cat.color}15` : '0 1px 3px rgba(0,0,0,0.04)',
+                                    }}
+                                >
+                                    {active && (
+                                        <div style={{ position: 'absolute', top: '10px', right: '10px', width: '22px', height: '22px', borderRadius: '50%', background: cat.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <I d="M5 13l4 4L19 7" s={12} style={{ color: '#fff' }} />
                                         </div>
                                     )}
-                                </div>
-                            </>
-                        ) : (
-                            <div className="st-map-customizer" style={{ background: 'var(--bg-secondary)', padding: '24px', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>1. Reference Image</label>
-                                            <div 
-                                                style={{ border: '2px dashed var(--border)', borderRadius: '8px', padding: '20px', textAlign: 'center', cursor: 'pointer', background: 'var(--bg-tertiary)', position: 'relative', overflow: 'hidden' }}
-                                                onClick={() => {
-                                                    const input = document.createElement('input');
-                                                    input.type = 'file';
-                                                    input.accept = 'image/*';
-                                                    input.onchange = (e) => {
-                                                        const file = e.target.files[0];
-                                                        if (file) {
-                                                            setMappingCustomReference(file);
-                                                            const r = new FileReader();
-                                                            r.onload = (e) => {
-                                                                setMappingCustomReferencePreview(e.target.result);
-                                                                setMappingCustomMask(null); // Reset mask
-                                                                const newSet = new Set(mappingSelectedProducts);
-                                                                newSet.add('custom_product');
-                                                                setMappingSelectedProducts(newSet);
-                                                            };
-                                                            r.readAsDataURL(file);
-                                                        }
-                                                    };
-                                                    input.click();
-                                                }}
-                                            >
-                                                {mappingCustomReferencePreview ? (
-                                                    <img src={mappingCustomReferencePreview} style={{ width: '100%', height: '160px', objectFit: 'contain' }} alt="Reference" />
-                                                ) : (
-                                                    <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Click to upload product image</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>2. Target Area Mask</label>
-                                            <button 
-                                                className="st-map-primary-btn" 
-                                                style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px' }}
-                                                onClick={() => { if(mappingCustomReferencePreview) setIsCanvasOpen(true); else alert('Upload reference image first'); }}
-                                            >
-                                                <I d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" s={18} />
-                                                {mappingCustomMask ? 'Edit Painted Mask' : 'Paint Masking Area'}
-                                            </button>
-                                            {mappingCustomMask && <div style={{ fontSize: '12px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}><I d="M5 13l4 4L19 7" s={14}/> Mask applied</div>}
-                                        </div>
+                                    <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: active ? `${cat.color}18` : '#f3f4f6', color: active ? cat.color : '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px', transition: 'all 0.25s ease' }}>
+                                        <I d={cat.icon} s={24} />
                                     </div>
-
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>3. Describe Product (AI Prompt)</label>
-                                            <textarea 
-                                                placeholder="e.g. A modern living room sofa with natural sunlight" 
-                                                style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', minHeight: '60px', resize: 'vertical' }}
-                                                value={mappingCustomPrompt}
-                                                onChange={e => setMappingCustomPrompt(e.target.value)}
-                                            />
-                                        </div>
-
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Background Environment</label>
-                                            <select value={mappingBackground} onChange={e => setMappingBackground(e.target.value)} style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
-                                                <option value="studio">Studio Lighting (Clean)</option>
-                                                <option value="lifestyle">Lifestyle / Indoor</option>
-                                                <option value="outdoor">Outdoor / Natural</option>
-                                                <option value="minimal">Minimalist</option>
-                                            </select>
-                                        </div>
-
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Fabric Material</label>
-                                            <select value={mappingFabricTexture} onChange={e => setMappingFabricTexture(e.target.value)} style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
-                                                <option value="cotton">Cotton / Matte</option>
-                                                <option value="silk">Silk / Satin (Glossy)</option>
-                                                <option value="linen">Linen (Textured)</option>
-                                                <option value="velvet">Velvet (Plush)</option>
-                                                <option value="canvas">Canvas / Heavy</option>
-                                            </select>
-                                        </div>
-                                    </div>
+                                    <div style={{ fontSize: '0.88rem', fontWeight: 750, color: '#1f2937', marginBottom: '4px' }}>{cat.label}</div>
+                                    <div style={{ fontSize: '0.7rem', color: '#6b7280', lineHeight: 1.4, marginBottom: '10px' }}>{cat.desc}</div>
+                                    <span style={{ fontSize: '0.65rem', fontWeight: 600, padding: '3px 10px', borderRadius: '8px', background: active ? `${cat.color}12` : '#f3f4f6', color: active ? cat.color : '#9ca3af' }}>
+                                        {cat.id === 'custom' ? 'Unlimited' : `${productCount} products`}
+                                    </span>
                                 </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Step 4: Map & Preview (results) */}
-                {mappingStep === 4 && (
-                    <div className="st-map-section">
-                        <h2 className="st-map-section-title">Map Your Print</h2>
-                        <p className="st-map-section-desc">AI-generated product mockups with your pattern</p>
-
-                        {/* Loading state */}
-                        {isMappingGenerating && (
-                            <div style={{ textAlign: 'center', padding: '3.5rem 2rem' }}>
-                                <div className="st-ai-processing" style={{ margin: '0 auto' }}>
-                                    <div className="st-ai-sparkle-container">
-                                        <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
-                                        <div className="st-ai-ring" />
-                                        <div className="st-ai-ring" />
-                                        <div className="st-ai-ring" />
-                                    </div>
-                                </div>
-                                <p style={{ fontWeight: 800, color: '#111827', fontSize: '1.05rem', marginTop: '1.5rem', letterSpacing: '-0.02em' }}>Generating AI Mockups</p>
-                                <p style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 500, marginTop: '0.35rem' }}>Mapping your pattern onto selected products — 30-60s per product</p>
-                            </div>
-                        )}
-
-                        {mappingResults.length > 0 && (
-                            <div className="st-map-results">
-                                <div className="st-map-results-grid">
-                                    {mappingResults.map((result, idx) => (
-                                        <div key={idx} className="st-map-result-card">
-                                            <img src={`${API}${result.mockupUrl}`} alt={result.productType} />
-                                            <div className="st-map-result-info">
-                                                <span className="st-map-result-name">{result.productType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
-                                                <a className="st-map-result-dl" href={`${API}${result.mockupUrl}`} download onClick={(e) => forceDownload(e, `${API}${result.mockupUrl}`)}>
-                                                    <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
-                                                </a>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {!isMappingGenerating && mappingResults.length === 0 && (
-                            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
-                                <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" s={40} />
-                                <p style={{ marginTop: '1rem', fontWeight: 600, color: '#6b7280' }}>Click "Generate Mockups" to create your product mockups</p>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Custom Canvas Modal */}
-                {isCanvasOpen && mappingCustomReferencePreview && (
-                    <CustomMappingCanvas 
-                        imageUrl={mappingCustomReferencePreview}
-                        onCancel={() => setIsCanvasOpen(false)}
-                        onComplete={(maskUrl) => {
-                            setMappingCustomMask(maskUrl);
-                            setIsCanvasOpen(false);
-                        }}
-                    />
-                )}
-
-                {/* Footer with Back / Next navigation */}
-                <div className="st-map-footer">
-                    <div className="st-map-footer-left">
-                        {mappingStep > 1 && (
-                            <button onClick={() => setMappingStep(s => s - 1)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <I d="M19 12H5M12 19l-7-7 7-7" s={16} /> Back
-                            </button>
-                        )}
-                        <button onClick={() => {
-                            setMappingStep(1);
-                            setMappingPrint(null);
-                            setMappingPrintPreview(null);
-                            setMappingSelectedProducts(new Set());
-                            setMappingResults([]);
-                        }} style={{ color: '#9ca3af' }}>Reset</button>
-                    </div>
-                    <div className="st-map-footer-right">
-                        {mappingStep < 4 ? (
-                            <button
-                                className="st-map-primary-btn"
-                                disabled={
-                                    (mappingStep === 1 && !mappingPrint) ||
-                                    (mappingStep === 2 && !mappingCategory) ||
-                                    (mappingStep === 3 && mappingSelectedProducts.size === 0)
-                                }
-                                onClick={() => setMappingStep(s => s + 1)}
-                            >
-                                {mappingStep === 3 ? 'Continue to Generate' : 'Next Step'} <I d="M5 12h14M12 5l7 7-7 7" s={16} />
-                            </button>
-                        ) : (
-                            <button
-                                className={`st-map-primary-btn ${!hasEnoughMappingCredits ? 'insufficient-credits' : ''}`}
-                                disabled={!mappingPrint || mappingSelectedProducts.size === 0 || isMappingGenerating || !hasEnoughMappingCredits}
-                                onClick={generateMockups}
-                                title={!hasEnoughMappingCredits ? `Need ${mappingCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Generate mockups'}
-                            >
-                                {isMappingGenerating ? (
-                                    <><div className="st-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Generating...</>
-                                ) : !hasEnoughMappingCredits ? (
-                                    <>Need {mappingCreditCost} credits</>
-                                ) : (
-                                    <><I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} /> Generate Mockups ({mappingSelectedProducts.size})</>
-                                )}
-                            </button>
-                        )}
+                            );
+                        })}
                     </div>
                 </div>
+            )}
+
+            {/* Step 3: Choose Products or Customizer */}
+            {mappingStep === 3 && (
+                <div className="st-map-section">
+                    <h2 className="st-map-section-title">{mappingCategory === 'custom' ? 'Custom Mask & Settings' : 'Choose Products'}</h2>
+                    <p className="st-map-section-desc">{mappingCategory === 'custom' ? 'Upload a product photo, paint a mask, and adjust settings' : 'Select the products you want to map this print on'}</p>
+
+                    {mappingCategory !== 'custom' ? (
+                        <>
+                            <div className="st-map-products-header">
+                                <div className="st-map-selected-count">{mappingSelectedProducts.size} product{mappingSelectedProducts.size !== 1 ? 's' : ''} selected</div>
+                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                    <div className="st-map-products-search">
+                                        <I d="M21 21l-4.3-4.3M10 18a8 8 0 100-16 8 8 0 000 16z" s={16} />
+                                        <input placeholder="Search products..." value={mappingProductSearch} onChange={e => setMappingProductSearch(e.target.value)} />
+                                    </div>
+                                    {mappingSelectedProducts.size > 0 && (
+                                        <button className="st-map-clear-btn" onClick={() => setMappingSelectedProducts(new Set())}>Clear All</button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="st-map-products-grid">
+                                {filteredProducts.map(product => (
+                                    <div
+                                        key={product.id}
+                                        className={`st-map-product ${mappingSelectedProducts.has(product.id) ? 'selected' : ''}`}
+                                        onClick={() => { toggleMappingProduct(product.id); }}
+                                        style={{ overflow: 'hidden' }}
+                                    >
+                                        <div className="st-map-product-check">
+                                            <I d="M5 13l4 4L19 7" s={14} />
+                                        </div>
+                                        <div className="st-map-product-image-container" style={{ width: '100%', height: '120px', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {product.image ? (
+                                                <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                            ) : (
+                                                <div className="st-map-product-icon">
+                                                    <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={28} />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="st-map-product-name">{product.name}</div>
+                                    </div>
+                                ))}
+                                {filteredProducts.length === 0 && (
+                                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                        No products available in this category yet.
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="st-map-custom-panel">
+                            <div className="st-map-custom-grid">
+                                <div className="st-map-custom-block">
+                                    <label className="st-map-field-label">1. Reference image</label>
+                                    <div
+                                        className={`st-map-custom-upload ${mappingCustomReferencePreview ? 'has-image' : ''}`}
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => {
+                                            const input = document.createElement('input');
+                                            input.type = 'file';
+                                            input.accept = 'image/*';
+                                            input.onchange = (e) => {
+                                                const file = e.target.files[0];
+                                                if (file) {
+                                                    setMappingCustomReference(file);
+                                                    const r = new FileReader();
+                                                    r.onload = (ev) => {
+                                                        setMappingCustomReferencePreview(ev.target.result);
+                                                        setMappingCustomMask(null);
+                                                        const newSet = new Set(mappingSelectedProducts);
+                                                        newSet.add('custom_product');
+                                                        setMappingSelectedProducts(newSet);
+                                                    };
+                                                    r.readAsDataURL(file);
+                                                }
+                                            };
+                                            input.click();
+                                        }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click(); }}
+                                    >
+                                        {mappingCustomReferencePreview ? (
+                                            <>
+                                                <img src={mappingCustomReferencePreview} alt="Product reference" />
+                                                <span>Click to replace</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={22} />
+                                                <span>Upload product photo</span>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="st-map-custom-block">
+                                    <label className="st-map-field-label">2. Target area mask</label>
+                                    <button
+                                        type="button"
+                                        className="st-map-mask-btn"
+                                        onClick={() => { if (mappingCustomReferencePreview) setIsCanvasOpen(true); else setError('Upload reference image first'); }}
+                                    >
+                                        <I d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" s={18} />
+                                        {mappingCustomMask ? 'Edit painted mask' : 'Paint masking area'}
+                                    </button>
+                                    {mappingCustomMask && (
+                                        <p className="st-map-mask-applied">
+                                            <I d="M5 13l4 4L19 7" s={14} />
+                                            Mask applied — pattern will fill this region
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="st-map-custom-block st-map-custom-block-wide">
+                                    <label className="st-map-field-label" htmlFor="mapping-custom-prompt">3. Describe product (AI prompt)</label>
+                                    <div className="st-map-chat-box">
+                                        <I d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7h2c3.1 0 5.5-2.5 5.5-5.5C22 6 17.5 2 12 2z" s={16} />
+                                        <textarea
+                                            id="mapping-custom-prompt"
+                                            placeholder="e.g. A modern living room sofa with natural sunlight"
+                                            value={mappingCustomPrompt}
+                                            onChange={(e) => setMappingCustomPrompt(e.target.value)}
+                                            rows={3}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="st-map-custom-block">
+                                    <label className="st-map-field-label" htmlFor="mapping-background">Background</label>
+                                    <select
+                                        id="mapping-background"
+                                        className="st-map-select"
+                                        value={mappingBackground}
+                                        onChange={(e) => setMappingBackground(e.target.value)}
+                                    >
+                                        <option value="studio">Studio lighting (clean)</option>
+                                        <option value="lifestyle">Lifestyle / indoor</option>
+                                        <option value="outdoor">Outdoor / natural</option>
+                                        <option value="minimal">Minimalist</option>
+                                    </select>
+                                </div>
+
+                                <div className="st-map-custom-block">
+                                    <label className="st-map-field-label" htmlFor="mapping-fabric">Fabric material</label>
+                                    <select
+                                        id="mapping-fabric"
+                                        className="st-map-select"
+                                        value={mappingFabricTexture}
+                                        onChange={(e) => setMappingFabricTexture(e.target.value)}
+                                    >
+                                        <option value="cotton">Cotton / matte</option>
+                                        <option value="silk">Silk / satin (glossy)</option>
+                                        <option value="linen">Linen (textured)</option>
+                                        <option value="velvet">Velvet (plush)</option>
+                                        <option value="canvas">Canvas / heavy</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Step 4: Map & Preview (results) */}
+            {mappingStep === 4 && (
+                <div className="st-map-section">
+                    <h2 className="st-map-section-title">Map Your Print</h2>
+                    <p className="st-map-section-desc">AI-generated product mockups with your pattern</p>
+
+                    {/* Loading state */}
+                    {isMappingGenerating && (
+                        <div style={{ textAlign: 'center', padding: '3.5rem 2rem' }}>
+                            <div className="st-ai-processing" style={{ margin: '0 auto' }}>
+                                <div className="st-ai-sparkle-container">
+                                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
+                                    <div className="st-ai-ring" />
+                                    <div className="st-ai-ring" />
+                                    <div className="st-ai-ring" />
+                                </div>
+                            </div>
+                            <p style={{ fontWeight: 800, color: '#111827', fontSize: '1.05rem', marginTop: '1.5rem', letterSpacing: '-0.02em' }}>Generating AI Mockups</p>
+                            <p style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 500, marginTop: '0.35rem' }}>Mapping your pattern onto selected products — 30-60s per product</p>
+                        </div>
+                    )}
+
+                    {mappingResults.length > 0 && (
+                        <div className="st-map-results">
+                            <div className="st-map-results-grid">
+                                {mappingResults.map((result, idx) => (
+                                    <div key={idx} className="st-map-result-card">
+                                        <img src={`${API}${result.mockupUrl}`} alt={result.productType} />
+                                        <div className="st-map-result-info">
+                                            <span className="st-map-result-name">{result.productType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                                            <a className="st-map-result-dl" href={`${API}${result.mockupUrl}`} download onClick={(e) => forceDownload(e, `${API}${result.mockupUrl}`)}>
+                                                <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
+                                            </a>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {!isMappingGenerating && mappingResults.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
+                            <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" s={40} />
+                            <p style={{ marginTop: '1rem', fontWeight: 600, color: '#6b7280' }}>Click "Generate Mockups" to create your product mockups</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Custom Canvas Modal */}
+            {isCanvasOpen && mappingCustomReferencePreview && (
+                <CustomMappingCanvas
+                    imageUrl={mappingCustomReferencePreview}
+                    onCancel={() => setIsCanvasOpen(false)}
+                    onComplete={(maskUrl) => {
+                        setMappingCustomMask(maskUrl);
+                        setIsCanvasOpen(false);
+                    }}
+                />
+            )}
+
+            {/* Footer with Back / Next navigation */}
+            <div className="st-map-footer">
+                <div className="st-map-footer-left">
+                    {mappingStep > 1 && (
+                        <button onClick={() => setMappingStep(s => s - 1)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <I d="M19 12H5M12 19l-7-7 7-7" s={16} /> Back
+                        </button>
+                    )}
+                    <button onClick={() => {
+                        setMappingStep(1);
+                        setMappingPrint(null);
+                        setMappingPrintPreview(null);
+                        setMappingSelectedProducts(new Set());
+                        setMappingResults([]);
+                    }} style={{ color: '#9ca3af' }}>Reset</button>
+                </div>
+                <div className="st-map-footer-right">
+                    {mappingStep < 4 ? (
+                        <button
+                            className="st-map-primary-btn"
+                            disabled={
+                                (mappingStep === 1 && !mappingPrint) ||
+                                (mappingStep === 2 && !mappingCategory) ||
+                                (mappingStep === 3 && mappingSelectedProducts.size === 0)
+                            }
+                            onClick={() => setMappingStep(s => s + 1)}
+                        >
+                            {mappingStep === 3 ? 'Continue to Generate' : 'Next Step'} <I d="M5 12h14M12 5l7 7-7 7" s={16} />
+                        </button>
+                    ) : (
+                        <button
+                            className={`st-map-primary-btn ${!hasEnoughMappingCredits ? 'insufficient-credits' : ''}`}
+                            disabled={!mappingPrint || mappingSelectedProducts.size === 0 || isMappingGenerating || !hasEnoughMappingCredits}
+                            onClick={generateMockups}
+                            title={!hasEnoughMappingCredits ? `Need ${mappingCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Generate mockups'}
+                        >
+                            {isMappingGenerating ? (
+                                <><div className="st-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Generating...</>
+                            ) : !hasEnoughMappingCredits ? (
+                                <>Need {mappingCreditCost} credits</>
+                            ) : (
+                                <><I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} /> Generate Mockups ({mappingSelectedProducts.size})</>
+                            )}
+                        </button>
+                    )}
+                </div>
             </div>
-        );
+        </div>
+    );
 
 }

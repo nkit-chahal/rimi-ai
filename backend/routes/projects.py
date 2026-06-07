@@ -41,7 +41,7 @@ def update_project(project_id):
     conn = db()
 
     # Verify ownership
-    project = conn.execute("SELECT id FROM projects WHERE id = ? AND (user_id = ? OR user_id IS NULL)", (project_id, user_id)).fetchone()
+    project = conn.execute("SELECT id FROM projects WHERE id = ? AND user_id = ?", (project_id, user_id)).fetchone()
     if not project:
         conn.close()
         return jsonify({'success': False, 'error': 'Project not found'}), 404
@@ -74,7 +74,7 @@ def delete_project(project_id):
     conn = db()
 
     # Verify ownership
-    project = conn.execute("SELECT id FROM projects WHERE id = ? AND (user_id = ? OR user_id IS NULL)", (project_id, user_id)).fetchone()
+    project = conn.execute("SELECT id FROM projects WHERE id = ? AND user_id = ?", (project_id, user_id)).fetchone()
     if not project:
         conn.close()
         return jsonify({'success': False, 'error': 'Project not found'}), 404
@@ -115,6 +115,7 @@ def delete_project(project_id):
     conn.execute("DELETE FROM project_controls WHERE project_id = ?", (project_id,))
     conn.execute("DELETE FROM suggestions WHERE project_id = ?", (project_id,))
     conn.execute("DELETE FROM pipeline_runs WHERE project_id = ?", (project_id,))
+    conn.execute("DELETE FROM exports WHERE project_id = ?", (project_id,))
     conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
     conn.commit()
     conn.close()

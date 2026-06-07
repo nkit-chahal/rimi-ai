@@ -37,7 +37,8 @@ def resolve_user_id(user_id=None):
         return None
 
 
-def log_export(project_id, filename, input_filename, tool_type, settings_dict=None, pipeline_run_id=None, pipeline_steps_list=None):
+def log_export(project_id, filename, input_filename, tool_type, settings_dict=None, pipeline_run_id=None, pipeline_steps_list=None, user_id=None):
+    user_id = resolve_user_id(user_id)
     settings_json = json.dumps(settings_dict) if settings_dict is not None else '{}'
     pipeline_steps_json = json.dumps(pipeline_steps_list) if pipeline_steps_list is not None else None
     created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -48,10 +49,10 @@ def log_export(project_id, filename, input_filename, tool_type, settings_dict=No
             conn.execute(
                 """
                 INSERT OR IGNORE INTO exports 
-                (project_id, filename, input_filename, tool_type, settings_json, pipeline_run_id, pipeline_steps_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (user_id, project_id, filename, input_filename, tool_type, settings_json, pipeline_run_id, pipeline_steps_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (project_id, filename, input_filename, tool_type, settings_json, pipeline_run_id, pipeline_steps_json, created_at)
+                (user_id, project_id, filename, input_filename, tool_type, settings_json, pipeline_run_id, pipeline_steps_json, created_at)
             )
             conn.commit()
         except Exception as e:

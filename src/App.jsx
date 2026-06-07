@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './index.css';
+// import Landing from './pages/Landing'; // Landing page disabled — not used in product
 import Studio from './pages/Studio';
 import Login from './pages/Login';
 
@@ -68,19 +69,15 @@ function App() {
       return <Login onLogin={handleLogin} />;
     }
     return (
-      <Studio 
-        currentUser={currentUser} 
+      <Studio
+        currentUser={currentUser}
         currentToken={currentToken}
-        onLogout={handleLogout} 
+        onLogout={handleLogout}
       />
     );
   }
 
-  return (
-    <Login 
-      onLogin={handleLogin} 
-    />
-  );
+  return <Login onLogin={handleLogin} />;
 }
 
 export default App;

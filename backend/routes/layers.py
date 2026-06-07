@@ -45,7 +45,7 @@ def image_layers():
             user_id = int(user_id_raw)
         except ValueError:
             pass
-    required_credits = credit_requirement('imageLayers', 100)
+    required_credits = credit_requirement('imageLayers', 315)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -84,8 +84,8 @@ def image_layers():
             }
         )
         duration = time.time() - start_time
-        credits_used = max(20, int(round(duration * 12)))
-        cost_usd = duration * 0.00115
+        credits_used = required_credits
+        cost_usd = 0.03 + (0.01 * num_layers)
 
         log_replicate_call(project_id, "qwen/qwen-image-layered", duration, credits_used, cost_usd)
 
@@ -239,7 +239,7 @@ def edit_layer():
             user_id = int(user_id_raw)
         except ValueError:
             pass
-    required_credits = credit_requirement('imageLayerEdit', 15)
+    required_credits = credit_requirement('imageLayerEdit', 75)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -306,8 +306,8 @@ def edit_layer():
             }
         )
         duration = time.time() - start_time
-        credits_used = 15
-        cost_usd = duration * 0.001
+        credits_used = required_credits
+        cost_usd = 0.03
 
         log_replicate_call(project_id, "qwen/qwen-image-edit", duration, credits_used, cost_usd)
 
@@ -389,7 +389,7 @@ def inpaint_layer():
         except ValueError:
             pass
 
-    required_credits = credit_requirement('imageLayerEdit', 15)
+    required_credits = credit_requirement('imageLayerEdit', 75)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -460,8 +460,8 @@ def inpaint_layer():
             }
         )
         duration = time.time() - start_time
-        credits_used = 15
-        cost_usd = duration * 0.001
+        credits_used = required_credits
+        cost_usd = 0.03
         log_replicate_call(project_id, "qwen/qwen-image-edit", duration, credits_used, cost_usd)
 
         try:

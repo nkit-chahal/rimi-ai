@@ -38,7 +38,7 @@ def vectorize_image():
     num_colors = int(data.get('numColors', 32))
     project_id = int(data.get('projectId', 1))
     pricing_key = 'vectorize' if engine == 'api' else 'vectorizeLocal'
-    required_credits = get_credit_price(pricing_key, 100 if engine == 'api' else 5)
+    required_credits = get_credit_price(pricing_key, 25 if engine == 'api' else 5)
 
     # Extract user_id early for credit check
     user_id_raw = data.get('userId') or data.get('user_id')
@@ -98,7 +98,7 @@ def vectorize_image():
             )
             duration = time.time() - start_time
             credits_used = required_credits  # Recraft API / Vectorize Replicate flat
-            cost_usd = duration * 0.00115  # standard GPU-based logging estimation
+            cost_usd = 0.01
             log_replicate_call(project_id, "recraft-ai/recraft-vectorize", duration, credits_used, cost_usd)
 
             # Download the SVG result
@@ -224,7 +224,7 @@ def upscale():
             user_id_early = int(user_id_raw)
         except ValueError:
             pass
-    required_credits = credit_requirement('upscale', 60)
+    required_credits = credit_requirement('upscale', 50)
     ok, remaining, limit, used = check_credits(user_id_early, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -258,8 +258,8 @@ def upscale():
             }
         )
         duration = time.time() - start_time
-        credits_used = max(10, int(round(duration * 12)))
-        cost_usd = duration * 0.00115
+        credits_used = required_credits
+        cost_usd = 0.02
 
         project_id = int(data.get('projectId', 1))
         user_id = data.get('userId') or data.get('user_id')

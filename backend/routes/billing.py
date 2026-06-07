@@ -15,18 +15,28 @@ bp = Blueprint("billing", __name__)
 
 RAZORPAY_ORDERS_URL = "https://api.razorpay.com/v1/orders"
 
+# ---------------------------------------------------------------------------
+# Billing plans  (Option A: 4 credits per INR 1, ~57% gross margin)
+# Economics (INR 100 = USD 1):
+#   - Razorpay fee    : ~3% of gross
+#   - Vendor budget   : 1 credit = $0.001 of true vendor cost
+#                       At 4 credits/INR we collect INR 0.25 per credit and
+#                       spend INR 0.10  =>  ~57% gross margin per recharge
+#   - After Razorpay  : ~54% gross  (covers hosting, free-tier abuse, failed
+#                       runs, Groq side-calls; leaves room for GST + tax)
+# ---------------------------------------------------------------------------
 BILLING_PLANS = [
     {
         "id": "free",
-        "label": "Free",
+        "label": "Free Trial",
         "description": "Trial credits for testing the studio.",
-        "credits": 200,
+        "credits": 50,
         "amount": 0,
         "currency": "INR",
         "badge": "",
         "features": [
-            "200 starting credits",
-            "Use any AI design tool",
+            "50 starting credits",
+            "Try cheap models (Flux Schnell, Vectorize Local)",
             "Razorpay recharge anytime",
         ],
         "disabled": True,
@@ -35,59 +45,82 @@ BILLING_PLANS = [
         "id": "starter",
         "label": "Starter",
         "description": "Small production runs and evaluation.",
-        "credits": 5000,
+        "credits": 1996,
         "amount": 49900,
         "currency": "INR",
         "badge": "",
         "features": [
-            "5,000 AI credits",
-            "Good for quick pattern cleanup",
-            "Standard Razorpay checkout",
+            "1,996 AI credits",
+            "~13 Pattern Extractions (GPT Image 2)",
+            "~34 Make-Seamless / Mockup runs",
         ],
     },
     {
         "id": "creator",
         "label": "Creator",
         "description": "Best value for active textile workflows.",
-        "credits": 12000,
+        "credits": 3996,
         "amount": 99900,
         "currency": "INR",
         "badge": "Popular",
         "features": [
-            "12,000 AI credits",
-            "Pattern extraction, vectorize, seamless",
-            "Additional credits through Razorpay",
+            "3,996 AI credits",
+            "~27 Pattern Extractions, ~68 Seamless runs",
+            "Recommended for active studios",
         ],
     },
     {
         "id": "pro",
         "label": "Pro",
         "description": "For frequent studio use and client work.",
-        "credits": 50000,
+        "credits": 11996,
         "amount": 299900,
         "currency": "INR",
         "badge": "",
         "features": [
-            "50,000 AI credits",
+            "11,996 AI credits",
             "High-volume generation buffer",
-            "Works with all available AI tools",
+            "All AI tools unlocked",
         ],
     },
     {
         "id": "scale",
         "label": "Scale",
         "description": "Large credit top-up for production teams.",
-        "credits": 125000,
+        "credits": 27996,
         "amount": 699900,
         "currency": "INR",
         "badge": "",
         "features": [
-            "125,000 AI credits",
-            "Lowest listed per-credit rate",
+            "27,996 AI credits",
+            "Best per-credit rate",
             "Designed for team production usage",
         ],
     },
+    {
+        "id": "enterprise",
+        "label": "Enterprise",
+        "description": "For agencies and high-volume teams.",
+        "credits": 59996,
+        "amount": 1499900,
+        "currency": "INR",
+        "badge": "",
+        "features": [
+            "59,996 AI credits",
+            "Priority support",
+            "Bulk seat licensing on request",
+        ],
+    },
 ]
+
+# Custom top-up: 4 credits per INR 1 (matches all subscription plans).
+# Internal accounting convention: INR 100 = USD 1, 1 credit = $0.001 of vendor
+# budget.  At 4 cr/INR we collect INR 0.25 per credit and spend INR 0.10,
+# giving ~57% gross margin (~54% after Razorpay's ~3% fee).
+CUSTOM_CREDITS_PER_RUPEE = 4
+CUSTOM_MIN_AMOUNT_INR = 100       # Minimum INR 100  -> 400 credits
+CUSTOM_MAX_AMOUNT_INR = 100000    # Maximum INR 1,00,000 -> 4,00,000 credits
+INR_PER_USD = 100                 # INR 100 = $1 for internal accounting
 
 
 def _billing_plan_map():
@@ -180,6 +213,105 @@ def create_order():
     })
 
 
+@bp.route("/api/create-custom-order", methods=["POST"])
+@login_required
+def create_custom_order():
+    """Create a Razorpay order for a custom rupee amount.
+
+    Credits = amount_inr * CUSTOM_CREDITS_PER_RUPEE (4 credits per INR 1).
+    Internal accounting: INR 100 = $1.
+    """
+    data = request.get_json() or {}
+
+    try:
+        amount_inr = int(data.get("amountInr", 0))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid amount"}), 400
+
+    if amount_inr < CUSTOM_MIN_AMOUNT_INR:
+        return jsonify({
+            "success": False,
+            "error": f"Minimum amount is ₹{CUSTOM_MIN_AMOUNT_INR:,}",
+        }), 400
+
+    if amount_inr > CUSTOM_MAX_AMOUNT_INR:
+        return jsonify({
+            "success": False,
+            "error": f"Maximum amount is ₹{CUSTOM_MAX_AMOUNT_INR:,}",
+        }), 400
+
+    # Razorpay expects amount in paise (1 INR = 100 paise)
+    amount_paise = amount_inr * 100
+    credits = int(round(amount_inr * CUSTOM_CREDITS_PER_RUPEE))
+    currency = "INR"
+    pack_id = "custom"
+    receipt = str(data.get("receipt") or f"custom_{int(time.time())}")[:40]
+    user_id = g.current_user["id"]
+
+    key_id, key_secret = _razorpay_credentials()
+    if not key_id or not key_secret:
+        return jsonify({"success": False, "error": "Razorpay is not configured"}), 500
+
+    try:
+        response = requests.post(
+            RAZORPAY_ORDERS_URL,
+            json={
+                "amount": amount_paise,
+                "currency": currency,
+                "receipt": receipt,
+                "notes": {
+                    "pack_id": pack_id,
+                    "credits": credits,
+                    "custom_amount_inr": amount_inr,
+                },
+            },
+            auth=(key_id, key_secret),
+            timeout=20,
+        )
+    except requests.RequestException:
+        return jsonify({"success": False, "error": "Unable to connect to Razorpay"}), 500
+
+    if response.status_code == 401:
+        return jsonify({"success": False, "error": "Razorpay authentication failed"}), 401
+
+    if response.status_code >= 400:
+        return jsonify({"success": False, "error": "Razorpay order creation failed"}), 500
+
+    order = response.json()
+    created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    with db_lock:
+        conn = db()
+        try:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO payments
+                (user_id, provider_order_id, amount, currency, credits, pack_id, receipt, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'created', ?)
+                """,
+                (user_id, order["id"], order["amount"], order["currency"],
+                 credits, pack_id, receipt, created_at),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    return jsonify({
+        "success": True,
+        "order_id": order["id"],
+        "amount": order["amount"],
+        "currency": order["currency"],
+        "key_id": key_id,
+        "credits": credits,
+        "pack": {
+            "id": "custom",
+            "label": "Custom Top-up",
+            "credits": credits,
+            "amount": amount_paise,
+            "priceLabel": f"₹{amount_inr:,}",
+        },
+    })
+
+
 @bp.route("/api/billing/overview", methods=["GET"])
 @login_required
 def billing_overview():
@@ -218,7 +350,7 @@ def billing_overview():
             "currency": row["currency"],
             "credits": row["credits"],
             "packId": row["pack_id"],
-            "packLabel": plan["label"] if plan else (row["pack_id"] or "Credits"),
+            "packLabel": plan["label"] if plan else ("Custom Top-up" if row["pack_id"] == "custom" else (row["pack_id"] or "Credits")),
             "status": row["status"],
             "createdAt": row["created_at"],
             "paidAt": row["paid_at"],
@@ -297,9 +429,10 @@ def verify_payment():
                 )
                 if payment["user_id"] and payment["credits"] > 0:
                     plan = _billing_plan_map().get(payment["pack_id"] or "")
+                    plan_label = plan["label"] if plan else ("Custom Top-up" if payment["pack_id"] == "custom" else "Paid Credits")
                     conn.execute(
                         "UPDATE users SET credits_limit = credits_limit + ?, plan = ? WHERE id = ?",
-                        (payment["credits"], plan["label"] if plan else "Paid Credits", payment["user_id"])
+                        (payment["credits"], plan_label, payment["user_id"])
                     )
                     conn.execute(
                         """

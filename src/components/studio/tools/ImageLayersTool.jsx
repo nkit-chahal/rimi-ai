@@ -8,9 +8,9 @@ export default function ImageLayersTool(props) {
     const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, rightPanelEl, handleUpload, handlePreUpload, tool } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
-    const imageLayersCreditCost = creditPricing.imageLayers || 100;
+    const imageLayersCreditCost = creditPricing.imageLayers || 69;
     const hasEnoughImageLayersCredits = userRemainingCredits >= imageLayersCreditCost;
-    const layerEditCreditCost = creditPricing.imageLayerEdit || 15;
+    const layerEditCreditCost = creditPricing.imageLayerEdit || 35;
     const hasEnoughLayerEditCredits = userRemainingCredits >= layerEditCreditCost;
     const [isDrag, setIsDrag] = useState(false);
     const fileRef = useRef(null);
@@ -408,11 +408,11 @@ export default function ImageLayersTool(props) {
                     }).catch(err => console.error("Error editing fabric layer", err));
                 }
             } else {
-                alert(d.error || 'Layer edit failed');
+                setError(d.error || 'Layer edit failed');
             }
         } catch (e) {
             console.error(e);
-            alert('Error editing layer');
+            setError('Error editing layer');
         } finally {
             setIsEditingLayer(false);
         }
@@ -420,7 +420,7 @@ export default function ImageLayersTool(props) {
 
     const handleRecursiveDecompose = async () => {
         if (!selectedLayerId && selectedLayerId !== 0) {
-            alert('Select a layer to decompose further.');
+            setError('Select a layer to decompose further.');
             return;
         }
         if (!hasEnoughImageLayersCredits) {
@@ -526,7 +526,7 @@ export default function ImageLayersTool(props) {
             });
         } catch (e) {
             console.error(e);
-            alert(e.message || 'Error during recursive decomposition');
+            setError(e.message || 'Error during recursive decomposition');
         } finally {
             setIsProcessingAI(false);
         }
@@ -734,7 +734,7 @@ export default function ImageLayersTool(props) {
     const handleInpaintLayer = async () => {
         if (!selectedLayerId && selectedLayerId !== 0) return;
         if (!layerEditPrompt.trim()) {
-            alert('Enter an inpaint instruction first.');
+            setError('Enter an inpaint instruction first.');
             return;
         }
         if (!hasEnoughLayerEditCredits) {
@@ -749,7 +749,7 @@ export default function ImageLayersTool(props) {
 
         if (!canvas || !layerData || !objToReplace) return;
         if (!maskDataUrl) {
-            alert('Paint a mask on the canvas first.');
+            setError('Paint a mask on the canvas first.');
             return;
         }
 
@@ -821,7 +821,7 @@ export default function ImageLayersTool(props) {
             }).catch(err => console.error('Error loading inpainted layer', err));
         } catch (e) {
             console.error(e);
-            alert(e.message || 'Layer inpaint failed');
+            setError(e.message || 'Layer inpaint failed');
         } finally {
             setIsInpaintingLayer(false);
             setIsProcessingAI(false);
@@ -882,7 +882,7 @@ export default function ImageLayersTool(props) {
             document.body.removeChild(link);
         } catch (e) {
             console.error(e);
-            alert(e.message || 'Layer export failed');
+            setError(e.message || 'Layer export failed');
         } finally {
             setIsExportingLayers(false);
         }
@@ -973,263 +973,263 @@ export default function ImageLayersTool(props) {
 
 
     const renderCanvasBlock = () => {
-    return (
-        <div className={`st-layer-editor ${isImageLayersFullscreen ? 'fullscreen' : ''}`}>
-            {imageLayersResults.length > 0 ? (
-                <>
-                    <div className="st-qwen-layer-hero">
-                        <div>
-                            <div className="st-qwen-eyebrow">Qwen-Image-Layered</div>
-                            <h2>Editable RGBA layers with physical isolation</h2>
-                            <p>Decompose, recolor, revise, replace, resize, reposition, delete, and recursively split any selected layer.</p>
-                        </div>
-                        <button
-                            className="st-layer-fullscreen-btn"
-                            onClick={() => setIsImageLayersFullscreen(v => !v)}
-                            title={isImageLayersFullscreen ? 'Exit fullscreen' : 'Fullscreen editor'}
-                        >
-                            <I d={isImageLayersFullscreen ? 'M8 3v5H3M16 3v5h5M8 21v-5H3M16 21v-5h5' : 'M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5'} s={15} />
-                            {isImageLayersFullscreen ? 'Exit' : 'Fullscreen'}
-                        </button>
-                        <div className="st-qwen-depth-preview" aria-hidden="true">
-                            {[0, 1, 2, 3, 4].map(i => <span key={i} style={{ '--i': i }} />)}
-                        </div>
-                    </div>
-
-                    <div className="st-qwen-demo-strip">
-                        {qwenLayerDemoActions.map((demo) => (
+        return (
+            <div className={`st-layer-editor ${isImageLayersFullscreen ? 'fullscreen' : ''}`}>
+                {imageLayersResults.length > 0 ? (
+                    <>
+                        <div className="st-qwen-layer-hero">
+                            <div>
+                                <div className="st-qwen-eyebrow">Qwen-Image-Layered</div>
+                                <h2>Editable RGBA layers with physical isolation</h2>
+                                <p>Decompose, recolor, revise, replace, resize, reposition, delete, and recursively split any selected layer.</p>
+                            </div>
                             <button
-                                key={demo.label}
-                                className={`st-qwen-demo-card ${editType === demo.type ? 'active' : ''}`}
-                                onClick={() => applyQwenLayerDemo(demo)}
-                                title={demo.prompt || demo.label}
+                                className="st-layer-fullscreen-btn"
+                                onClick={() => setIsImageLayersFullscreen(v => !v)}
+                                title={isImageLayersFullscreen ? 'Exit fullscreen' : 'Fullscreen editor'}
                             >
-                                <I d={demo.icon} s={15} />
-                                <span>{demo.label}</span>
-                                {demo.prompt ? <small>{demo.prompt}</small> : null}
+                                <I d={isImageLayersFullscreen ? 'M8 3v5H3M16 3v5h5M8 21v-5H3M16 21v-5h5' : 'M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5'} s={15} />
+                                {isImageLayersFullscreen ? 'Exit' : 'Fullscreen'}
                             </button>
-                        ))}
-                    </div>
-
-                    <div className="st-layer-toolbar">
-                        <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('flipH')} title="Flip Horizontal">
-                            <I d="M15 21h2v-2h-2v2zm4-12h2V7h-2v2zM3 5v14c0 1.1.9 2 2 2h4v-2H5V5h4V3H5c-1.1 0-2 .9-2 2zm16-2v2h2c0-1.1-.9-2-2-2zm-8 20h2V1h-2v22zm8-6h2v-2h-2v2zM15 5h2V3h-2v2zm4 8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2z" s={14} /> Flip H
-                        </button>
-                        <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('flipV')} title="Flip Vertical">
-                            <I d="M7 8v8h2V8H7zm4 0v8h2V8h-2zm4 0v8h2V8h-2z" s={14} /> Flip V
-                        </button>
-                        <div className="st-layer-toolbar-sep" />
-                        <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('rotLeft')} title="Rotate Left 90 deg">
-                            <I d="M10 4v4h-4l5-5 5 5h-4v4" s={14} /> Rot L
-                        </button>
-                        <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('rotRight')} title="Rotate Right 90 deg">
-                            <I d="M14 4v4h4l-5-5-5 5h4v4" s={14} /> Rot R
-                        </button>
-                        <div className="st-layer-toolbar-sep" />
-                        <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('front')} title="Bring to Front">
-                            <I d="M4 4h8v8H4V4zm10 10h6v6h-6v-6z" s={14} /> Front
-                        </button>
-                        <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('back')} title="Send to Back">
-                            <I d="M14 14h6v6h-6v-6zM4 4h8v8H4V4z" s={14} /> Back
-                        </button>
-                        <div className="st-layer-toolbar-sep" />
-                        <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('delete')} title="Delete Selected">
-                            <I d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" s={14} /> Del
-                        </button>
-                        <div className="st-layer-toolbar-sep" />
-                        <button className="st-layer-toolbar-btn" onClick={resetLayersToBase} title="Reset all layers to original positions">
-                            <I d="M3 12a9 9 0 019-9 9.75 9.75 0 016.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 01-9 9 9.75 9.75 0 01-6.74-2.74L3 16M3 21v-5h5" s={14} /> Base
-                        </button>
-                        <button className="st-layer-toolbar-btn" onClick={() => setImageLayerZoom(layerCanvasZoom - 0.15)} title="Zoom Out">
-                            <I d="M5 12h14" s={14} /> Zoom
-                        </button>
-                        <div className="st-layer-zoom-readout">{Math.round(layerCanvasZoom * 100)}%</div>
-                        <button className="st-layer-toolbar-btn" onClick={() => setImageLayerZoom(layerCanvasZoom + 0.15)} title="Zoom In">
-                            <I d="M12 5v14M5 12h14" s={14} /> Zoom
-                        </button>
-                        <button className="st-layer-toolbar-btn" onClick={resetImageLayerView} title="Reset zoom and pan">
-                            <I d="M4 4h16v16H4z" s={14} /> View
-                        </button>
-                        <div className="st-layer-toolbar-sep" />
-                        <button className={`st-layer-toolbar-btn ${isLayerMaskMode ? 'active' : ''}`} onClick={() => setIsLayerMaskMode(v => !v)} title="Paint an inpaint mask">
-                            <I d="M12 19l7-7 3 3-7 7H9v-6l10-10a2.1 2.1 0 00-3-3L6 13v6h6z" s={14} /> Brush
-                        </button>
-                        <div className="st-recursive-control st-mask-control">
-                            <span>Size</span>
-                            <input type="range" min="6" max="96" value={layerMaskBrushSize} onChange={(e) => setLayerMaskBrushSize(+e.target.value)} />
-                            <strong>{layerMaskBrushSize}</strong>
+                            <div className="st-qwen-depth-preview" aria-hidden="true">
+                                {[0, 1, 2, 3, 4].map(i => <span key={i} style={{ '--i': i }} />)}
+                            </div>
                         </div>
-                        <button className="st-layer-toolbar-btn" onClick={clearLayerMask} title="Clear painted inpaint mask">
-                            <I d="M18 6L6 18M6 6l12 12" s={14} /> Clear Mask
-                        </button>
-                        <button className="st-layer-toolbar-btn st-qwen-action-btn" onClick={handleInpaintLayer} disabled={selectedLayerId === null || isProcessingAI || isInpaintingLayer || !layerEditPrompt.trim()} title="Inpaint only the painted mask on selected layer">
-                            <I d="M3 21v-4l11-11 4 4L7 21H3z" s={14} /> {isInpaintingLayer ? 'Inpainting...' : 'Inpaint Mask'}
-                        </button>
-                        <div className="st-layer-toolbar-sep" />
-                        <div className="st-recursive-control">
-                            <span>Depth</span>
-                            <input type="range" min="2" max="10" value={recursiveLayerCount} onChange={(e) => setRecursiveLayerCount(+e.target.value)} />
-                            <strong>{recursiveLayerCount}</strong>
+
+                        <div className="st-qwen-demo-strip">
+                            {qwenLayerDemoActions.map((demo) => (
+                                <button
+                                    key={demo.label}
+                                    className={`st-qwen-demo-card ${editType === demo.type ? 'active' : ''}`}
+                                    onClick={() => applyQwenLayerDemo(demo)}
+                                    title={demo.prompt || demo.label}
+                                >
+                                    <I d={demo.icon} s={15} />
+                                    <span>{demo.label}</span>
+                                    {demo.prompt ? <small>{demo.prompt}</small> : null}
+                                </button>
+                            ))}
                         </div>
-                        <button className="st-layer-toolbar-btn st-qwen-action-btn" onClick={handleRecursiveDecompose} disabled={selectedLayerId === null || isProcessingAI} title="Decompose selected layer again with Qwen">
-                            <I d="M12 2L2 7l10 5 10-5-10-5zM2 12l10 5 10-5M2 17l10 5 10-5" s={14} /> Decompose Selected
-                        </button>
-                        <div className="st-layer-toolbar-sep" />
-                        <button className="st-layer-toolbar-btn" onClick={handleComposeLayers} disabled={isExportingLayers} title="Flatten ordered visible layers to PNG">
-                            <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} /> {isExportingLayers ? 'Exporting...' : 'Flatten & Export PNG'}
-                        </button>
-                    </div>
 
-
-            {/* Main Body */}
-            <div className="st-layer-body">
-                {/* Canvas */}
-                <div className="st-layer-canvas-wrap checkerboard-bg">
-                    <canvas ref={fabricCanvasRef} />
-                    {isProcessingAI && (
-                        <div className="st-processing-overlay">
-                            <div className="st-spinner" style={{ width: 40, height: 40, borderWidth: 4, borderColor: 'rgba(59, 130, 246, 0.3)', borderTopColor: '#3b82f6' }} />
-                            <div className="st-processing-text">{aiProcessingText}</div>
+                        <div className="st-layer-toolbar">
+                            <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('flipH')} title="Flip Horizontal">
+                                <I d="M15 21h2v-2h-2v2zm4-12h2V7h-2v2zM3 5v14c0 1.1.9 2 2 2h4v-2H5V5h4V3H5c-1.1 0-2 .9-2 2zm16-2v2h2c0-1.1-.9-2-2-2zm-8 20h2V1h-2v22zm8-6h2v-2h-2v2zM15 5h2V3h-2v2zm4 8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2z" s={14} /> Flip H
+                            </button>
+                            <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('flipV')} title="Flip Vertical">
+                                <I d="M7 8v8h2V8H7zm4 0v8h2V8h-2zm4 0v8h2V8h-2z" s={14} /> Flip V
+                            </button>
+                            <div className="st-layer-toolbar-sep" />
+                            <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('rotLeft')} title="Rotate Left 90 deg">
+                                <I d="M10 4v4h-4l5-5 5 5h-4v4" s={14} /> Rot L
+                            </button>
+                            <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('rotRight')} title="Rotate Right 90 deg">
+                                <I d="M14 4v4h4l-5-5-5 5h4v4" s={14} /> Rot R
+                            </button>
+                            <div className="st-layer-toolbar-sep" />
+                            <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('front')} title="Bring to Front">
+                                <I d="M4 4h8v8H4V4zm10 10h6v6h-6v-6z" s={14} /> Front
+                            </button>
+                            <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('back')} title="Send to Back">
+                                <I d="M14 14h6v6h-6v-6zM4 4h8v8H4V4z" s={14} /> Back
+                            </button>
+                            <div className="st-layer-toolbar-sep" />
+                            <button className="st-layer-toolbar-btn" onClick={() => applyCanvasTransform('delete')} title="Delete Selected">
+                                <I d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" s={14} /> Del
+                            </button>
+                            <div className="st-layer-toolbar-sep" />
+                            <button className="st-layer-toolbar-btn" onClick={resetLayersToBase} title="Reset all layers to original positions">
+                                <I d="M3 12a9 9 0 019-9 9.75 9.75 0 016.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 01-9 9 9.75 9.75 0 01-6.74-2.74L3 16M3 21v-5h5" s={14} /> Base
+                            </button>
+                            <button className="st-layer-toolbar-btn" onClick={() => setImageLayerZoom(layerCanvasZoom - 0.15)} title="Zoom Out">
+                                <I d="M5 12h14" s={14} /> Zoom
+                            </button>
+                            <div className="st-layer-zoom-readout">{Math.round(layerCanvasZoom * 100)}%</div>
+                            <button className="st-layer-toolbar-btn" onClick={() => setImageLayerZoom(layerCanvasZoom + 0.15)} title="Zoom In">
+                                <I d="M12 5v14M5 12h14" s={14} /> Zoom
+                            </button>
+                            <button className="st-layer-toolbar-btn" onClick={resetImageLayerView} title="Reset zoom and pan">
+                                <I d="M4 4h16v16H4z" s={14} /> View
+                            </button>
+                            <div className="st-layer-toolbar-sep" />
+                            <button className={`st-layer-toolbar-btn ${isLayerMaskMode ? 'active' : ''}`} onClick={() => setIsLayerMaskMode(v => !v)} title="Paint an inpaint mask">
+                                <I d="M12 19l7-7 3 3-7 7H9v-6l10-10a2.1 2.1 0 00-3-3L6 13v6h6z" s={14} /> Brush
+                            </button>
+                            <div className="st-recursive-control st-mask-control">
+                                <span>Size</span>
+                                <input type="range" min="6" max="96" value={layerMaskBrushSize} onChange={(e) => setLayerMaskBrushSize(+e.target.value)} />
+                                <strong>{layerMaskBrushSize}</strong>
+                            </div>
+                            <button className="st-layer-toolbar-btn" onClick={clearLayerMask} title="Clear painted inpaint mask">
+                                <I d="M18 6L6 18M6 6l12 12" s={14} /> Clear Mask
+                            </button>
+                            <button className="st-layer-toolbar-btn st-qwen-action-btn" onClick={handleInpaintLayer} disabled={selectedLayerId === null || isProcessingAI || isInpaintingLayer || !layerEditPrompt.trim()} title="Inpaint only the painted mask on selected layer">
+                                <I d="M3 21v-4l11-11 4 4L7 21H3z" s={14} /> {isInpaintingLayer ? 'Inpainting...' : 'Inpaint Mask'}
+                            </button>
+                            <div className="st-layer-toolbar-sep" />
+                            <div className="st-recursive-control">
+                                <span>Depth</span>
+                                <input type="range" min="2" max="10" value={recursiveLayerCount} onChange={(e) => setRecursiveLayerCount(+e.target.value)} />
+                                <strong>{recursiveLayerCount}</strong>
+                            </div>
+                            <button className="st-layer-toolbar-btn st-qwen-action-btn" onClick={handleRecursiveDecompose} disabled={selectedLayerId === null || isProcessingAI} title="Decompose selected layer again with Qwen">
+                                <I d="M12 2L2 7l10 5 10-5-10-5zM2 12l10 5 10-5M2 17l10 5 10-5" s={14} /> Decompose Selected
+                            </button>
+                            <div className="st-layer-toolbar-sep" />
+                            <button className="st-layer-toolbar-btn" onClick={handleComposeLayers} disabled={isExportingLayers} title="Flatten ordered visible layers to PNG">
+                                <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} /> {isExportingLayers ? 'Exporting...' : 'Flatten & Export PNG'}
+                            </button>
                         </div>
-                    )}
-                </div>
 
-                {/* Layer Panel */}
-                <div className="st-layer-panel">
-                    <div className="st-layer-panel-title">LAYERS ({layersList.length})</div>
-                    <div className="st-layer-panel-list">
-                        {/* Reverse order so top layer is at top of list */}
-                        {[...layersList].reverse().map((layer) => (
-                            <div
-                                key={layer.id}
-                                className={`st-layer-panel-item ${selectedLayerId === layer.id ? 'selected' : ''} ${layerDragState.draggingId === layer.id ? 'dragging' : ''} ${layerDragState.overId === layer.id ? `drag-over-${layerDragState.position}` : ''}`}
-                                draggable
-                                onDragStart={(e) => {
-                                    e.dataTransfer.effectAllowed = 'move';
-                                    e.dataTransfer.setData('text/plain', String(layer.id));
-                                    setLayerDragState({ draggingId: layer.id, overId: null, position: null });
-                                }}
-                                onDragOver={(e) => {
-                                    e.preventDefault();
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    const position = e.clientY > rect.top + rect.height / 2 ? 'after' : 'before';
-                                    setLayerDragState(prev => (
-                                        prev.overId === layer.id && prev.position === position
-                                            ? prev
-                                            : { ...prev, overId: layer.id, position }
-                                    ));
-                                }}
-                                onDragLeave={(e) => {
-                                    if (!e.currentTarget.contains(e.relatedTarget)) {
-                                        setLayerDragState(prev => ({ ...prev, overId: null, position: null }));
-                                    }
-                                }}
-                                onDrop={(e) => {
-                                    e.preventDefault();
-                                    const draggedId = Number(e.dataTransfer.getData('text/plain'));
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    const position = e.clientY > rect.top + rect.height / 2 ? 'after' : 'before';
-                                    reorderLayerStack(draggedId, layer.id, position);
-                                    setLayerDragState({ draggingId: null, overId: null, position: null });
-                                }}
-                                onDragEnd={() => setLayerDragState({ draggingId: null, overId: null, position: null })}
-                                onClick={() => selectLayerFromPanel(layer.id)}
-                            >
-                                <div className="layer-num">{layer.id + 1}</div>
-                                <img className="layer-thumb" src={`${API}${layer.url}`} alt={layer.name} draggable={false} />
-                                <div className="layer-name">
-                                    {layer.loadingName ? '...' : layer.name}
+
+                        {/* Main Body */}
+                        <div className="st-layer-body">
+                            {/* Canvas */}
+                            <div className="st-layer-canvas-wrap checkerboard-bg">
+                                <canvas ref={fabricCanvasRef} />
+                                {isProcessingAI && (
+                                    <div className="st-processing-overlay">
+                                        <div className="st-spinner" style={{ width: 40, height: 40, borderWidth: 4, borderColor: 'rgba(59, 130, 246, 0.3)', borderTopColor: '#3b82f6' }} />
+                                        <div className="st-processing-text">{aiProcessingText}</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Layer Panel */}
+                            <div className="st-layer-panel">
+                                <div className="st-layer-panel-title">LAYERS ({layersList.length})</div>
+                                <div className="st-layer-panel-list">
+                                    {/* Reverse order so top layer is at top of list */}
+                                    {[...layersList].reverse().map((layer) => (
+                                        <div
+                                            key={layer.id}
+                                            className={`st-layer-panel-item ${selectedLayerId === layer.id ? 'selected' : ''} ${layerDragState.draggingId === layer.id ? 'dragging' : ''} ${layerDragState.overId === layer.id ? `drag-over-${layerDragState.position}` : ''}`}
+                                            draggable
+                                            onDragStart={(e) => {
+                                                e.dataTransfer.effectAllowed = 'move';
+                                                e.dataTransfer.setData('text/plain', String(layer.id));
+                                                setLayerDragState({ draggingId: layer.id, overId: null, position: null });
+                                            }}
+                                            onDragOver={(e) => {
+                                                e.preventDefault();
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                const position = e.clientY > rect.top + rect.height / 2 ? 'after' : 'before';
+                                                setLayerDragState(prev => (
+                                                    prev.overId === layer.id && prev.position === position
+                                                        ? prev
+                                                        : { ...prev, overId: layer.id, position }
+                                                ));
+                                            }}
+                                            onDragLeave={(e) => {
+                                                if (!e.currentTarget.contains(e.relatedTarget)) {
+                                                    setLayerDragState(prev => ({ ...prev, overId: null, position: null }));
+                                                }
+                                            }}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                const draggedId = Number(e.dataTransfer.getData('text/plain'));
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                const position = e.clientY > rect.top + rect.height / 2 ? 'after' : 'before';
+                                                reorderLayerStack(draggedId, layer.id, position);
+                                                setLayerDragState({ draggingId: null, overId: null, position: null });
+                                            }}
+                                            onDragEnd={() => setLayerDragState({ draggingId: null, overId: null, position: null })}
+                                            onClick={() => selectLayerFromPanel(layer.id)}
+                                        >
+                                            <div className="layer-num">{layer.id + 1}</div>
+                                            <img className="layer-thumb" src={`${API}${layer.url}`} alt={layer.name} draggable={false} />
+                                            <div className="layer-name">
+                                                {layer.loadingName ? '...' : layer.name}
+                                            </div>
+                                            <button
+                                                className={`st-layer-icon-btn ${!layer.visible ? 'off' : ''}`}
+                                                onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(layer.id); }}
+                                                title="Visibility"
+                                            >
+                                                <I d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" s={14} />
+                                            </button>
+                                            <button
+                                                className={`st-layer-icon-btn ${!layer.locked ? 'off' : ''}`}
+                                                onClick={(e) => { e.stopPropagation(); toggleLayerLock(layer.id); }}
+                                                title="Lock"
+                                            >
+                                                {layer.locked
+                                                    ? <I d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" s={14} />
+                                                    : <I d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10z" s={14} />}
+                                            </button>
+                                        </div>
+                                    ))}
                                 </div>
+                            </div>
+                        </div>
+                        <div className="st-layer-prompt-bar st-qwen-prompt-bar">
+                            <div className="st-layer-prompt-chips">
+                                <button className={`st-layer-prompt-chip ${editType === 'recolor' ? 'active' : ''}`} onClick={() => setEditType('recolor')}>Recolor</button>
+                                <button className={`st-layer-prompt-chip ${editType === 'revise' ? 'active' : ''}`} onClick={() => setEditType('revise')}>Revise</button>
+                                <button className={`st-layer-prompt-chip ${editType === 'replace' ? 'active' : ''}`} onClick={() => setEditType('replace')}>Replace</button>
+                                <button className={`st-layer-prompt-chip ${editType === 'inpaint' ? 'active' : ''}`} onClick={() => setEditType('inpaint')}>Inpaint</button>
+                                <button className={`st-layer-prompt-chip ${editType === 'remove' ? 'active' : ''}`} onClick={() => setEditType('remove')}>Remove</button>
+                                <button className={`st-layer-prompt-chip ${editType === 'decompose' ? 'active' : ''}`} onClick={() => setEditType('decompose')}>Decompose</button>
+                            </div>
+                            <div className="st-layer-prompt-input-wrap">
+                                <input
+                                    type="text"
+                                    className="st-layer-prompt-input"
+                                    placeholder={editType === 'recolor' ? 'e.g. "Change to navy blue"' : editType === 'revise' ? 'e.g. "Make it more detailed"' : editType === 'replace' ? 'e.g. "Replace with a rose"' : editType === 'inpaint' ? 'Paint a mask, then describe the local change' : editType === 'remove' ? 'Remove this layer element' : 'Recursively decompose this layer'}
+                                    value={layerEditPrompt}
+                                    onChange={(e) => setLayerEditPrompt(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleEditLayer(); }}
+                                    disabled={selectedLayerId === null || isProcessingAI}
+                                />
                                 <button
-                                    className={`st-layer-icon-btn ${!layer.visible ? 'off' : ''}`}
-                                    onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(layer.id); }}
-                                    title="Visibility"
+                                    className="st-layer-prompt-apply"
+                                    onClick={handleEditLayer}
+                                    disabled={selectedLayerId === null || isProcessingAI || (!layerEditPrompt.trim() && editType !== 'remove' && editType !== 'decompose')}
                                 >
-                                    <I d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" s={14} />
-                                </button>
-                                <button
-                                    className={`st-layer-icon-btn ${!layer.locked ? 'off' : ''}`}
-                                    onClick={(e) => { e.stopPropagation(); toggleLayerLock(layer.id); }}
-                                    title="Lock"
-                                >
-                                    {layer.locked
-                                        ? <I d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" s={14} />
-                                        : <I d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10z" s={14} />}
+                                    {isProcessingAI ? 'Processing...' : editType === 'decompose' ? 'Decompose' : editType === 'inpaint' ? 'Inpaint' : 'Apply'}
                                 </button>
                             </div>
-                        ))}
+                        </div>
+                    </>
+                ) : (
+                    <div className="st-layer-empty">
+                        {isImageLayering ? (
+                            <>
+                                <div className="st-spinner" style={{ width: 32, height: 32, borderTopColor: '#67e8f9' }} />
+                                <div>Qwen is decomposing image into {imageLayersNumLayers} RGBA layers...</div>
+                                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>The resulting layers can be isolated, edited, moved, resized, deleted, and decomposed again.</div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="st-qwen-empty-visual" aria-hidden="true">
+                                    <div className="st-qwen-empty-card base">{preview ? <img src={preview} alt="" /> : null}</div>
+                                    {[0, 1, 2, 3].map(i => <div key={i} className="st-qwen-empty-card layer" style={{ '--i': i }} />)}
+                                </div>
+                                <div className="st-qwen-empty-title">Qwen-Image-Layered</div>
+                                <div>Upload an image, choose a layer count, then decompose it into editable RGBA layers.</div>
+                                <div className="st-qwen-demo-grid">
+                                    {qwenLayerDemoActions.map((demo) => (
+                                        <button
+                                            key={demo.label}
+                                            className={`st-qwen-demo-card ${editType === demo.type ? 'active' : ''}`}
+                                            onClick={() => applyQwenLayerDemo(demo)}
+                                        >
+                                            <I d={demo.icon} s={15} />
+                                            <span>{demo.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="st-qwen-feature-row">
+                                    <span>Physical isolation</span>
+                                    <span>Natural-language edits</span>
+                                    <span>Recursive depth</span>
+                                    <span>Layer composition</span>
+                                </div>
+                            </>
+                        )}
                     </div>
-                </div>
+                )}
             </div>
-            <div className="st-layer-prompt-bar st-qwen-prompt-bar">
-                <div className="st-layer-prompt-chips">
-                    <button className={`st-layer-prompt-chip ${editType === 'recolor' ? 'active' : ''}`} onClick={() => setEditType('recolor')}>Recolor</button>
-                    <button className={`st-layer-prompt-chip ${editType === 'revise' ? 'active' : ''}`} onClick={() => setEditType('revise')}>Revise</button>
-                    <button className={`st-layer-prompt-chip ${editType === 'replace' ? 'active' : ''}`} onClick={() => setEditType('replace')}>Replace</button>
-                    <button className={`st-layer-prompt-chip ${editType === 'inpaint' ? 'active' : ''}`} onClick={() => setEditType('inpaint')}>Inpaint</button>
-                    <button className={`st-layer-prompt-chip ${editType === 'remove' ? 'active' : ''}`} onClick={() => setEditType('remove')}>Remove</button>
-                    <button className={`st-layer-prompt-chip ${editType === 'decompose' ? 'active' : ''}`} onClick={() => setEditType('decompose')}>Decompose</button>
-                </div>
-                <div className="st-layer-prompt-input-wrap">
-                    <input
-                        type="text"
-                        className="st-layer-prompt-input"
-                        placeholder={editType === 'recolor' ? 'e.g. "Change to navy blue"' : editType === 'revise' ? 'e.g. "Make it more detailed"' : editType === 'replace' ? 'e.g. "Replace with a rose"' : editType === 'inpaint' ? 'Paint a mask, then describe the local change' : editType === 'remove' ? 'Remove this layer element' : 'Recursively decompose this layer'}
-                        value={layerEditPrompt}
-                        onChange={(e) => setLayerEditPrompt(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleEditLayer(); }}
-                        disabled={selectedLayerId === null || isProcessingAI}
-                    />
-                    <button
-                        className="st-layer-prompt-apply"
-                        onClick={handleEditLayer}
-                        disabled={selectedLayerId === null || isProcessingAI || (!layerEditPrompt.trim() && editType !== 'remove' && editType !== 'decompose')}
-                    >
-                        {isProcessingAI ? 'Processing...' : editType === 'decompose' ? 'Decompose' : editType === 'inpaint' ? 'Inpaint' : 'Apply'}
-                    </button>
-                </div>
-            </div>
-                </>
-            ) : (
-                <div className="st-layer-empty">
-                    {isImageLayering ? (
-                        <>
-                            <div className="st-spinner" style={{ width: 32, height: 32, borderTopColor: '#67e8f9' }} />
-                            <div>Qwen is decomposing image into {imageLayersNumLayers} RGBA layers...</div>
-                            <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>The resulting layers can be isolated, edited, moved, resized, deleted, and decomposed again.</div>
-                        </>
-                    ) : (
-                        <>
-                            <div className="st-qwen-empty-visual" aria-hidden="true">
-                                <div className="st-qwen-empty-card base">{preview ? <img src={preview} alt="" /> : null}</div>
-                                {[0, 1, 2, 3].map(i => <div key={i} className="st-qwen-empty-card layer" style={{ '--i': i }} />)}
-                            </div>
-                            <div className="st-qwen-empty-title">Qwen-Image-Layered</div>
-                            <div>Upload an image, choose a layer count, then decompose it into editable RGBA layers.</div>
-                            <div className="st-qwen-demo-grid">
-                                {qwenLayerDemoActions.map((demo) => (
-                                    <button
-                                        key={demo.label}
-                                        className={`st-qwen-demo-card ${editType === demo.type ? 'active' : ''}`}
-                                        onClick={() => applyQwenLayerDemo(demo)}
-                                    >
-                                        <I d={demo.icon} s={15} />
-                                        <span>{demo.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="st-qwen-feature-row">
-                                <span>Physical isolation</span>
-                                <span>Natural-language edits</span>
-                                <span>Recursive depth</span>
-                                <span>Layer composition</span>
-                            </div>
-                        </>
-                    )}
-                </div>
-            )}
-        </div>
-    );
+        );
 
     };
 

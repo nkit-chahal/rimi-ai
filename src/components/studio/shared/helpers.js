@@ -3,8 +3,11 @@
  * Extracted from Studio.jsx to avoid duplication.
  */
 
-const localApiHosts = new Set(['localhost', '127.0.0.1']);
-export const API = import.meta.env.VITE_API_URL || (localApiHosts.has(window.location.hostname) ? 'http://localhost:3001' : '');
+/**
+ * API base URL. Empty string = same origin (Vite dev proxy or nginx in production).
+ * Set VITE_API_URL when frontend and backend are on different hosts.
+ */
+export const API = import.meta.env.VITE_API_URL || '';
 
 /**
  * Crop an image element based on a ReactCrop crop object.

@@ -102,7 +102,8 @@ def generate_colorways():
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
 
-    required_credits = credit_requirement('colorways', 50, count)
+    credits_per_colorway = credit_requirement('colorways', 10)
+    required_credits = credits_per_colorway * count
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -170,7 +171,7 @@ def generate_colorways():
                 'resultUrl': f'/results/{result_name}',
             })
             log_export(project_id, result_name, filename, "Colorway", {"strategy": strategy, "colorway_index": cw_idx})
-            total_credits += 10
+            total_credits += credits_per_colorway
         except Exception as e:
             print(f"  [Colorway] Error generating colorway {cw_idx}: {e}")
 

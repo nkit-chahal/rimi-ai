@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API } from '../components/studio/shared/helpers';
 
 export default function Login({ onLogin, onGoToLanding }) {
   const [mode, setMode] = useState('signin');
@@ -275,7 +274,7 @@ export default function Login({ onLogin, onGoToLanding }) {
       <div className="login-grid-overlay"></div>
 
       <div className="login-container">
-        <div className="login-brand" onClick={onGoToLanding}>
+        <div className="login-brand" onClick={onGoToLanding ? onGoToLanding : undefined} style={onGoToLanding ? { cursor: 'pointer' } : undefined}>
           <span className="ln-logo-badge">RI</span>
           <span className="login-logo-text">RIMI AI</span>
         </div>

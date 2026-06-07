@@ -9,14 +9,14 @@ export default function VectorizeTool(props) {
     const [vecEngine, setVecEngine] = useState('api');
     const [vecColors, setVecColors] = useState(32);
     const [isVec, setIsVec] = useState(false);
-    
+
     const [upscaleFactor, setUpscaleFactor] = useState('x4');
     const [isUpscaling, setIsUpscaling] = useState(false);
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
-    const vectorizeCreditCost = vecEngine === 'api' ? (creditPricing.vectorize || 100) : (creditPricing.vectorizeLocal || 5);
+    const vectorizeCreditCost = vecEngine === 'api' ? (creditPricing.vectorize || 12) : (creditPricing.vectorizeLocal || 3);
     const hasEnoughVectorizeCredits = userRemainingCredits >= vectorizeCreditCost;
-    const upscaleCreditCost = creditPricing.upscale || 60;
+    const upscaleCreditCost = creditPricing.upscale || 23;
     const hasEnoughUpscaleCredits = userRemainingCredits >= upscaleCreditCost;
     const [isDrag, setIsDrag] = useState(false);
     const fileRef = useRef(null);
@@ -106,129 +106,129 @@ export default function VectorizeTool(props) {
 
 
     const renderCanvasBlock = () => {
-                const resultUrl = tool === 'vectorize' ? vecUrl : upscaleUrl;
-                const loading = tool === 'vectorize' ? isVec : isUpscaling;
-                const toolTitle = tool === 'vectorize' ? 'vectorize' : 'upscale';
-                const toolLabel = tool === 'vectorize' ? 'Vectorize' : 'Upscale';
-                const actionFunc = tool === 'vectorize' ? vectorize : upscale;
-                const creditCost = tool === 'vectorize' ? vectorizeCreditCost : upscaleCreditCost;
-                const hasEnoughToolCredits = tool === 'vectorize' ? hasEnoughVectorizeCredits : hasEnoughUpscaleCredits;
-                
-                if (!preview) {
-                    return (
-                        <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
-                            <div
-                                className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
-                                onClick={() => fileRef.current?.click()}
-                                onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                                onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                                onDragLeave={() => setIsDrag(false)}
-                            >
-                                <div className="st-particles">
-                                    <div className="st-particle" />
-                                    <div className="st-particle" />
-                                    <div className="st-particle" />
-                                    <div className="st-particle" />
-                                    <div className="st-particle" />
-                                    <div className="st-particle" />
-                                </div>
-                                <div className="st-dropzone-icon-wrap">
-                                    {tool === 'vectorize' ? <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={36} /> : <I d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" s={36} />}
-                                </div>
-                                <h2 className="st-dropzone-title">Upload artwork to {toolTitle}</h2>
-                                <p className="st-dropzone-desc">Drag & drop or click to browse — AI will process your high-fidelity asset</p>
-                                <div className="st-dropzone-badges">
-                                    <span className="st-dropzone-badge">PNG</span>
-                                    <span className="st-dropzone-badge">JPG</span>
-                                    <span className="st-dropzone-badge">TIFF</span>
-                                </div>
-                            </div>
+        const resultUrl = tool === 'vectorize' ? vecUrl : upscaleUrl;
+        const loading = tool === 'vectorize' ? isVec : isUpscaling;
+        const toolTitle = tool === 'vectorize' ? 'vectorize' : 'upscale';
+        const toolLabel = tool === 'vectorize' ? 'Vectorize' : 'Upscale';
+        const actionFunc = tool === 'vectorize' ? vectorize : upscale;
+        const creditCost = tool === 'vectorize' ? vectorizeCreditCost : upscaleCreditCost;
+        const hasEnoughToolCredits = tool === 'vectorize' ? hasEnoughVectorizeCredits : hasEnoughUpscaleCredits;
+
+        if (!preview) {
+            return (
+                <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
+                    <div
+                        className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
+                        onClick={() => fileRef.current?.click()}
+                        onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
+                        onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
+                        onDragLeave={() => setIsDrag(false)}
+                    >
+                        <div className="st-particles">
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
+                            <div className="st-particle" />
                         </div>
-                    );
-                }
-
-                return (
-                    <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                        <div className="st-comparison-workspace">
-                            <div className="st-comparison-card">
-                                <div className="st-comparison-card-head">
-                                    <span>Original Input</span>
-                                    <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} />
-                                        Replace
-                                    </button>
-                                </div>
-                                <div className="st-comparison-card-body">
-                                    <img src={preview} alt="Original artwork" />
-                                </div>
-                            </div>
-
-                            <div className="st-comparison-action-bridge">
-                                <button
-                                    className={`st-extract-btn-creative ${!hasEnoughToolCredits ? 'insufficient-credits' : ''}`}
-                                    onClick={actionFunc}
-                                    disabled={loading || !preview || !hasEnoughToolCredits}
-                                    title={!hasEnoughToolCredits ? `Need ${creditCost} credits. You have ${userRemainingCredits} remaining.` : toolLabel}
-                                >
-                                    <div className={loading ? 'spin-icon' : ''}>
-                                        <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={20} />
-                                    </div>
-                                    {loading ? 'Processing...' : hasEnoughToolCredits ? toolLabel : `Need ${creditCost} credits`}
-                                </button>
-                                <span className="st-credit-badge">
-                                    <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
-                                    {creditCost} credits
-                                </span>
-                            </div>
-
-                            <div className="st-comparison-card">
-                                <div className="st-comparison-card-head">
-                                    <span>{tool === 'vectorize' ? 'Vector SVG' : 'Upscaled Result'}</span>
-                                    {resultUrl && !Array.isArray(resultUrl) && (
-                                        <button onClick={(e) => forceDownload(e, resultUrl)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                            <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
-                                        </button>
-                                    )}
-                                </div>
-                                <div className="st-comparison-card-body">
-                                    {resultUrl ? (
-                                        Array.isArray(resultUrl) ? (
-                                            <div className="st-result-reveal" style={{ position: 'absolute', inset: '0', padding: '1.25rem', display: 'flex', gap: '10px' }}>
-                                                {resultUrl.map((url, i) => (
-                                                    <div key={i} style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                                                        <img src={url.startsWith('/') ? `${API}${url}` : url} alt={`Result ${i + 1}`} style={{ flex: 1, borderRadius: '10px', objectFit: 'contain' }} />
-                                                        <a href={url} onClick={(e) => forceDownload(e, url)} className="st-premium-download-btn" style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>Download</a>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="st-result-reveal">
-                                                <img src={resultUrl.startsWith('/') ? `${API}${resultUrl}` : resultUrl} alt="Result" />
-                                            </div>
-                                        )
-                                    ) : loading ? (
-                                        <div className="st-ai-processing">
-                                            <div className="st-ai-sparkle-container">
-                                                <div className="st-ai-sparkle-icon">
-                                                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
-                                                </div>
-                                                <div className="st-ai-ring" />
-                                                <div className="st-ai-ring" />
-                                                <div className="st-ai-ring" />
-                                            </div>
-                                            <span className="st-ai-phase-text">AI is {tool === 'vectorize' ? 'converting to vector' : 'enhancing resolution'}...</span>
-                                        </div>
-                                    ) : (
-                                        <div style={{ textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-                                            <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />
-                                            <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>Ready to process image</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                        <div className="st-dropzone-icon-wrap">
+                            {tool === 'vectorize' ? <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={36} /> : <I d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" s={36} />}
+                        </div>
+                        <h2 className="st-dropzone-title">Upload artwork to {toolTitle}</h2>
+                        <p className="st-dropzone-desc">Drag & drop or click to browse — AI will process your high-fidelity asset</p>
+                        <div className="st-dropzone-badges">
+                            <span className="st-dropzone-badge">PNG</span>
+                            <span className="st-dropzone-badge">JPG</span>
+                            <span className="st-dropzone-badge">TIFF</span>
                         </div>
                     </div>
-                );
+                </div>
+            );
+        }
+
+        return (
+            <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <div className="st-comparison-workspace">
+                    <div className="st-comparison-card">
+                        <div className="st-comparison-card-head">
+                            <span>Original Input</span>
+                            <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} />
+                                Replace
+                            </button>
+                        </div>
+                        <div className="st-comparison-card-body">
+                            <img src={preview} alt="Original artwork" />
+                        </div>
+                    </div>
+
+                    <div className="st-comparison-action-bridge">
+                        <button
+                            className={`st-extract-btn-creative ${!hasEnoughToolCredits ? 'insufficient-credits' : ''}`}
+                            onClick={actionFunc}
+                            disabled={loading || !preview || !hasEnoughToolCredits}
+                            title={!hasEnoughToolCredits ? `Need ${creditCost} credits. You have ${userRemainingCredits} remaining.` : toolLabel}
+                        >
+                            <div className={loading ? 'spin-icon' : ''}>
+                                <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={20} />
+                            </div>
+                            {loading ? 'Processing...' : hasEnoughToolCredits ? toolLabel : `Need ${creditCost} credits`}
+                        </button>
+                        <span className="st-credit-badge">
+                            <I d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1" s={12} />
+                            {creditCost} credits
+                        </span>
+                    </div>
+
+                    <div className="st-comparison-card">
+                        <div className="st-comparison-card-head">
+                            <span>{tool === 'vectorize' ? 'Vector SVG' : 'Upscaled Result'}</span>
+                            {resultUrl && !Array.isArray(resultUrl) && (
+                                <button onClick={(e) => forceDownload(e, resultUrl)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                    <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
+                                </button>
+                            )}
+                        </div>
+                        <div className="st-comparison-card-body">
+                            {resultUrl ? (
+                                Array.isArray(resultUrl) ? (
+                                    <div className="st-result-reveal" style={{ position: 'absolute', inset: '0', padding: '1.25rem', display: 'flex', gap: '10px' }}>
+                                        {resultUrl.map((url, i) => (
+                                            <div key={i} style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                                                <img src={url.startsWith('/') ? `${API}${url}` : url} alt={`Result ${i + 1}`} style={{ flex: 1, borderRadius: '10px', objectFit: 'contain' }} />
+                                                <a href={url} onClick={(e) => forceDownload(e, url)} className="st-premium-download-btn" style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>Download</a>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="st-result-reveal">
+                                        <img src={resultUrl.startsWith('/') ? `${API}${resultUrl}` : resultUrl} alt="Result" />
+                                    </div>
+                                )
+                            ) : loading ? (
+                                <div className="st-ai-processing">
+                                    <div className="st-ai-sparkle-container">
+                                        <div className="st-ai-sparkle-icon">
+                                            <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
+                                        </div>
+                                        <div className="st-ai-ring" />
+                                        <div className="st-ai-ring" />
+                                        <div className="st-ai-ring" />
+                                    </div>
+                                    <span className="st-ai-phase-text">AI is {tool === 'vectorize' ? 'converting to vector' : 'enhancing resolution'}...</span>
+                                </div>
+                            ) : (
+                                <div style={{ textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />
+                                    <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>Ready to process image</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
 
     };
 

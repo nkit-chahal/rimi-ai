@@ -30,8 +30,8 @@ def require_credits(user_id, tool_key='colorReduction', default=10):
     required_credits = credit_requirement(tool_key, default)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
-        return user_id, jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
-    return user_id, None, None
+        return user_id, required_credits, jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+    return user_id, required_credits, None, None
 
 
 @bp.route('/api/extract-palette', methods=['POST'])
@@ -65,7 +65,7 @@ def recolor_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, error_response, status_code = require_credits(user_id, 'recolor', 10)
+    user_id, required_credits, error_response, status_code = require_credits(user_id, 'recolor', 10)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -82,13 +82,13 @@ def recolor_api():
         recolor_image(filepath, color_mapping, local_filepath)
         storage.sync_to_s3(local_filepath)
         duration = time.time() - start_time
-        credits_used = 10
+        credits_used = required_credits
         local_url = f"/results/{local_filename}"
         conn = db()
         created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn.execute(
-            "INSERT INTO exports (project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (project_id, local_filename, filename, "Colorways", json.dumps({"mapping": color_mapping}), created_at)
+            "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, project_id, local_filename, filename, "Colorways", json.dumps({"mapping": color_mapping}), created_at)
         )
         conn.commit()
         conn.close()
@@ -108,7 +108,7 @@ def generate_tech_pack_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, error_response, status_code = require_credits(user_id, 'techPack', 15)
+    user_id, required_credits, error_response, status_code = require_credits(user_id, 'techPack', 15)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(RESULTS_DIR, filename)
@@ -140,12 +140,12 @@ def generate_tech_pack_api():
     conn = db()
     created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn.execute(
-        "INSERT INTO exports (project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (project_id, pdf_filename, filename, "Tech Pack", json.dumps(tech_pack_options), created_at)
+        "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (user_id, project_id, pdf_filename, filename, "Tech Pack", json.dumps(tech_pack_options), created_at)
     )
     conn.commit()
     conn.close()
-    record_activity(project_id, 'export', 1, credit_requirement('techPack', 15), user_id=user_id)
+    record_activity(project_id, 'export', 1, required_credits, user_id=user_id)
     updated_credits = get_updated_credits(user_id)
     return jsonify({'success': True, 'resultUrl': f"/results/{pdf_filename}", **updated_credits})
 
@@ -178,7 +178,7 @@ def color_reduce_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, error_response, status_code = require_credits(user_id, 'colorReduction', 10)
+    user_id, required_credits, error_response, status_code = require_credits(user_id, 'colorReduction', 10)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -203,13 +203,13 @@ def color_reduce_api():
                 conn.close()
         palette = quantize_and_save(filepath, n_colors, local_filepath, brand_palette)
         storage.sync_to_s3(local_filepath)
-        credits_used = 10
+        credits_used = required_credits
         local_url = f"/results/{local_filename}"
         conn = db()
         created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn.execute(
-            "INSERT INTO exports (project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (project_id, local_filename, filename, "Color Reduce", json.dumps({"numColors": n_colors}), created_at)
+            "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, project_id, local_filename, filename, "Color Reduce", json.dumps({"numColors": n_colors}), created_at)
         )
         conn.commit()
         conn.close()
@@ -234,7 +234,7 @@ def layer_export_api():
     filename = os.path.basename(filename)
     if export_format not in ('zip', 'tiff'):
         return jsonify({'error': 'Format must be zip or tiff'}), 400
-    user_id, error_response, status_code = require_credits(user_id, 'layerExport', 15)
+    user_id, required_credits, error_response, status_code = require_credits(user_id, 'layerExport', 15)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -257,12 +257,12 @@ def layer_export_api():
         conn = db()
         created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn.execute(
-            "INSERT INTO exports (project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (project_id, out_filename, filename, f"Layer Export ({export_format.upper()})", json.dumps({"numColors": n_colors, "format": export_format}), created_at)
+            "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, project_id, out_filename, filename, f"Layer Export ({export_format.upper()})", json.dumps({"numColors": n_colors, "format": export_format}), created_at)
         )
         conn.commit()
         conn.close()
-        credits_used = 15
+        credits_used = required_credits
         record_activity(project_id, 'export', 1, credits_used, user_id=user_id)
         updated_credits = get_updated_credits(user_id)
         return jsonify({'success': True, 'resultUrl': local_url, 'palette': palette, **updated_credits})

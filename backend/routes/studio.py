@@ -1,8 +1,9 @@
 """Studio state and project controls routes."""
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone
 
 from db import db, db_lock, rows_to_dicts, time_ago
+from middleware import login_required
 
 bp = Blueprint('studio', __name__)
 
@@ -24,7 +25,7 @@ def get_studio_state(project_id=1, user_id=None):
         user = dict(user_row)
 
     projects = rows_to_dicts(conn.execute(
-        "SELECT * FROM projects WHERE user_id = ? OR user_id IS NULL ORDER BY updated_at DESC",
+        "SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC",
         (user["id"],)
     ).fetchall())
     if not projects:
@@ -36,10 +37,10 @@ def get_studio_state(project_id=1, user_id=None):
         )
         conn.commit()
         projects = rows_to_dicts(conn.execute(
-            "SELECT * FROM projects WHERE user_id = ? OR user_id IS NULL ORDER BY updated_at DESC",
+            "SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC",
             (user["id"],)
         ).fetchall())
-    project_row = conn.execute("SELECT * FROM projects WHERE id = ? AND (user_id = ? OR user_id IS NULL)", (project_id, user["id"])).fetchone()
+    project_row = conn.execute("SELECT * FROM projects WHERE id = ? AND user_id = ?", (project_id, user["id"])).fetchone()
     project = dict(project_row) if project_row else projects[0]
     variations = rows_to_dicts(conn.execute("SELECT * FROM pattern_variations WHERE project_id = ? ORDER BY id", (project["id"],)).fetchall())
     metrics_row = conn.execute("SELECT * FROM project_metrics WHERE project_id = ?", (project["id"],)).fetchone()
@@ -106,18 +107,15 @@ def get_studio_state(project_id=1, user_id=None):
 
 
 @bp.route('/api/studio-state')
+@login_required
 def studio_state():
     project_id = int(request.args.get('projectId', 1))
-    user_id = request.args.get('userId')
-    if user_id:
-        try:
-            user_id = int(user_id)
-        except ValueError:
-            user_id = None
+    user_id = g.current_user["id"]
     return jsonify({'success': True, 'state': get_studio_state(project_id, user_id)})
 
 
 @bp.route('/api/projects/<int:project_id>/controls', methods=['PATCH'])
+@login_required
 def update_project_controls(project_id):
     data = request.get_json() or {}
     allowed = {
@@ -137,12 +135,13 @@ def update_project_controls(project_id):
             updates.append(f"{column} = ?")
             values.append(caster(data[key]))
 
-    user_id = request.args.get('userId') or data.get('userId') or data.get('user_id')
-    if user_id:
-        try:
-            user_id = int(user_id)
-        except ValueError:
-            user_id = None
+    user_id = g.current_user["id"]
+
+    conn = db()
+    project = conn.execute("SELECT id FROM projects WHERE id = ? AND user_id = ?", (project_id, user_id)).fetchone()
+    conn.close()
+    if not project:
+        return jsonify({'success': False, 'error': 'Project not found'}), 404
 
     if updates:
         updates.append("updated_at = ?")

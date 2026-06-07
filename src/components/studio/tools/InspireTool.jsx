@@ -46,7 +46,7 @@ export default function InspireTool({
     const promptChips = ['Botanical repeat', 'Hand-painted floral', 'Art deco geometric', 'Soft watercolor', 'Vintage textile', 'Tropical foliage'];
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
-    const inspireCreditCost = variants * Math.max(1, inspireModels.length) * (creditPricing?.inspire || 50);
+    const inspireCreditCost = variants * Math.max(1, inspireModels.length) * (creditPricing?.inspire || 148);
     const hasEnoughInspireCredits = userRemainingCredits >= inspireCreditCost;
 
     // File Upload Handler

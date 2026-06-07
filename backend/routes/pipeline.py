@@ -1,10 +1,11 @@
 """Pipeline runs and saved workflows routes."""
 import json
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone
 
 from db import db, rows_to_dicts
 from auth import log_export
+from middleware import login_required
 
 bp = Blueprint('pipeline', __name__)
 
@@ -113,18 +114,44 @@ def update_pipeline_run(run_id):
 
 
 @bp.route('/api/pipeline-runs')
+@login_required
 def list_pipeline_runs():
     """List recent pipeline runs (newest first, max 20). Optionally filter by project_id."""
     project_id = request.args.get('project_id')
+    current_user = g.current_user
+    user_id = current_user["id"]
+    is_admin = current_user.get("role") == "admin"
     conn = db()
-    if project_id:
+    if is_admin and project_id:
         rows = conn.execute(
             "SELECT * FROM pipeline_runs WHERE project_id = ? ORDER BY created_at DESC LIMIT 20",
             (project_id,)
         ).fetchall()
-    else:
+    elif is_admin:
         rows = conn.execute(
             "SELECT * FROM pipeline_runs ORDER BY created_at DESC LIMIT 20"
+        ).fetchall()
+    elif project_id:
+        rows = conn.execute(
+            """
+            SELECT pr.*
+            FROM pipeline_runs pr
+            JOIN projects p ON p.id = pr.project_id
+            WHERE pr.project_id = ? AND p.user_id = ?
+            ORDER BY pr.created_at DESC LIMIT 20
+            """,
+            (project_id, user_id),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT pr.*
+            FROM pipeline_runs pr
+            JOIN projects p ON p.id = pr.project_id
+            WHERE p.user_id = ?
+            ORDER BY pr.created_at DESC LIMIT 20
+            """,
+            (user_id,),
         ).fetchall()
     conn.close()
     runs = []

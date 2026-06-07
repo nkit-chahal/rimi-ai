@@ -31,7 +31,7 @@ def create_repeat_set():
             user_id = int(user_id)
         except ValueError:
             user_id = None
-    required_credits = credit_requirement('repeat', 50)
+    required_credits = credit_requirement('repeat', 10)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403

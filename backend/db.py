@@ -14,21 +14,63 @@ from config import DB_PATH, DATABASE_URL, UPLOAD_DIR, RESULTS_DIR
 
 db_lock = threading.Lock()
 
+# ---------------------------------------------------------------------------
+# Credit pricing
+# Economics: INR 100 = USD 1.  1 credit = $0.001 of vendor budget.
+# Razorpay ~3% + target 40% profit  =>  vendor cost budget = 57% of gross.
+# Per-call credits include a +15% safety markup over raw vendor cost to absorb
+# Groq side-calls and invoice variance.   credits = ceil(cost_usd * 1150)
+# Pack pricing: 5.5 credits per INR 1 (gives ~42% margin after Razorpay).
+# ---------------------------------------------------------------------------
 DEFAULT_CREDIT_PRICING = [
+    # ----- Uploads / Exports (free) -----
     ("upload", "Upload", "Upload artwork", 0, "fixed", 1),
-    ("extract", "Pattern Extraction", "/api/extract-design", 50, "dynamic", 1),
-    ("seamless", "Make Seamless", "/api/make-seamless", 80, "dynamic", 1),
-    ("repeat", "Repeat Set", "/api/create-repeat-set", 50, "fixed", 1),
-    ("upscale", "Super Resolution", "/api/upscale", 60, "dynamic", 1),
-    ("vectorize", "Vectorize", "/api/vectorize cloud", 100, "fixed", 1),
-    ("vectorizeLocal", "Vectorize Local", "/api/vectorize local", 5, "fixed", 1),
     ("export", "Export", "Standard export", 0, "fixed", 1),
-    ("inspire", "Inspirations", "/api/generate-inspirations", 50, "dynamic", 1),
-    ("mappings", "Mappings", "/api/generate-mockup", 50, "dynamic", 1),
-    ("imageLayers", "Image Layers", "/api/image-layers", 100, "dynamic", 1),
-    ("colorways", "Colorways", "/api/colorways", 50, "dynamic", 1),
-    ("colorReduction", "Color Reduction", "/api/reduce-colors", 10, "fixed", 1),
-    ("techPack", "Tech Pack Export", "/api/export-techpack", 15, "fixed", 1),
+
+    # ----- Pattern Extraction (default + per-model overrides) -----
+    # Default key falls back to GPT-Image-2 pricing.
+    ("extract", "Pattern Extraction (default)", "/api/extract-design", 148, "dynamic", 1),
+    ("extract_gpt_image_2", "Extract — GPT Image 2", "openai/gpt-image-2", 148, "dynamic", 1),
+    ("extract_gpt_image_15", "Extract — GPT Image 1.5", "openai/gpt-image-1.5", 157, "dynamic", 1),
+    ("extract_imagen_ultra", "Extract — Imagen 4 Ultra", "google/imagen-4-ultra", 69, "dynamic", 1),
+    ("extract_imagen_fast", "Extract — Imagen 4 Fast", "google/imagen-4-fast", 23, "dynamic", 1),
+    ("extract_flux_2_pro", "Extract — Flux 2 Pro", "black-forest-labs/flux-2-pro", 35, "dynamic", 1),
+    ("extract_flux_2_flex", "Extract — Flux 2 Flex", "black-forest-labs/flux-2-flex", 156, "dynamic", 1),
+    ("extract_seedream", "Extract — Seedream 4.5", "bytedance/seedream-4.5", 46, "dynamic", 1),
+    ("extract_nano_banana", "Extract — Nano Banana", "google/nano-banana", 45, "dynamic", 1),
+    ("extract_nano_banana_2", "Extract — Nano Banana 2", "google/nano-banana-2", 78, "dynamic", 1),
+    ("extract_nano_banana_pro", "Extract — Nano Banana Pro", "google/nano-banana-pro", 173, "dynamic", 1),
+    ("extract_grok", "Extract — Grok Imagine", "xai/grok-imagine-image", 23, "dynamic", 1),
+    ("extract_flux_schnell", "Extract — Flux Schnell", "black-forest-labs/flux-schnell", 4, "dynamic", 1),
+
+    # ----- Inspirations (mirrors extract pricing per model) -----
+    ("inspire", "Inspirations (default)", "/api/generate-inspirations", 148, "dynamic", 1),
+
+    # ----- Seamless -----
+    ("seamless", "Make Seamless (Flux Fill Pro)", "/api/make-seamless", 58, "dynamic", 1),
+    ("seamless_texture", "Seamless Texture (text-to-img)", "replicate/seamless-texture", 84, "dynamic", 1),
+
+    # ----- Mockups / Mappings -----
+    ("mappings", "Mappings / Mockups", "/api/generate-mockup", 58, "dynamic", 1),
+
+    # ----- Image Layers -----
+    ("imageLayers", "Image Layers (3-layer default)", "/api/image-layers", 69, "dynamic", 1),
+    ("imageLayerEdit", "Image Layer Edit", "/api/edit-layer", 35, "fixed", 1),
+
+    # ----- Upscale / Vectorize / Misc Replicate -----
+    ("upscale", "Super Resolution", "/api/upscale", 23, "dynamic", 1),
+    ("vectorize", "Vectorize (cloud)", "/api/vectorize cloud", 12, "fixed", 1),
+    ("vectorizeLocal", "Vectorize (local)", "/api/vectorize local", 3, "fixed", 1),
+    ("removeBg", "Remove Background", "lucataco/remove-bg", 2, "fixed", 1),
+    ("styleTransfer", "Style Transfer", "fofr/style-transfer", 23, "dynamic", 1),
+
+    # ----- Local / cheap CPU-side tools -----
+    ("repeat", "Repeat Set", "/api/create-repeat-set", 5, "fixed", 1),
+    ("colorways", "Colorways", "/api/colorways", 3, "dynamic", 1),
+    ("recolor", "Recolor", "/api/recolor", 3, "fixed", 1),
+    ("colorReduction", "Color Reduction", "/api/reduce-colors", 3, "fixed", 1),
+    ("layerExport", "Layer Export", "/api/layer-export", 2, "fixed", 1),
+    ("techPack", "Tech Pack Export", "/api/export-techpack", 2, "fixed", 1),
 ]
 
 # ---------------------------------------------------------------------------
@@ -180,16 +222,29 @@ def seed_credit_pricing(conn):
                 INSERT INTO credit_pricing
                 (tool_key, label, api_name, credits, pricing_type, is_active, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (tool_key) DO NOTHING
+                ON CONFLICT (tool_key) DO UPDATE SET
+                    label = EXCLUDED.label,
+                    api_name = EXCLUDED.api_name,
+                    credits = EXCLUDED.credits,
+                    pricing_type = EXCLUDED.pricing_type,
+                    is_active = EXCLUDED.is_active,
+                    updated_at = EXCLUDED.updated_at
                 """,
                 (tool_key, label, api_name, credits, pricing_type, is_active, updated_at),
             )
     else:
         conn.executemany(
             """
-            INSERT OR IGNORE INTO credit_pricing
+            INSERT INTO credit_pricing
             (tool_key, label, api_name, credits, pricing_type, is_active, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(tool_key) DO UPDATE SET
+                label = excluded.label,
+                api_name = excluded.api_name,
+                credits = excluded.credits,
+                pricing_type = excluded.pricing_type,
+                is_active = excluded.is_active,
+                updated_at = excluded.updated_at
             """,
             [
                 (tool_key, label, api_name, credits, pricing_type, is_active, updated_at)
@@ -351,6 +406,7 @@ def _pg_schema_sql():
         );
         CREATE TABLE IF NOT EXISTS exports (
             id SERIAL PRIMARY KEY,
+            user_id INTEGER,
             project_id INTEGER,
             filename TEXT NOT NULL UNIQUE,
             input_filename TEXT,
@@ -454,6 +510,7 @@ def init_db():
     if _USE_PG:
         # PostgreSQL: create all tables
         conn.executescript(_pg_schema_sql())
+        conn.execute("ALTER TABLE exports ADD COLUMN IF NOT EXISTS user_id INTEGER")
         conn.commit()
     else:
         # SQLite: original schema + migration
@@ -573,6 +630,7 @@ def init_db():
             );
             CREATE TABLE IF NOT EXISTS exports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 project_id INTEGER,
                 filename TEXT NOT NULL UNIQUE,
                 input_filename TEXT,
@@ -691,6 +749,7 @@ def init_db():
         ensure_column("users", "created_at", "TEXT")
         ensure_column("users", "status", "TEXT NOT NULL DEFAULT 'active'")
         ensure_column("projects", "user_id", "INTEGER REFERENCES users(id)")
+        ensure_column("exports", "user_id", "INTEGER REFERENCES users(id)")
 
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
         conn.commit()

@@ -36,7 +36,7 @@ def generate_seamless():
     if user_id:
         try: user_id = int(user_id)
         except ValueError: user_id = None
-    required_credits = credit_requirement('seamless', 80)
+    required_credits = credit_requirement('seamless', 250)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -91,8 +91,8 @@ def generate_seamless():
                    "num_inference_steps": 28, "guidance_scale": guidance, "output_format": "png"}
         )
         duration = time.time() - start_time
-        credits_used = max(10, int(round(duration * 12)))
-        cost_usd = duration * 0.00115
+        cost_usd = duration * 0.001525
+        credits_used = required_credits
         log_replicate_call(project_id, "replicate/seamless-texture", duration, credits_used, cost_usd)
         results = []
         best_url = None
@@ -171,7 +171,7 @@ def make_seamless():
     if user_id_raw:
         try: user_id_early = int(user_id_raw)
         except ValueError: pass
-    required_credits = credit_requirement('seamless', 80)
+    required_credits = credit_requirement('seamless', 250)
     ok, remaining, limit, used = check_credits(user_id_early, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -264,8 +264,8 @@ def make_seamless():
                         "output_format": "png", "steps": steps, "guidance": guidance,
                     })
                     duration = time.time() - t0
-                    credits_used = max(10, int(round(duration * 12)))
-                    cost_usd = duration * 0.00115
+                    credits_used = 121
+                    cost_usd = 0.05
                     log_replicate_call(project_id, "black-forest-labs/flux-fill-pro", duration, credits_used, cost_usd)
                     replicate_calls.append((duration, credits_used))
                     resp_img = http_requests.get(str(output), timeout=60)
@@ -345,7 +345,7 @@ def make_seamless():
         if user_id:
             try: user_id = int(user_id)
             except ValueError: user_id = None
-        total_credits = sum(c[1] for c in replicate_calls) if replicate_calls else 20
+        total_credits = required_credits
         record_activity(project_id, 'generation', 1, total_credits, user_id=user_id)
         updated_credits = get_updated_credits(user_id)
         return jsonify({'success': True, 'resultUrl': new_url, 'health': {
