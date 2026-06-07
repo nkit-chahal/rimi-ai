@@ -8206,7 +8206,7 @@ if (tool === 'imagelayers') {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div className="st-credits-text" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                         <I d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" s={12} />
-                                        {Number(user.creditsUsed || 0).toLocaleString()} used, resets in {user.resetDays} days
+                                        {Number(user.creditsUsed || 0).toLocaleString()} used
                                     </div>
                                     <button onClick={() => setShowSettingsModal(true)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', cursor: 'pointer', padding: '2px', borderRadius: '6px', transition: 'all 0.2s ease' }}
                                         onMouseEnter={e => e.currentTarget.style.color = '#a78bfa'}

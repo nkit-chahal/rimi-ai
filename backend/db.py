@@ -426,6 +426,25 @@ def _pg_schema_sql():
             used_at TEXT,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS email_otps (
+            email TEXT PRIMARY KEY,
+            otp_hash TEXT NOT NULL,
+            name TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS google_signup_tokens (
+            token TEXT PRIMARY KEY,
+            email TEXT NOT NULL,
+            google_sub TEXT NOT NULL,
+            name TEXT NOT NULL,
+            avatar_url TEXT,
+            expires_at TEXT NOT NULL,
+            used_at TEXT,
+            created_at TEXT NOT NULL
+        );
     """
 
 
@@ -637,6 +656,25 @@ def init_db():
                 used_at TEXT,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS email_otps (
+                email TEXT PRIMARY KEY,
+                otp_hash TEXT NOT NULL,
+                name TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS google_signup_tokens (
+                token TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                google_sub TEXT NOT NULL,
+                name TEXT NOT NULL,
+                avatar_url TEXT,
+                expires_at TEXT NOT NULL,
+                used_at TEXT,
+                created_at TEXT NOT NULL
             );
         """)
 

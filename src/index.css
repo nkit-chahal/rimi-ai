@@ -10020,6 +10020,55 @@ input[type=range]::-moz-range-track {
   animation: fadeIn 0.3s ease;
 }
 
+.login-notice-badge,
+.login-dev-otp {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  animation: fadeIn 0.3s ease;
+}
+
+.login-notice-badge {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.32);
+  color: #6ee7b7;
+}
+
+.login-dev-otp {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+}
+
+.login-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  margin-bottom: 1.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.login-mode-tabs button {
+  border: none;
+  border-radius: 9px;
+  padding: 0.68rem 0.85rem;
+  background: transparent;
+  color: #94a3b8;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.login-mode-tabs button.active {
+  background: rgba(139, 92, 246, 0.95);
+  color: white;
+  box-shadow: 0 8px 22px rgba(139, 92, 246, 0.22);
+}
+
 .login-field {
   display: flex;
   flex-direction: column;
@@ -10074,6 +10123,13 @@ input[type=range]::-moz-range-track {
               inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+.login-otp-input {
+  text-align: center;
+  letter-spacing: 0.25rem;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
 .login-submit-btn {
   background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
   color: #ffffff;
@@ -10099,6 +10155,19 @@ input[type=range]::-moz-range-track {
 .login-submit-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.login-link-btn {
+  border: none;
+  background: transparent;
+  color: #a78bfa;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.2rem;
+}
+
+.login-link-btn:hover {
+  color: #c4b5fd;
 }
 
 .login-oauth-section {

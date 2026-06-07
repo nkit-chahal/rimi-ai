@@ -4,6 +4,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
+import bcrypt
 import jwt as pyjwt
 import requests
 from flask import Blueprint, jsonify, make_response, redirect, request
@@ -199,25 +200,27 @@ def google_callback():
                     (user_id,),
                 )
         else:
-            cur = conn.execute(
+            signup_token = secrets.token_urlsafe(32)
+            conn.execute(
                 """
-                INSERT INTO users
-                (email, password, name, initials, role, plan, credits_used, credits_limit,
-                 reset_at, login_provider, google_sub, avatar_url, email_verified, created_at)
-                VALUES (?, ?, ?, ?, 'user', 'Free Trial', 0, 200, ?, 'google', ?, ?, 1, ?)
+                INSERT INTO google_signup_tokens
+                (token, email, google_sub, name, avatar_url, expires_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    signup_token,
                     email,
-                    "GOOGLE_OAUTH_ONLY",
-                    name,
-                    initials_from_name(name, email),
-                    reset_at,
                     google_sub,
+                    name,
                     avatar_url,
+                    (now + timedelta(minutes=15)).isoformat(),
                     now.isoformat(),
                 ),
             )
-            user_id = cur.lastrowid
+            conn.commit()
+            response = make_response(redirect(f"{frontend_url()}?{urlencode({'google_signup_token': signup_token})}"))
+            response.delete_cookie("google_oauth_state")
+            return response
 
         record_login(conn, user_id, "google")
         login_token = secrets.token_urlsafe(32)
@@ -239,6 +242,106 @@ def google_callback():
     response = make_response(redirect(f"{frontend_url()}?{urlencode({'google_login_token': login_token})}"))
     response.delete_cookie("google_oauth_state")
     return response
+
+
+@bp.route('/api/auth/google/signup-token', methods=['POST'])
+def google_signup_token_info():
+    data = request.get_json() or {}
+    token = data.get("token", "")
+    if not token:
+        return jsonify({"success": False, "error": "Missing Google signup token"}), 400
+
+    conn = db()
+    try:
+        row = conn.execute("SELECT * FROM google_signup_tokens WHERE token = ?", (token,)).fetchone()
+        if not row:
+            return jsonify({"success": False, "error": "Invalid Google signup token"}), 400
+        if row["used_at"]:
+            return jsonify({"success": False, "error": "Google signup token was already used"}), 400
+        if datetime.fromisoformat(row["expires_at"]) < utc_now():
+            return jsonify({"success": False, "error": "Google signup token expired"}), 400
+        return jsonify({
+            "success": True,
+            "email": row["email"],
+            "name": row["name"],
+            "avatarUrl": row["avatar_url"],
+        })
+    finally:
+        conn.close()
+
+
+@bp.route('/api/auth/google/complete-signup', methods=['POST'])
+def google_complete_signup():
+    data = request.get_json() or {}
+    token = data.get("token", "")
+    name = (data.get("name") or "").strip()
+    password = data.get("password") or ""
+
+    if not token or not name or not password:
+        return jsonify({"success": False, "error": "Name and password are required"}), 400
+    if len(password) < 8:
+        return jsonify({"success": False, "error": "Password must be at least 8 characters"}), 400
+
+    conn = db()
+    try:
+        row = conn.execute("SELECT * FROM google_signup_tokens WHERE token = ?", (token,)).fetchone()
+        if not row:
+            return jsonify({"success": False, "error": "Invalid Google signup token"}), 400
+        if row["used_at"]:
+            return jsonify({"success": False, "error": "Google signup token was already used"}), 400
+        if datetime.fromisoformat(row["expires_at"]) < utc_now():
+            return jsonify({"success": False, "error": "Google signup token expired"}), 400
+
+        existing = conn.execute(
+            "SELECT id FROM users WHERE google_sub = ? OR email = ?",
+            (row["google_sub"], row["email"]),
+        ).fetchone()
+        if existing:
+            conn.execute("UPDATE google_signup_tokens SET used_at = ? WHERE token = ?", (utc_now().isoformat(), token))
+            conn.commit()
+            return jsonify({"success": False, "error": "An account with this Google email already exists"}), 409
+
+        now = utc_now()
+        reset_at = (now + timedelta(days=30)).isoformat()
+        password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        cur = conn.execute(
+            """
+            INSERT INTO users
+            (email, password, name, initials, role, plan, credits_used, credits_limit,
+             reset_at, login_provider, google_sub, avatar_url, email_verified, created_at, status)
+            VALUES (?, ?, ?, ?, 'user', 'Free Trial', 0, 200, ?, 'google', ?, ?, 1, ?, 'active')
+            """,
+            (
+                row["email"],
+                password_hash,
+                name,
+                initials_from_name(name, row["email"]),
+                reset_at,
+                row["google_sub"],
+                row["avatar_url"],
+                now.isoformat(),
+            ),
+        )
+        user_id = cur.lastrowid
+        conn.execute("UPDATE google_signup_tokens SET used_at = ? WHERE token = ?", (now.isoformat(), token))
+        last_login_at = record_login(conn, user_id, "google")
+        conn.commit()
+
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        jwt_secret = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
+        jwt_token = pyjwt.encode(
+            {'user_id': user_id, 'role': user['role'], 'exp': utc_now() + timedelta(hours=24)},
+            jwt_secret, algorithm='HS256'
+        )
+        payload = user_payload(user)
+        payload["lastLoginAt"] = last_login_at
+        return jsonify({"success": True, "user": payload, "token": jwt_token})
+    except Exception as exc:
+        conn.rollback()
+        print(f"Google signup completion failed: {exc}")
+        return jsonify({"success": False, "error": "Could not complete Google signup"}), 500
+    finally:
+        conn.close()
 
 
 @bp.route('/api/auth/google/exchange', methods=['POST'])

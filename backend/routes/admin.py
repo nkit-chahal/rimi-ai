@@ -1,7 +1,11 @@
 """Admin routes: login, logs, users, credit management, health check."""
+import hashlib
 import json
 import os
+import random
 import sqlite3
+import smtplib
+from email.message import EmailMessage
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone, timedelta
 
@@ -15,6 +19,8 @@ bp = Blueprint('admin', __name__)
 
 VALID_ROLES = {'user', 'admin'}
 VALID_STATUSES = {'active', 'suspended'}
+SIGNUP_DEFAULT_CREDITS = int(os.getenv("SIGNUP_DEFAULT_CREDITS", "200"))
+SIGNUP_OTP_TTL_MINUTES = int(os.getenv("SIGNUP_OTP_TTL_MINUTES", "10"))
 
 
 def _initials_from_name(name):
@@ -31,6 +37,43 @@ def _safe_int(value, default=0):
 def _is_unique_violation(exc):
     text = str(exc).lower()
     return isinstance(exc, sqlite3.IntegrityError) or 'unique' in text or 'duplicate' in text
+
+
+def _otp_hash(email, otp):
+    secret = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
+    return hashlib.sha256(f"{email.lower()}:{otp}:{secret}".encode("utf-8")).hexdigest()
+
+
+def _smtp_configured():
+    return bool(os.getenv("SMTP_HOST") and os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"))
+
+
+def _send_signup_otp(email, otp):
+    if not _smtp_configured():
+        return False
+
+    msg = EmailMessage()
+    msg["Subject"] = "Your RIMI AI verification code"
+    msg["From"] = os.getenv("SMTP_FROM", os.getenv("SMTP_USER"))
+    msg["To"] = email
+    msg.set_content(
+        f"Your RIMI AI verification code is {otp}.\n\n"
+        f"This code expires in {SIGNUP_OTP_TTL_MINUTES} minutes."
+    )
+
+    host = os.getenv("SMTP_HOST")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    use_ssl = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
+    if use_ssl:
+        with smtplib.SMTP_SSL(host, port, timeout=15) as server:
+            server.login(os.getenv("SMTP_USER"), os.getenv("SMTP_PASSWORD"))
+            server.send_message(msg)
+    else:
+        with smtplib.SMTP(host, port, timeout=15) as server:
+            server.starttls()
+            server.login(os.getenv("SMTP_USER"), os.getenv("SMTP_PASSWORD"))
+            server.send_message(msg)
+    return True
 
 
 def _active_admin_count(conn, excluding_user_id=None):
@@ -142,6 +185,121 @@ def api_login():
     except Exception as e:
         print(f"Error during login: {e}")
         return jsonify({'success': False, 'error': 'Login failed. Please try again.'}), 500
+    finally:
+        conn.close()
+
+
+@bp.route('/api/signup/request-otp', methods=['POST'])
+def signup_request_otp():
+    data = request.get_json() or {}
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    name = (data.get('name') or '').strip()
+
+    if not email or not password or not name:
+        return jsonify({'success': False, 'error': 'Name, email, and password are required'}), 400
+    if '@' not in email or '.' not in email.rsplit('@', 1)[-1]:
+        return jsonify({'success': False, 'error': 'Enter a valid email address'}), 400
+    if len(password) < 8:
+        return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
+
+    conn = db()
+    try:
+        existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        if existing:
+            return jsonify({'success': False, 'error': 'An account with this email already exists'}), 409
+
+        otp = f"{random.randint(0, 999999):06d}"
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        expires_at = (now + timedelta(minutes=SIGNUP_OTP_TTL_MINUTES)).isoformat()
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        otp_hash = _otp_hash(email, otp)
+        conn.execute(
+            """
+            INSERT INTO email_otps (email, otp_hash, name, password_hash, attempts, expires_at, created_at)
+            VALUES (?, ?, ?, ?, 0, ?, ?)
+            ON CONFLICT(email) DO UPDATE SET
+                otp_hash = excluded.otp_hash,
+                name = excluded.name,
+                password_hash = excluded.password_hash,
+                attempts = 0,
+                expires_at = excluded.expires_at,
+                created_at = excluded.created_at
+            """,
+            (email, otp_hash, name, password_hash, expires_at, now.isoformat()),
+        )
+        sent_email = _send_signup_otp(email, otp)
+        conn.commit()
+        response = {
+            'success': True,
+            'message': 'Verification code sent. Check your email.',
+            'emailSent': sent_email,
+            'expiresInMinutes': SIGNUP_OTP_TTL_MINUTES,
+        }
+        if not sent_email:
+            response['devOtp'] = otp
+            response['message'] = 'Email service is not configured. Use the development OTP shown here.'
+        return jsonify(response)
+    except Exception as e:
+        conn.rollback()
+        print(f"Error requesting signup OTP: {e}")
+        return jsonify({'success': False, 'error': 'Could not start signup. Please try again.'}), 500
+    finally:
+        conn.close()
+
+
+@bp.route('/api/signup/verify-otp', methods=['POST'])
+def signup_verify_otp():
+    data = request.get_json() or {}
+    email = (data.get('email') or '').strip().lower()
+    otp = (data.get('otp') or '').strip()
+
+    if not email or not otp:
+        return jsonify({'success': False, 'error': 'Email and verification code are required'}), 400
+
+    conn = db()
+    try:
+        pending_row = conn.execute("SELECT * FROM email_otps WHERE email = ?", (email,)).fetchone()
+        if not pending_row:
+            return jsonify({'success': False, 'error': 'No pending signup was found for this email'}), 404
+        pending = dict(pending_row)
+        expires_at = datetime.fromisoformat(pending["expires_at"])
+        if expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+            conn.execute("DELETE FROM email_otps WHERE email = ?", (email,))
+            conn.commit()
+            return jsonify({'success': False, 'error': 'Verification code expired. Request a new code.'}), 400
+        if pending["attempts"] >= 5:
+            return jsonify({'success': False, 'error': 'Too many attempts. Request a new code.'}), 429
+        if _otp_hash(email, otp) != pending["otp_hash"]:
+            conn.execute("UPDATE email_otps SET attempts = attempts + 1 WHERE email = ?", (email,))
+            conn.commit()
+            return jsonify({'success': False, 'error': 'Invalid verification code'}), 400
+
+        existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        if existing:
+            conn.execute("DELETE FROM email_otps WHERE email = ?", (email,))
+            conn.commit()
+            return jsonify({'success': False, 'error': 'An account with this email already exists'}), 409
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        reset_at = (now + timedelta(days=30)).isoformat()
+        initials = _initials_from_name(pending["name"])
+        conn.execute(
+            """
+            INSERT INTO users
+            (email, password, name, initials, role, plan, credits_used, credits_limit, reset_at,
+             login_provider, email_verified, created_at, status)
+            VALUES (?, ?, ?, ?, 'user', 'Free Trial', 0, ?, ?, 'email', 1, ?, 'active')
+            """,
+            (email, pending["password_hash"], pending["name"], initials, SIGNUP_DEFAULT_CREDITS, reset_at, now.isoformat()),
+        )
+        conn.execute("DELETE FROM email_otps WHERE email = ?", (email,))
+        conn.commit()
+        return jsonify({'success': True, 'message': 'Email verified. You can sign in now.'})
+    except Exception as e:
+        conn.rollback()
+        print(f"Error verifying signup OTP: {e}")
+        return jsonify({'success': False, 'error': 'Could not verify signup. Please try again.'}), 500
     finally:
         conn.close()
 
