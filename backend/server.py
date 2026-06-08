@@ -23,12 +23,22 @@ def create_app():
     ):
         raise RuntimeError("JWT_SECRET must be configured in production")
 
-    # Security: restrict CORS to known origins
-    _allowed_origins = os.getenv(
-        "CORS_ORIGINS", "http://localhost:5173,http://localhost:3001"
-    ).split(",")
-    _allowed_origins = [origin.strip() for origin in _allowed_origins if origin.strip()]
-    CORS(app, resources={r"/api/*": {"origins": _allowed_origins}}, supports_credentials=True)
+    # Security: restrict CORS to known origins (always allow production frontend)
+    _default_origins = [
+        "http://localhost:5173",
+        "http://localhost:3001",
+        "https://rimiai.pro",
+        "https://www.rimiai.pro",
+    ]
+    _env_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+    _allowed_origins = list(dict.fromkeys((_env_origins or _default_origins) + _default_origins[-2:]))
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": _allowed_origins}},
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    )
 
     # Security: enforce max upload size (25 MB)
     app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024

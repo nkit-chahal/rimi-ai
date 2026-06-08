@@ -20,7 +20,7 @@ bp = Blueprint('colorways', __name__)
 # --------------- Brand Palettes CRUD ---------------
 @bp.route('/api/brand-palettes', methods=['GET'])
 def get_brand_palettes():
-    project_id = request.args.get('projectId', type=int)
+    project_id = request.args.get('projectId', type=int) or request.args.get('project_id', type=int)
     if not project_id:
         return jsonify({'error': 'projectId is required'}), 400
     conn = db()

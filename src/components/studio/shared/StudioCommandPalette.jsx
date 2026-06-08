@@ -67,6 +67,7 @@ export default function StudioCommandPalette({ open, query, onQueryChange, onClo
                             >
                                 <I d={item.icon} s={16} />
                                 <span className="st-command-palette-item-label">{item.label}</span>
+                                {item.comingSoon && <span className="st-nav-soon-badge">Soon</span>}
                                 {item.section && <span className="st-command-palette-item-section">{item.section}</span>}
                             </button>
                         ))

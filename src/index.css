@@ -13268,6 +13268,21 @@ input[type=range]::-moz-range-track {
   color: var(--primary);
   flex-shrink: 0;
 }
+.st-title-soon-badge {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  font-size: 0.62rem;
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.25);
+  color: #6d28d9;
+}
+.st-command-palette-item .st-nav-soon-badge {
+  margin-left: 0;
+  margin-right: auto;
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.22);
+  color: #6d28d9;
+}
 .st-nav-soon-badge {
   margin-left: auto;
   padding: 0.15rem 0.45rem;

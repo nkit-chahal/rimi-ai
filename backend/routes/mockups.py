@@ -295,10 +295,22 @@ def generate_mockups_batch():
                     settings_dict={"productType": m["productType"], "category": category, "batch": True, "texture": fabric_texture}
                 )
 
+        if not mockups:
+            message = errors[0]["error"] if errors else "No mockups were generated"
+            return jsonify({
+                "success": False,
+                "error": message,
+                "mockups": [],
+                "errors": errors,
+                **get_updated_credits(user_id),
+            }), 500
+
         return jsonify({
             "success": True, "mockups": mockups, "errors": errors, **get_updated_credits(user_id)
         })
 
     except Exception as exc:
         print(f"  [Batch Mockup] Error: {exc}")
-        return jsonify({"error": f"Failed to generate batch mockups: {str(exc)}"}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"Failed to generate batch mockups: {str(exc)}"}), 500

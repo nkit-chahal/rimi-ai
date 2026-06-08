@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, apiFetch, forceDownload } from '../shared/helpers';
 import { createPortal } from 'react-dom';
 import { isImageFile } from '../shared/imageUpload';
 import { useImageDropzone } from '../shared/useImageDropzone';
@@ -185,17 +185,20 @@ export default function MappingsTool(props) {
     const [mappingCustomMask, setMappingCustomMask] = useState(null); // The drawn mask URL
     const [isCanvasOpen, setIsCanvasOpen] = useState(false);
 
-    const handleMappingUpload = (file) => {
+    const handleMappingUpload = async (file) => {
         if (!file) return;
         setMappingPrintPreview(URL.createObjectURL(file));
         const fd = new FormData();
         fd.append('image', file);
-        fetch(`${API}/api/upload`, { method: 'POST', body: fd })
-            .then(r => r.json())
-            .then(d => {
-                if (d.success) setMappingPrint({ file, filename: d.filename, url: d.url });
-            })
-            .catch(() => setError('Upload failed'));
+        fd.append('projectId', String(activeProject?.id || 1));
+        if (user?.id) fd.append('userId', String(user.id));
+        try {
+            const d = await apiFetch('/api/upload', { method: 'POST', body: fd }, currentToken);
+            if (d.success) setMappingPrint({ file, filename: d.filename, url: d.url });
+            else setError(d.error || 'Upload failed');
+        } catch (err) {
+            setError(err.message || 'Upload failed');
+        }
     };
 
     const { rootProps, pasteProps, inputProps, openFilePicker, isDrag } = useImageDropzone({
@@ -226,9 +229,8 @@ export default function MappingsTool(props) {
         setError('');
 
         const trigger = async () => {
-            const r = await fetch(`${API}/api/generate-mockups-batch`, {
+            const d = await apiFetch('/api/generate-mockups-batch', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     patternFilename: mappingPrint.filename,
                     products: Array.from(mappingSelectedProducts),
@@ -242,18 +244,22 @@ export default function MappingsTool(props) {
                     projectId: activeProject.id,
                     userId: user.id,
                 }),
-            });
-            const d = await r.json();
-            if (d.success && d.mockups) {
+            }, currentToken);
+
+            if (d.success && d.mockups?.length) {
                 setMappingResults(d.mockups);
                 setMappingStep(4);
                 setIsMappingGenerating(false);
                 updateCreditsFromResponse(d);
-                return { url: d.mockups[0]?.mockupUrl, urls: d.mockups.map(m => m.mockupUrl) };
-            } else {
-                setIsMappingGenerating(false);
-                throw new Error(d.error || 'Failed to generate mockups');
+                if (d.errors?.length) {
+                    setError(`Some mockups failed: ${d.errors.map((e) => e.productType).join(', ')}`);
+                }
+                return { url: d.mockups[0]?.mockupUrl, urls: d.mockups.map((m) => m.mockupUrl) };
             }
+
+            setIsMappingGenerating(false);
+            const detail = d.errors?.[0]?.error;
+            throw new Error(d.error || detail || 'Failed to generate mockups');
         };
 
         addBgTask('mappings', `Product Mockup: ${mappingSelectedProducts.size} item(s)`, mappingPrint.filename, trigger);

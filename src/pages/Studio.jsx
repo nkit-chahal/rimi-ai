@@ -14,7 +14,8 @@ import DashboardTool from '../components/studio/tools/DashboardTool';
 import ExportsTool from '../components/studio/tools/ExportsTool';
 import PatternTool from '../components/studio/tools/PatternTool';
 import SeamlessTool from '../components/studio/tools/SeamlessTool';
-import LibraryTool from '../components/studio/tools/LibraryTool';
+import ToolComingSoon from '../components/studio/shared/ToolComingSoon';
+import { COMING_SOON_TOOLS } from '../components/studio/shared/comingSoonTools';
 import ImageLayersTool from '../components/studio/tools/ImageLayersTool';
 import VectorizeTool from '../components/studio/tools/VectorizeTool';
 import RemoveBgTool from '../components/studio/tools/RemoveBgTool';
@@ -22,8 +23,6 @@ import InspireTool from '../components/studio/tools/InspireTool';
 import ColorwaysTool from '../components/studio/tools/ColorwaysTool';
 import ColorwayManagerTool from '../components/studio/tools/ColorwayManagerTool';
 import VectorProTool from '../components/studio/tools/VectorProTool';
-import MeasurementTool from '../components/studio/tools/MeasurementTool';
-import Mockup3DTool from '../components/studio/tools/Mockup3DTool';
 import RepeatTool from '../components/studio/tools/RepeatTool';
 import MappingsTool from '../components/studio/tools/MappingsTool';
 
@@ -72,8 +71,8 @@ const NAV = [
     {
         section: 'ASSETS & LIBRARY',
         items: [
-            { id: 'library', label: 'Brand Library', icon: 'M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z' },
-            { id: 'measurement', label: 'Measurement', icon: 'M2 2h6v6H2zM16 2h6v6h-6zM2 16h6v6H2zM16 16h6v6h-6zM8 5h8M8 19h8M5 8v8M19 8v8' },
+            { id: 'library', label: 'Brand Library', icon: 'M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z', comingSoon: true },
+            { id: 'measurement', label: 'Measurement', icon: 'M2 2h6v6H2zM16 2h6v6h-6zM2 16h6v6H2zM16 16h6v6h-6zM8 5h8M8 19h8M5 8v8M19 8v8', comingSoon: true },
             { id: 'exports', label: 'Exports', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3' },
             { id: 'billing', label: 'Billing', icon: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM12 6v12M8 10h6a2 2 0 010 4h-4a2 2 0 000 4h6' },
         ],
@@ -601,6 +600,16 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         return () => window.removeEventListener('keydown', onKeyDown);
     }, []);
 
+    const comingSoonToolIds = useMemo(() => {
+        const ids = new Set();
+        NAV.forEach((section) => {
+            section.items.forEach((it) => {
+                if (it.comingSoon) ids.add(it.id);
+            });
+        });
+        return ids;
+    }, []);
+
     const commandPaletteItems = useMemo(() => {
         const sections = isAdmin ? ADMIN_NAV : NAV;
         const items = sections.flatMap((section) =>
@@ -609,6 +618,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                 label: it.label,
                 icon: it.icon,
                 section: section.section || 'Studio',
+                comingSoon: Boolean(it.comingSoon),
             }))
         );
         if (!isAdmin) {
@@ -1202,7 +1212,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         if (tool === 'exports') return <ExportsTool {...commonProps} />;
         if (tool === 'pattern') return <PatternTool {...commonProps} enhUrl={enhUrl} setEnhUrl={setEnhUrl} />;
         if (tool === 'seamless') return <SeamlessTool {...commonProps} seamlessUrl={seamlessUrl} setSeamlessUrl={setSeamlessUrl} />;
-        if (tool === 'library') return <LibraryTool {...commonProps} />;
+        if (COMING_SOON_TOOLS[tool]) return <ToolComingSoon {...COMING_SOON_TOOLS[tool]} />;
         if (tool === 'imagelayers') return <ImageLayersTool {...commonProps} />;
         if (tool === 'vectorize' || tool === 'upscale') return <VectorizeTool {...commonProps} vecUrl={vecUrl} setVecUrl={setVecUrl} upscaleUrl={upscaleUrl} setUpscaleUrl={setUpscaleUrl} />;
         if (tool === 'removebg') return <RemoveBgTool {...commonProps} removeBgUrl={removeBgUrl} setRemoveBgUrl={setRemoveBgUrl} />;
@@ -1210,11 +1220,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         if (tool === 'colorways') return <ColorwaysTool {...commonProps} cwUrl={cwUrl} setCwUrl={setCwUrl} />;
         if (tool === 'colorway-manager') return <ColorwayManagerTool {...commonProps} />;
         if (tool === 'vectorpro') return <VectorProTool {...commonProps} brandPalettes={brandPalettes} />;
-        if (tool === 'measurement') return <MeasurementTool {...commonProps} />;
         if (tool === 'mappings') return <MappingsTool {...commonProps} />;
         if (tool === 'repeat') return <RepeatTool {...commonProps} repeatUrl={repeatUrl} setRepeatUrl={setRepeatUrl} isRepeat={isRepeat} setIsRepeat={setIsRepeat} />;
-
-        if (tool === 'mockup3d') return <Mockup3DTool />;
 
         return null;
     };
@@ -1695,23 +1702,26 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                     <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
                         <div className="st-page-head">
                             <div>
-                                <h1 className="st-title">{toolLabel} {tool === 'library' && <span className="st-pro-badge">Pro</span>}</h1>
+                                <h1 className="st-title">
+                                    {toolLabel}
+                                    {comingSoonToolIds.has(tool) && <span className="st-nav-soon-badge st-title-soon-badge">Soon</span>}
+                                </h1>
                                 {tool !== 'inspire' && <p>{
-                                    tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.'
-                                        : tool === 'pattern' ? 'Extract clean, seamless patterns using the power of multiple AI models.'
-                                            : tool === 'exports' ? 'View and download your recently exported assets.'
-                                                : tool === 'billing' ? 'Buy AI credit packs through Razorpay Standard Checkout.'
-                                                    : tool === 'workspace' ? 'Manage projects, switch workspaces, and organize your design pipeline.'
-                                                        : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.'
-                                                        : tool === 'removebg' ? 'Remove backgrounds instantly and download transparent PNGs for print-ready assets.'
-                                                        : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.'
-                                                            : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.'
-                                                                : 'Upload artwork and generate print-ready assets.'
+                                    comingSoonToolIds.has(tool) ? 'This feature is in development and will be available in an upcoming release.'
+                                        : tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.'
+                                            : tool === 'pattern' ? 'Extract clean, seamless patterns using the power of multiple AI models.'
+                                                : tool === 'exports' ? 'View and download your recently exported assets.'
+                                                    : tool === 'billing' ? 'Buy AI credit packs through Razorpay Standard Checkout.'
+                                                        : tool === 'workspace' ? 'Manage projects, switch workspaces, and organize your design pipeline.'
+                                                            : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.'
+                                                                : tool === 'removebg' ? 'Remove backgrounds instantly and download transparent PNGs for print-ready assets.'
+                                                                    : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.'
+                                                                        : 'Upload artwork and generate print-ready assets.'
                                 }</p>}
                             </div>
                         </div>
 
-                        {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'workspace' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && tool !== 'vectorize' && tool !== 'upscale' && tool !== 'removebg' && tool !== 'imagelayers' && !tool.startsWith('admin')) && (
+                        {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'workspace' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && tool !== 'vectorize' && tool !== 'upscale' && tool !== 'removebg' && tool !== 'imagelayers' && !comingSoonToolIds.has(tool) && !tool.startsWith('admin')) && (
                             <ImageDropzone
                                 variant="compact"
                                 preview={preview}
@@ -1759,7 +1769,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                     <button
                                         key={it.id}
                                         type="button"
-                                        className={`st-mobile-nav-item ${tool === it.id ? 'active' : ''}`}
+                                        className={`st-mobile-nav-item ${tool === it.id ? 'active' : ''}${it.comingSoon ? ' coming-soon' : ''}`}
                                         onClick={() => { setTool(it.id); setError(''); setMobileNavOpen(false); }}
                                     >
                                         <I d={it.icon} s={18} />
