@@ -146,34 +146,14 @@ def extract_design():
 # ---------------------------------------------------------------------------
 EXTRACT_MODELS = [
     {
-        'id': 'google/nano-banana-2',
-        'name': 'Nano Banana 2',
+        'id': 'xai/grok-imagine-image',
+        'name': 'Grok Imagine',
         'prompt': '',  # Will be generated from image description
         'input_key': None,
         'input_list': False,
         'supports_image': False,
-        'cost_per_image': 0.067,
-        'credits': 78,
-    },
-    {
-        'id': 'google/imagen-4-ultra',
-        'name': 'Imagen 4 Ultra',
-        'prompt': '',  # Will be generated from image description
-        'input_key': None,
-        'input_list': False,
-        'supports_image': False,
-        'cost_per_image': 0.06,
-        'credits': 69,
-    },
-    {
-        'id': 'black-forest-labs/flux-2-pro',
-        'name': 'Flux 2 Pro',
-        'prompt': '',  # Will be generated from image description
-        'input_key': None,
-        'input_list': False,
-        'supports_image': False,
-        'cost_per_image': 0.090,  # Avg based on megapixel billing
-        'credits': 104,
+        'cost_per_image': 0.02,
+        'credits': 23,
     },
     {
         'id': 'bytedance/seedream-4.5',
@@ -184,6 +164,36 @@ EXTRACT_MODELS = [
         'supports_image': False,
         'cost_per_image': 0.04,
         'credits': 46,
+    },
+    {
+        'id': 'black-forest-labs/flux-schnell',
+        'name': 'Flux Schnell',
+        'prompt': '',  # Will be generated from image description
+        'input_key': None,
+        'input_list': False,
+        'supports_image': False,
+        'cost_per_image': 0.003,
+        'credits': 4,
+    },
+    {
+        'id': 'google/nano-banana',
+        'name': 'Nano Banana',
+        'prompt': '',  # Will be generated from image description
+        'input_key': None,
+        'input_list': False,
+        'supports_image': False,
+        'cost_per_image': 0.039,
+        'credits': 45,
+    },
+    {
+        'id': 'google/nano-banana-2',
+        'name': 'Nano Banana 2',
+        'prompt': '',  # Will be generated from image description
+        'input_key': None,
+        'input_list': False,
+        'supports_image': False,
+        'cost_per_image': 0.067,
+        'credits': 78,
     },
 ]
 
