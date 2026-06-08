@@ -36,9 +36,13 @@ def require_credits(user_id, tool_key='colorReduction', default=3):
 
 @bp.route('/api/extract-palette', methods=['POST'])
 def extract_palette_api():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     filename = data.get('filename', '')
-    num_colors = int(data.get('numColors', 5))
+    try:
+        num_colors = int(data.get('numColors', 5))
+    except (TypeError, ValueError):
+        num_colors = 5
+    num_colors = max(1, min(num_colors, 24))
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)

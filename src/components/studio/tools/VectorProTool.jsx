@@ -197,21 +197,6 @@ export default function VectorProTool(props) {
                                 </div>
                             </div>
 
-                            <div>
-                                <div className="st-group-title">BRAND STYLE ENFORCEMENT</div>
-                                <select
-                                    className="st-input"
-                                    value={vpBrandPaletteId}
-                                    onChange={e => setVpBrandPaletteId(e.target.value)}
-                                    style={{ width: '100%', marginTop: '0.5rem', cursor: 'pointer', padding: '0.7rem', borderRadius: '10px' }}
-                                >
-                                    <option value="">None (Auto-Extract)</option>
-                                    {brandPalettes.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name} ({p.colors.length} colors)</option>
-                                    ))}
-                                </select>
-                            </div>
-
                             <button
                                 className={`st-extract-btn-creative ${!hasEnoughColorReductionCredits ? 'insufficient-credits' : ''}`}
                                 onClick={reduceColors}

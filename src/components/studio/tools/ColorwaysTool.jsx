@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { apiFetch, forceDownload } from '../shared/helpers';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function ColorwaysTool(props) {
     const {
         uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse,
-        creditPricing, cwUrl, setCwUrl, handlePreUpload, onUploadInvalid, onUploadPaste,
+        creditPricing, cwUrl, setCwUrl, currentToken, handlePreUpload, onUploadInvalid, onUploadPaste,
     } = props;
 
     const colorwayCreditCost = creditPricing.recolor || 3;
@@ -30,12 +30,10 @@ export default function ColorwaysTool(props) {
         if (!uploaded) return;
         setIsCwExtracting(true);
         try {
-            const res = await fetch(`${API}/api/extract-palette`, {
+            const d = await apiFetch('/api/extract-palette', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ filename: uploaded.filename, numColors: 5 }),
-            });
-            const d = await res.json();
+            }, currentToken);
             if (d.success) {
                 setCwExtractedPalette(d.palette);
                 setCwTargetPalette(d.palette.map(p => ({ old: p.hex, new: p.hex })));
@@ -59,17 +57,15 @@ export default function ColorwaysTool(props) {
         setError('');
 
         const trigger = async () => {
-            const r = await fetch(`${API}/api/recolor`, {
+            const d = await apiFetch('/api/recolor', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     filename: uploaded.filename,
                     colorMapping: cwTargetPalette,
                     projectId: activeProject.id,
                     userId: user.id
                 }),
-            });
-            const d = await r.json();
+            }, currentToken);
             if (d.success) {
                 setCwUrl(d.resultUrl);
                 updateCreditsFromResponse(d);

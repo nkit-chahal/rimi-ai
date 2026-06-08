@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { apiFetch, forceDownload } from '../shared/helpers';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function ColorwayManagerTool(props) {
     const {
         uploaded, preview, activeProject, user, setError, updateCreditsFromResponse,
-        creditPricing, handlePreUpload, onUploadInvalid, onUploadPaste,
+        creditPricing, currentToken, handlePreUpload, onUploadInvalid, onUploadPaste,
     } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
@@ -30,19 +30,19 @@ export default function ColorwayManagerTool(props) {
         setIsCwmGenerating(true);
         setError('');
         try {
-            const res = await fetch(`${API}/api/extract-palette`, {
+            const d = await apiFetch('/api/extract-palette', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ filename: uploaded.filename, numColors: 6 }),
-            });
-            const d = await res.json();
+            }, currentToken);
             if (d.success) {
                 setCwmPalette(d.palette);
                 setCwmColorways([]);
                 setCwmLockedColors(new Set());
+            } else {
+                throw new Error(d.error || 'Failed to extract palette');
             }
         } catch (e) {
-            setError('Failed to extract palette');
+            setError(e.message || 'Failed to extract palette');
         } finally {
             setIsCwmGenerating(false);
         }
@@ -58,9 +58,8 @@ export default function ColorwayManagerTool(props) {
         setIsCwmGenerating(true);
         setError('');
         try {
-            const res = await fetch(`${API}/api/colorways/generate`, {
+            const d = await apiFetch('/api/colorways/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     filename: uploaded.filename,
                     palette: cwmPalette.map(p => p.hex),
@@ -70,8 +69,7 @@ export default function ColorwayManagerTool(props) {
                     projectId: activeProject.id,
                     userId: user.id,
                 }),
-            });
-            const d = await res.json();
+            }, currentToken);
             if (d.success) {
                 setCwmColorways(d.colorways);
                 updateCreditsFromResponse(d);

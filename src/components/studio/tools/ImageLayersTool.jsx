@@ -14,7 +14,7 @@ export default function ImageLayersTool(props) {
     const layerEditCreditCost = creditPricing.imageLayerEdit || 35;
     const hasEnoughLayerEditCredits = userRemainingCredits >= layerEditCreditCost;
 
-    const { pasteProps, inputProps } = useImageDropzone({
+    const { rootProps, pasteProps, inputProps, openFilePicker, isDrag } = useImageDropzone({
         onFile: handlePreUpload,
         onInvalidFile: onUploadInvalid,
         onPasteSuccess: onUploadPaste,
@@ -961,15 +961,19 @@ export default function ImageLayersTool(props) {
         setSelectedLayerId(id);
     };
 
-    const applyQwenLayerDemo = (demo) => {
-        setEditType(demo.type);
-        setLayerEditPrompt(demo.prompt);
-
-        if (selectedLayerId !== null || layersList.length === 0) return;
-
-        const fallbackLayer = [...layersList].reverse().find(layer => layer.visible !== false && !layer.locked) || [...layersList].reverse()[0];
-        if (fallbackLayer) selectLayerFromPanel(fallbackLayer.id);
-    };
+    const renderShowcaseDemoCard = (demo, size = 15) => (
+        <button
+            key={demo.label}
+            type="button"
+            className="st-qwen-demo-card showcase"
+            aria-disabled="true"
+            title={`${demo.label} showcase`}
+        >
+            <I d={demo.icon} s={size} />
+            <span>{demo.label}</span>
+            {demo.prompt ? <small>{demo.prompt}</small> : null}
+        </button>
+    );
 
 
     const renderCanvasBlock = () => {
@@ -997,18 +1001,7 @@ export default function ImageLayersTool(props) {
                         </div>
 
                         <div className="st-qwen-demo-strip">
-                            {qwenLayerDemoActions.map((demo) => (
-                                <button
-                                    key={demo.label}
-                                    className={`st-qwen-demo-card ${editType === demo.type ? 'active' : ''}`}
-                                    onClick={() => applyQwenLayerDemo(demo)}
-                                    title={demo.prompt || demo.label}
-                                >
-                                    <I d={demo.icon} s={15} />
-                                    <span>{demo.label}</span>
-                                    {demo.prompt ? <small>{demo.prompt}</small> : null}
-                                </button>
-                            ))}
+                            {qwenLayerDemoActions.map((demo) => renderShowcaseDemoCard(demo))}
                         </div>
 
                         <div className="st-layer-toolbar">
@@ -1205,18 +1198,35 @@ export default function ImageLayersTool(props) {
                                     {[0, 1, 2, 3].map(i => <div key={i} className="st-qwen-empty-card layer" style={{ '--i': i }} />)}
                                 </div>
                                 <div className="st-qwen-empty-title">Qwen-Image-Layered</div>
-                                <div>Upload an image (drag, paste, or click above), choose a layer count, then decompose it into editable RGBA layers.</div>
+                                <div>Upload an image, choose a layer count, then decompose it into editable RGBA layers.</div>
+                                <div
+                                    {...rootProps}
+                                    className={`st-qwen-upload-drop ${isDrag ? 'dragging' : ''} ${preview ? 'has-preview' : ''}`}
+                                >
+                                    <div className="st-qwen-upload-thumb">
+                                        {preview ? (
+                                            <img src={preview} alt="Selected input" />
+                                        ) : (
+                                            <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={28} />
+                                        )}
+                                    </div>
+                                    <div className="st-qwen-upload-copy">
+                                        <strong>{preview ? uploaded?.originalName || uploaded?.filename || 'Image selected' : 'Upload image'}</strong>
+                                        <span>{preview ? 'Drag, paste, or replace the input image.' : 'Drag and drop, paste, or click to browse.'}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="st-qwen-upload-btn"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            openFilePicker();
+                                        }}
+                                    >
+                                        {preview ? 'Replace' : 'Choose file'}
+                                    </button>
+                                </div>
                                 <div className="st-qwen-demo-grid">
-                                    {qwenLayerDemoActions.map((demo) => (
-                                        <button
-                                            key={demo.label}
-                                            className={`st-qwen-demo-card ${editType === demo.type ? 'active' : ''}`}
-                                            onClick={() => applyQwenLayerDemo(demo)}
-                                        >
-                                            <I d={demo.icon} s={15} />
-                                            <span>{demo.label}</span>
-                                        </button>
-                                    ))}
+                                    {qwenLayerDemoActions.map((demo) => renderShowcaseDemoCard(demo))}
                                 </div>
                                 <div className="st-qwen-feature-row">
                                     <span>Physical isolation</span>
@@ -1245,16 +1255,7 @@ export default function ImageLayersTool(props) {
                 <div className="st-settings-group">
                     <div className="st-group-title">QWEN DEMO ACTIONS</div>
                     <div className="st-qwen-demo-grid compact">
-                        {qwenLayerDemoActions.map((demo) => (
-                            <button
-                                key={demo.label}
-                                className={`st-qwen-demo-card ${editType === demo.type ? 'active' : ''}`}
-                                onClick={() => applyQwenLayerDemo(demo)}
-                            >
-                                <I d={demo.icon} s={14} />
-                                <span>{demo.label}</span>
-                            </button>
-                        ))}
+                        {qwenLayerDemoActions.map((demo) => renderShowcaseDemoCard(demo, 14))}
                     </div>
                 </div>
                 <div className="st-settings-group">
