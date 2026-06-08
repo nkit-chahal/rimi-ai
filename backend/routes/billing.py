@@ -16,19 +16,19 @@ bp = Blueprint("billing", __name__)
 RAZORPAY_ORDERS_URL = "https://api.razorpay.com/v1/orders"
 
 # ---------------------------------------------------------------------------
-# Billing plans  (7 credits per INR 1, ~24% gross margin after Razorpay)
+# Billing plans  (7.5 credits per INR 1, ~22% gross margin after Razorpay)
 # Economics (INR 100 = USD 1):
 #   - Razorpay fee    : ~3% of gross
 #   - Vendor budget   : 1 credit = $0.001 of true vendor cost
-#                       At 7 credits/INR we collect INR 0.143 per credit and
-#                       spend INR 0.10  =>  ~27% gross margin per recharge
-#   - After Razorpay  : ~24% gross  (covers hosting, free-tier abuse, failed
+#                       At 7.5 credits/INR we collect INR 0.133 per credit and
+#                       spend INR 0.10  =>  ~25% gross margin per recharge
+#   - After Razorpay  : ~22% gross  (covers hosting, free-tier abuse, failed
 #                       runs, Groq side-calls; leaves room for GST + tax)
 # ---------------------------------------------------------------------------
 BILLING_PLANS = [
     {
         "id": "free",
-        "label": "Free Trial",
+        "label": "Free",
         "description": "Trial credits for testing the studio.",
         "credits": 50,
         "amount": 0,
@@ -36,8 +36,8 @@ BILLING_PLANS = [
         "badge": "",
         "features": [
             "50 starting credits",
-            "Try cheap models (Flux Schnell, Vectorize Local)",
-            "Razorpay recharge anytime",
+            "Try all AI tools",
+            "Recharge anytime",
         ],
         "disabled": True,
     },
@@ -45,109 +45,67 @@ BILLING_PLANS = [
         "id": "starter",
         "label": "Starter",
         "description": "Small production runs and evaluation.",
-        "credits": 3493,
-        "amount": 49900,
+        "credits": 3960,
+        "amount": 52800,
         "currency": "INR",
         "badge": "",
         "features": [
-            "3,493 AI credits",
-            "~77 Pattern Extractions (Nano Banana)",
-            "~52 Mockups / ~60 Seamless runs",
+            "3,960 AI credits",
+            "~88 Pattern Extractions (Nano Banana)",
+            "~59 Mockups / ~68 Seamless runs",
         ],
     },
     {
         "id": "creator",
         "label": "Creator",
         "description": "Best value for active textile workflows.",
-        "credits": 6993,
-        "amount": 99900,
+        "credits": 14520,
+        "amount": 193600,
         "currency": "INR",
         "badge": "Popular",
         "features": [
-            "6,993 AI credits",
-            "~16 full design workflows",
+            "14,520 AI credits",
+            "~33 full design workflows",
             "Recommended for active studios",
-        ],
-    },
-    {
-        "id": "studio",
-        "label": "Studio",
-        "description": "For growing studios with regular output.",
-        "credits": 13993,
-        "amount": 199900,
-        "currency": "INR",
-        "badge": "",
-        "features": [
-            "13,993 AI credits",
-            "~32 full design workflows",
-            "Great for weekly production runs",
         ],
     },
     {
         "id": "pro",
         "label": "Pro",
         "description": "For frequent studio use and client work.",
-        "credits": 20993,
-        "amount": 299900,
+        "credits": 65340,
+        "amount": 871200,
         "currency": "INR",
         "badge": "",
         "features": [
-            "20,993 AI credits",
-            "~48 full design workflows",
+            "65,340 AI credits",
+            "~150 full design workflows",
             "All AI tools unlocked",
-        ],
-    },
-    {
-        "id": "business",
-        "label": "Business",
-        "description": "High-output studios and small teams.",
-        "credits": 34993,
-        "amount": 499900,
-        "currency": "INR",
-        "badge": "",
-        "features": [
-            "34,993 AI credits",
-            "~80 full design workflows",
-            "Ideal for multi-designer teams",
         ],
     },
     {
         "id": "scale",
         "label": "Scale",
-        "description": "Large credit top-up for production teams.",
-        "credits": 48993,
-        "amount": 699900,
-        "currency": "INR",
-        "badge": "",
-        "features": [
-            "48,993 AI credits",
-            "~113 full design workflows",
-            "Designed for team production usage",
-        ],
-    },
-    {
-        "id": "enterprise",
-        "label": "Enterprise",
         "description": "For agencies and high-volume teams.",
-        "credits": 104993,
-        "amount": 1499900,
+        "credits": 197340,
+        "amount": 2631200,
         "currency": "INR",
         "badge": "",
         "features": [
-            "104,993 AI credits",
-            "~242 full design workflows",
+            "197,340 AI credits",
+            "~454 full design workflows",
             "Priority support",
         ],
     },
 ]
 
-# Custom top-up: 7 credits per INR 1 (matches all subscription plans).
+# Custom top-up: 7.5 credits per INR 1 (matches all subscription plans).
 # Internal accounting convention: INR 100 = USD 1, 1 credit = $0.001 of vendor
-# budget.  At 7 cr/INR we collect INR 0.143 per credit and spend INR 0.10,
-# giving ~27% gross margin (~24% after Razorpay's ~3% fee).
-CUSTOM_CREDITS_PER_RUPEE = 7
-CUSTOM_MIN_AMOUNT_INR = 100       # Minimum INR 100  -> 700 credits
-CUSTOM_MAX_AMOUNT_INR = 100000    # Maximum INR 1,00,000 -> 7,00,000 credits
+# budget.  At 7.5 cr/INR we collect INR 0.133 per credit and spend INR 0.10,
+# giving ~25% gross margin (~22% after Razorpay's ~3% fee).
+CUSTOM_CREDITS_PER_RUPEE = 7.5
+CUSTOM_MIN_AMOUNT_INR = 100       # Minimum INR 100  -> 750 credits
+CUSTOM_MAX_AMOUNT_INR = 100000    # Maximum INR 1,00,000 -> 7,50,000 credits
 INR_PER_USD = 100                 # INR 100 = $1 for internal accounting
 
 
