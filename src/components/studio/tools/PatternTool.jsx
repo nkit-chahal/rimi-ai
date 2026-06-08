@@ -8,9 +8,9 @@ import { useImageDropzone } from '../shared/useImageDropzone';
 // and DEFAULT_CREDIT_PRICING in backend/db.py.  At 4 credits per INR 1, the
 // credits below give ~57% gross margin per call.
 const EXTRACT_MODEL_DEFS = [
-    { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'GI', credits: 148, accent: '#10a37f' },
+    { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', credits: 78, accent: '#4285f4' },
     { id: 'google/imagen-4-ultra', name: 'Imagen 4 Ultra', sub: 'Google', brand: 'google', logo: 'IU', credits: 69, accent: '#4285f4' },
-    { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest Labs', brand: 'bfl', logo: 'F2', credits: 35, accent: '#6366f1' },
+    { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest Labs', brand: 'bfl', logo: 'F2', credits: 104, accent: '#6366f1' },
     { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: 46, accent: '#f59e0b' },
 ];
 
@@ -242,7 +242,7 @@ export default function PatternTool({
                         {EXTRACT_MODEL_DEFS.map(m => {
                             const on = enabledModels[m.id];
                             const descriptions = {
-                                'openai/gpt-image-2': { desc: 'Great for balanced creativity and pattern coherence.', tag: 'High Quality', tagColor: '#6366f1' },
+                                'google/nano-banana-2': { desc: 'Fast and cost-effective with strong pattern extraction.', tag: 'Efficient', tagColor: '#4285f4' },
                                 'google/imagen-4-ultra': { desc: 'Excellent for detail recreation and color accuracy.', tag: 'Photorealistic', tagColor: '#3b82f6' },
                                 'black-forest-labs/flux-2-pro': { desc: 'Outstanding for artistic style and intricate patterns.', tag: 'Creative', tagColor: '#a855f7' },
                                 'bytedance/seedream-4.5': { desc: 'Strong with texture preservation and soft details.', tag: 'Textured', tagColor: '#f59e0b' },

@@ -146,14 +146,14 @@ def extract_design():
 # ---------------------------------------------------------------------------
 EXTRACT_MODELS = [
     {
-        'id': 'openai/gpt-image-2',
-        'name': 'GPT Image 2',
-        'prompt': 'A perfectly flat, 2D seamless repeating pattern tile of the exact fabric design, motif, and colors seen in the input image. Extract the design out of the outfit. High resolution, perfectly flat texture.',
-        'input_key': 'input_images',
-        'input_list': True,
-        'supports_image': True,
-        'cost_per_image': 0.128,
-        'credits': 148,
+        'id': 'google/nano-banana-2',
+        'name': 'Nano Banana 2',
+        'prompt': '',  # Will be generated from image description
+        'input_key': None,
+        'input_list': False,
+        'supports_image': False,
+        'cost_per_image': 0.067,
+        'credits': 78,
     },
     {
         'id': 'google/imagen-4-ultra',
