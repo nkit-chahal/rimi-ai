@@ -599,7 +599,7 @@ def generate_inspirations():
     if user_id:
         try: user_id = int(user_id)
         except ValueError: user_id = None
-    requested_models = data.get('models') or ['openai/gpt-image-2']
+    requested_models = data.get('models') or ['google/nano-banana']
     requested_model_count = 1 if use_seamless else max(1, len(requested_models))
     # Up-front credit check uses the most expensive selected model so the user
     # is never undercharged.  Per-call deduction inside the loop uses the
@@ -637,7 +637,7 @@ def generate_inspirations():
     else:
         models = requested_models
         if not models:
-            models = ['openai/gpt-image-2']
+            models = ['google/nano-banana']
         
         aspect_ratio = data.get('aspect_ratio', '1:1')
         resolution = int(data.get('resolution', 1024))
