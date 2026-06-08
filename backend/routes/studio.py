@@ -37,7 +37,7 @@ def get_studio_state(project_id=1, user_id=None):
         # Auto-create a default project for this user
         now_iso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn.execute(
-            "INSERT INTO projects (id, name, status, thumbnail_url, hero_image_url, updated_at, user_id) VALUES (NULL, 'My First Project', 'Draft', '', '', ?, ?)",
+            "INSERT INTO projects (name, status, thumbnail_url, hero_image_url, updated_at, user_id) VALUES ('My First Project', 'Draft', '', '', ?, ?)",
             (now_iso, user["id"])
         )
         conn.commit()

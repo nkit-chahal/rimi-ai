@@ -370,7 +370,9 @@ def google_exchange():
             (utc_now().isoformat(), token),
         )
         conn.commit()
-        jwt_token = issue_access_token(row['user_id'], row['role'])
+        # Use u.id from the JOIN — a legacy users.user_id column can shadow
+        # olt.user_id in "SELECT olt.*, u.*" and come back NULL.
+        jwt_token = issue_access_token(row['id'], row['role'])
         return jsonify({"success": True, "user": user_payload(row), "token": jwt_token})
     except Exception as exc:
         conn.rollback()
