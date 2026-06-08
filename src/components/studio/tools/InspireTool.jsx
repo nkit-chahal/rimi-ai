@@ -45,7 +45,7 @@ export default function InspireTool({
     // Pricing rule (Option A, 4 credits per INR 1, ~57% gross margin):
     //   credits = ceil(cost_usd * 1150)
     const allAvailableModels = [
-        { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'GI', credits: 148, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+
         { id: 'google/imagen-4-fast', name: 'Imagen 4 Fast', sub: 'Google', brand: 'google', logo: 'I4', credits: 23, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
         { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest', brand: 'bfl', logo: 'F2', credits: 104, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
         { id: 'google/imagen-4-ultra', name: 'Imagen 4 Ultra', sub: 'Google', brand: 'google', logo: 'IU', credits: 69, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },

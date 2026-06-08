@@ -93,28 +93,28 @@ def extract_design():
     if user_id:
         try: user_id = int(user_id)
         except ValueError: user_id = None
-    model_id = data.get('modelId', 'openai/gpt-image-2')
+    model_id = data.get('modelId', 'google/nano-banana')
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
-    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 148))
+    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 78))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
     try:
-        print(f"  [Extract Design] Processing {filename} with openai/gpt-image-2...")
+        print(f"  [Extract Design] Processing {filename} with {model_id}...")
         with open(filepath, "rb") as img_file:
             image_bytes = img_file.read()
             encoded_string = base64.b64encode(image_bytes).decode('utf-8')
             mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"
             data_uri = f"data:{mime_type};base64,{encoded_string}"
         start_time = time.time()
-        output = replicate.run("openai/gpt-image-2", input={
+        output = replicate.run(model_id, input={
             "prompt": "A perfectly flat, 2D seamless repeating pattern tile of the exact fabric design, motif, and colors seen in the input image. Extract the design out of the outfit. High resolution, perfectly flat texture.",
-            "input_images": [data_uri], "aspect_ratio": "1:1"
+            "image": data_uri, "aspect_ratio": "1:1"
         })
         duration = time.time() - start_time
-        cost_usd = 0.128
+        cost_usd = 0.039
         credits_used = required_credits
-        log_replicate_call(project_id, "openai/gpt-image-2", duration, credits_used, cost_usd)
+        log_replicate_call(project_id, model_id, duration, credits_used, cost_usd)
         image_urls = [str(url) for url in output] if isinstance(output, list) else [str(output)]
         print(f"  [Extract Design] Done! Generated {len(image_urls)} tiles. Downloading locally...")
         local_result_urls = []
@@ -453,7 +453,7 @@ def extract_edit():
     data = request.get_json()
     image_url = data.get('imageUrl', '')
     prompt = data.get('prompt', '')
-    model_id = data.get('modelId', 'openai/gpt-image-2')
+    model_id = data.get('modelId', 'google/nano-banana')
     project_id = int(data.get('projectId', 1))
     user_id = data.get('userId') or data.get('user_id')
 
@@ -467,7 +467,7 @@ def extract_edit():
         except ValueError: user_id = None
 
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
-    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 148))
+    required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 78))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
         return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
@@ -489,10 +489,11 @@ def extract_edit():
         edit_prompt = f"Edit this pattern tile: {prompt}. Keep it as a flat 2D seamless repeating pattern tile, high resolution."
 
         replicate_input = {"prompt": edit_prompt, "aspect_ratio": "1:1"}
-        if model_cfg['input_list']:
-            replicate_input[model_cfg['input_key']] = [data_uri]
+        input_key = model_cfg.get('input_key') or 'image'
+        if model_cfg.get('input_list'):
+            replicate_input[input_key] = [data_uri]
         else:
-            replicate_input[model_cfg['input_key']] = data_uri
+            replicate_input[input_key] = data_uri
 
         print(f"  [Extract Edit] Editing with {model_id}: {prompt[:80]}...")
         start_time = time.time()
