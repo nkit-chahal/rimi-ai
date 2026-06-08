@@ -70,6 +70,20 @@ BILLING_PLANS = [
         ],
     },
     {
+        "id": "studio",
+        "label": "Studio",
+        "description": "For growing studios with regular output.",
+        "credits": 13993,
+        "amount": 199900,
+        "currency": "INR",
+        "badge": "",
+        "features": [
+            "13,993 AI credits",
+            "~32 full design workflows",
+            "Great for weekly production runs",
+        ],
+    },
+    {
         "id": "pro",
         "label": "Pro",
         "description": "For frequent studio use and client work.",
