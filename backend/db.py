@@ -180,8 +180,11 @@ class _PgConnectionWrapper:
         return wrapper
 
     def executescript(self, sql):
+        """Run multiple DDL statements — psycopg2 does not support multi-statement execute."""
         cur = self._conn.cursor()
-        cur.execute(sql)
+        statements = _split_sql_script(sql)
+        for stmt in statements:
+            cur.execute(stmt)
         return _PgCursorWrapper(cur)
 
     def commit(self):
@@ -314,8 +317,7 @@ def _pg_schema_sql():
             email_verified INTEGER NOT NULL DEFAULT 0,
             last_login_at TEXT,
             created_at TEXT,
-            status TEXT NOT NULL DEFAULT 'active',
-            user_id INTEGER
+            status TEXT NOT NULL DEFAULT 'active'
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL;
 
@@ -506,15 +508,55 @@ def _pg_schema_sql():
     """
 
 
+def _split_sql_script(sql):
+    """Split a SQL script into individual statements for PostgreSQL execution."""
+    import re
+    cleaned_lines = []
+    for line in sql.splitlines():
+        stripped = line.strip()
+        if stripped.startswith('--'):
+            continue
+        cleaned_lines.append(line)
+    cleaned = '\n'.join(cleaned_lines)
+    return [stmt.strip() for stmt in re.split(r';\s*\n', cleaned) if stmt.strip()]
+
+
+def _pg_ensure_column(conn, table, column, definition):
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}")
+
+
+def _pg_run_migrations(conn):
+    """Apply column migrations on existing PostgreSQL databases (mirrors SQLite ensure_column)."""
+    _pg_ensure_column(conn, "users", "login_provider", "TEXT NOT NULL DEFAULT 'email'")
+    _pg_ensure_column(conn, "users", "google_sub", "TEXT")
+    _pg_ensure_column(conn, "users", "avatar_url", "TEXT")
+    _pg_ensure_column(conn, "users", "email_verified", "INTEGER NOT NULL DEFAULT 0")
+    _pg_ensure_column(conn, "users", "last_login_at", "TEXT")
+    _pg_ensure_column(conn, "users", "created_at", "TEXT")
+    _pg_ensure_column(conn, "users", "status", "TEXT NOT NULL DEFAULT 'active'")
+    _pg_ensure_column(conn, "projects", "user_id", "INTEGER")
+    _pg_ensure_column(conn, "exports", "user_id", "INTEGER")
+    _pg_ensure_column(conn, "project_controls", "print_height", "INTEGER NOT NULL DEFAULT 12")
+    _pg_ensure_column(conn, "project_controls", "fabric_width", "INTEGER NOT NULL DEFAULT 54")
+
+    # Assign orphaned projects to the first user so studio-state queries work.
+    conn.execute(
+        """
+        UPDATE projects
+        SET user_id = sub.owner_id
+        FROM (SELECT id AS owner_id FROM users ORDER BY id LIMIT 1) AS sub
+        WHERE projects.user_id IS NULL
+        """
+    )
+
+
 def init_db():
     conn = db()
 
     if _USE_PG:
-        # PostgreSQL: create all tables
+        # PostgreSQL: create all tables, then migrate existing deployments
         conn.executescript(_pg_schema_sql())
-        conn.execute("ALTER TABLE exports ADD COLUMN IF NOT EXISTS user_id INTEGER")
-        conn.execute("ALTER TABLE project_controls ADD COLUMN IF NOT EXISTS print_height INTEGER NOT NULL DEFAULT 12")
-        conn.execute("ALTER TABLE project_controls ADD COLUMN IF NOT EXISTS fabric_width INTEGER NOT NULL DEFAULT 54")
+        _pg_run_migrations(conn)
         conn.commit()
     else:
         # SQLite: original schema + migration

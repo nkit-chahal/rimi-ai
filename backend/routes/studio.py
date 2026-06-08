@@ -1,9 +1,14 @@
 """Studio state and project controls routes."""
+import logging
+import traceback
+
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone
 
 from db import db, db_lock, rows_to_dicts, time_ago
 from middleware import login_required
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('studio', __name__)
 
@@ -111,9 +116,15 @@ def get_studio_state(project_id=1, user_id=None):
 @bp.route('/api/studio-state')
 @login_required
 def studio_state():
-    project_id = int(request.args.get('projectId', 1))
-    user_id = g.current_user["id"]
-    return jsonify({'success': True, 'state': get_studio_state(project_id, user_id)})
+    try:
+        project_id = int(request.args.get('projectId', 1))
+        user_id = g.current_user["id"]
+        return jsonify({'success': True, 'state': get_studio_state(project_id, user_id)})
+    except Exception as exc:
+        logger.error("studio-state failed for user %s project %s: %s",
+                     getattr(g, 'current_user', {}).get('id'), request.args.get('projectId'), exc)
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': 'Failed to load workspace. Please try again.'}), 500
 
 
 @bp.route('/api/projects/<int:project_id>/controls', methods=['PATCH'])
