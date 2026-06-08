@@ -1,4 +1,4 @@
-"""Mockup generation routes: single and batch product mockups via Nano Banana 2."""
+"""Mockup generation routes: single and batch product mockups via FLUX.2 Pro."""
 import os
 import uuid
 import base64
@@ -21,9 +21,10 @@ import storage
 
 bp = Blueprint('mockups', __name__)
 
-MODEL_ID = "google/nano-banana-2"
+MODEL_ID = "black-forest-labs/flux-2-pro"
 MAX_RETRIES = 3
 RETRY_BACKOFF_SECONDS = 5
+MAX_INPUT_PX = 768  # Compress input images to save on per-megapixel billing
 
 PRODUCT_PROMPTS = {
     'bed_sheet': 'A photorealistic flat bed sheet laid on a king-size bed in a bright, modern bedroom.',
@@ -60,11 +61,21 @@ PRODUCT_PROMPTS = {
     'custom_product': 'A photorealistic product mockup matching the reference image.',
 }
 
-def _image_to_data_uri(pil_img: Image.Image) -> str:
+def _compress_image(pil_img: Image.Image, max_px: int = MAX_INPUT_PX) -> Image.Image:
+    """Downscale image so longest side <= max_px to reduce megapixel billing."""
+    w, h = pil_img.size
+    if max(w, h) > max_px:
+        scale = max_px / max(w, h)
+        pil_img = pil_img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+    return pil_img
+
+def _image_to_data_uri(pil_img: Image.Image, compress: bool = True) -> str:
+    if compress:
+        pil_img = _compress_image(pil_img)
     buf = BytesIO()
-    pil_img.save(buf, format="PNG")
+    pil_img.save(buf, format="JPEG", quality=85)
     b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-    return f"data:image/png;base64,{b64}"
+    return f"data:image/jpeg;base64,{b64}"
 
 def _load_pattern_image(filename: str = "", url: str = "") -> Image.Image:
     if filename:
@@ -150,25 +161,25 @@ def _generate_single_mockup(
     }
     
     prompt = (
-        f"Use @Image 1 as the fabric print design. The pattern in @Image 1 shows: {pattern_description}. "
-        f"Apply this EXACT pattern from @Image 1 as a seamless repeating print covering the ENTIRE fabric surface of the product. "
+        f"Use the input reference image as the fabric print design. The pattern shows: {pattern_description}. "
+        f"Apply this EXACT pattern as a seamless repeating print covering the ENTIRE fabric surface of the product. "
     )
     
     if product_type == "custom_product" and product_reference_data_uri:
-        prompt += f"The product should perfectly match the shape, style, and item type shown in @Image 2. "
+        prompt += f"The product should match the shape and type shown in the second reference image. "
     else:
         prompt += f"Product: {base_prompt} "
         
     prompt += (
         f"Fabric: {fabric_texture} with realistic texture, natural folds, and draping. "
-        f"The pattern from @Image 1 must be clearly visible and recognizable — NEVER generate a plain or solid-colored product. "
+        f"The pattern must be clearly visible and recognizable — NEVER generate a plain or solid-colored product. "
         f"{bg_p.get(background, bg_p['studio'])} {shot_p.get(shot_style, shot_p['editorial'])} "
-        f"Photorealistic product photography, 4K."
+        f"Photorealistic product photography."
     )
     if custom_prompt.strip():
         prompt += f" User art direction: {custom_prompt.strip()}"
 
-    # 3. Call Nano Banana 2
+    # 3. Call FLUX.2 Pro
     print(f"  [Mockup] Running {MODEL_ID} for '{product_type}'...")
     print(f"  [Mockup] Prompt: {prompt[:200]}...")
     result_url = None
@@ -181,17 +192,21 @@ def _generate_single_mockup(
                 MODEL_ID,
                 input={
                     "prompt": prompt,
-                    "image_input": input_images,
+                    "input_images": input_images,
                     "aspect_ratio": "1:1",
+                    "resolution": "1 MP",
                 }
             )
             duration = time.time() - t0
-            # mockups uses MODEL_ID = google/nano-banana-2 ($0.067/image).
-            credits_used = credit_requirement('mappings', 78)
-            cost_usd = 0.067
+            # flux-2-pro: $0.015/run + ~$0.009 input (0.59MP) + $0.015 output (1MP) ≈ $0.039
+            credits_used = credit_requirement('mappings', 45)
+            cost_usd = 0.039
             log_replicate_call(project_id, MODEL_ID, duration, credits_used, cost_usd)
 
-            if isinstance(output, list) and len(output) > 0:
+            # flux-2-pro returns a FileOutput object with .url
+            if hasattr(output, 'url'):
+                result_url = str(output.url)
+            elif isinstance(output, list) and len(output) > 0:
                 result_url = str(output[0])
             else:
                 result_url = str(output)
@@ -242,7 +257,7 @@ def generate_mockup():
     if not product_type: return jsonify({"error": "productType is required"}), 400
     if not pattern_filename and not pattern_url: return jsonify({"error": "patternFilename or patternUrl is required"}), 400
 
-    required_credits = credit_requirement('mappings', 78)
+    required_credits = credit_requirement('mappings', 45)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
@@ -290,7 +305,7 @@ def generate_mockups_batch():
     if not pattern_filename: return jsonify({"error": "patternFilename is required"}), 400
     if not products: return jsonify({"error": "products must be a non-empty list"}), 400
 
-    required_credits = credit_requirement('mappings', 78, len(products))
+    required_credits = credit_requirement('mappings', 45, len(products))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
