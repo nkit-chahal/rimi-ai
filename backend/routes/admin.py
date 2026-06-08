@@ -371,6 +371,25 @@ def admin_logs():
         conn.close()
 
 
+@bp.route('/api/admin/projects', methods=['GET'])
+@admin_required
+def admin_projects():
+    conn = db()
+    try:
+        projects = rows_to_dicts(conn.execute("""
+            SELECT p.*, u.name AS userName 
+            FROM projects p
+            LEFT JOIN users u ON u.id = p.user_id
+            ORDER BY p.updated_at DESC
+        """).fetchall())
+        return jsonify({'success': True, 'projects': projects})
+    except Exception as e:
+        print(f"Error fetching admin projects: {e}")
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
+    finally:
+        conn.close()
+
+
 @bp.route('/api/admin/users', methods=['GET'])
 @admin_required
 def admin_users():

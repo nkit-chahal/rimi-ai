@@ -316,6 +316,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const [adminBillingLoading, setAdminBillingLoading] = useState(false);
     const [adminPricing, setAdminPricing] = useState([]);
     const [adminPricingLoading, setAdminPricingLoading] = useState(false);
+    const [adminProjects, setAdminProjects] = useState([]);
+    const [adminProjectsLoading, setAdminProjectsLoading] = useState(false);
+    const [adminStats, setAdminStats] = useState({ totalUsers: 0, totalProjects: 0, recentLogs: [] });
 
     const fetchAdminUsers = useCallback(() => {
         setAdminUsersLoading(true);
@@ -370,6 +373,34 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     useEffect(() => {
         if (isAdmin && (tool === 'admin-credits' || tool === 'admin-dashboard')) fetchAdminBilling();
     }, [tool, fetchAdminBilling, isAdmin]);
+
+    useEffect(() => {
+        if (isAdmin && tool === 'admin-dashboard') {
+            Promise.all([
+                fetch(`${API}/api/admin/users`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
+                fetch(`${API}/api/admin/projects`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
+                fetch(`${API}/api/admin/logs`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
+            ]).then(([usersData, projectsData, logsData]) => {
+                setAdminStats({
+                    totalUsers: usersData.success ? usersData.users.length : 0,
+                    totalProjects: projectsData.success ? projectsData.projects.length : 0,
+                    recentLogs: logsData.success ? logsData.replicateLogs.slice(0, 8) : [],
+                });
+                if (usersData.success) setAdminUsers(usersData.users);
+            }).catch(() => { });
+        }
+    }, [tool, currentToken, isAdmin]);
+
+    useEffect(() => {
+        if (isAdmin && tool === 'admin-projects') {
+            setAdminProjectsLoading(true);
+            fetch(`${API}/api/admin/projects`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
+                .then(r => r.json())
+                .then(d => { if (d.success) setAdminProjects(d.projects); })
+                .catch(() => { })
+                .finally(() => setAdminProjectsLoading(false));
+        }
+    }, [tool, currentToken, isAdmin]);
 
     const fetchBillingOverview = useCallback(() => {
         if (!currentToken) return;
@@ -1197,9 +1228,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         };
 
         // Routing canvas rendering
-        if (tool === 'admin-dashboard') return <AdminDashboard adminStats={state.metrics} budgetData={budgetData} adminUsers={adminUsers} setTool={setTool} renderBudgetBanner={renderBudgetBanner} />;
+        if (tool === 'admin-dashboard') return <AdminDashboard adminStats={adminStats} budgetData={budgetData} adminUsers={adminUsers} setTool={setTool} renderBudgetBanner={renderBudgetBanner} />;
         if (tool === 'admin-users') return <AdminUsers renderBudgetBanner={renderBudgetBanner} adminUsersLoading={adminUsersLoading} adminUsers={adminUsers} currentToken={currentToken} fetchAdminUsers={fetchAdminUsers} />;
-        if (tool === 'admin-projects') return <AdminProjects renderBudgetBanner={renderBudgetBanner} adminProjectsLoading={state.projectsLoading} adminProjects={state.projects} />;
+        if (tool === 'admin-projects') return <AdminProjects renderBudgetBanner={renderBudgetBanner} adminProjectsLoading={adminProjectsLoading} adminProjects={adminProjects} />;
         if (tool === 'admin-logs') return <AdminLogs renderBudgetBanner={renderBudgetBanner} replicateLogsLoading={replicateLogsLoading} replicateLogs={replicateLogs} loginEvents={loginEvents} adminAuditEvents={adminAuditEvents} />;
         if (tool === 'admin-credits') return <AdminCredits renderBudgetBanner={renderBudgetBanner} adminUsers={adminUsers} adminSelectedUserId={adminSelectedUserId} setAdminSelectedUserId={setAdminSelectedUserId} adminUsersLoading={adminUsersLoading} currentToken={currentToken} fetchAdminUsers={fetchAdminUsers} />;
 
