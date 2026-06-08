@@ -10,9 +10,9 @@ from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone, timedelta
 
 import bcrypt
-import jwt
 
 from db import DEFAULT_CREDIT_PRICING, db, rows_to_dicts
+from jwt_tokens import issue_access_token
 from middleware import admin_required, login_required
 
 bp = Blueprint('admin', __name__)
@@ -175,11 +175,7 @@ def api_login():
                     "emailVerified": bool(user.get("email_verified", 0)),
                     "lastLoginAt": last_login_at,
                 }
-                jwt_secret = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
-                token = jwt.encode(
-                    {'user_id': user['id'], 'role': user['role'], 'exp': datetime.now(timezone.utc) + timedelta(hours=24)},
-                    jwt_secret, algorithm='HS256'
-                )
+                token = issue_access_token(user['id'], user['role'])
                 return jsonify({'success': True, 'user': user_payload, 'token': token})
         return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
     except Exception as e:

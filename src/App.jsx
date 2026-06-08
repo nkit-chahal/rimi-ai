@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import './index.css';
 import Studio from './pages/Studio';
 import Login from './pages/Login';
+import { normalizeToken } from './components/studio/shared/helpers';
 
 function readSavedUser() {
   try {
@@ -23,26 +24,41 @@ function readSavedUser() {
   }
 }
 
+function readInitialSession() {
+  const user = readSavedUser();
+  let token = null;
+  try {
+    token = normalizeToken(localStorage.getItem('rim_token'));
+  } catch {
+    token = null;
+  }
+  // Drop stale user cache when the session token is missing
+  if (user && !token) {
+    localStorage.removeItem('rim_user');
+    return { user: null, token: null };
+  }
+  return { user, token };
+}
+
 function App() {
-  const [view, setView] = useState(() => {
-    return readSavedUser() ? 'studio' : 'login';
-  });
-  const [currentUser, setCurrentUser] = useState(() => readSavedUser());
-  const [currentToken, setCurrentToken] = useState(() => {
-    try {
-      const saved = localStorage.getItem('rim_token');
-      return saved ? saved : null;
-    } catch {
-      return null;
-    }
-  });
+  const [initialSession] = useState(() => readInitialSession());
+  const [view, setView] = useState(() => (initialSession.user ? 'studio' : 'login'));
+  const [currentUser, setCurrentUser] = useState(() => initialSession.user);
+  const [currentToken, setCurrentToken] = useState(() => initialSession.token);
 
   const handleLogin = (user, token) => {
-    setCurrentUser(user);
-    if (token) {
-      setCurrentToken(token);
-      localStorage.setItem('rim_token', token);
+    const cleanToken = normalizeToken(token);
+    if (!cleanToken) {
+      setCurrentUser(null);
+      setCurrentToken(null);
+      localStorage.removeItem('rim_user');
+      localStorage.removeItem('rim_token');
+      setView('login');
+      return;
     }
+    setCurrentUser(user);
+    setCurrentToken(cleanToken);
+    localStorage.setItem('rim_token', cleanToken);
     localStorage.setItem('rim_user', JSON.stringify(user));
     setView('studio');
   };

@@ -5,11 +5,11 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import bcrypt
-import jwt as pyjwt
 import requests
 from flask import Blueprint, jsonify, make_response, redirect, request
 
 from db import db
+from jwt_tokens import issue_access_token
 
 bp = Blueprint('google_auth', __name__)
 
@@ -328,11 +328,7 @@ def google_complete_signup():
         conn.commit()
 
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-        jwt_secret = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
-        jwt_token = pyjwt.encode(
-            {'user_id': user_id, 'role': user['role'], 'exp': utc_now() + timedelta(hours=24)},
-            jwt_secret, algorithm='HS256'
-        )
+        jwt_token = issue_access_token(user_id, user['role'])
         payload = user_payload(user)
         payload["lastLoginAt"] = last_login_at
         return jsonify({"success": True, "user": payload, "token": jwt_token})
@@ -374,11 +370,7 @@ def google_exchange():
             (utc_now().isoformat(), token),
         )
         conn.commit()
-        jwt_secret = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
-        jwt_token = pyjwt.encode(
-            {'user_id': row['user_id'], 'role': row['role'], 'exp': utc_now() + timedelta(hours=24)},
-            jwt_secret, algorithm='HS256'
-        )
+        jwt_token = issue_access_token(row['user_id'], row['role'])
         return jsonify({"success": True, "user": user_payload(row), "token": jwt_token})
     except Exception as exc:
         conn.rollback()

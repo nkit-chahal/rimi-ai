@@ -9,6 +9,13 @@
  */
 export const API = import.meta.env.VITE_API_URL || '';
 
+/** Normalize JWT strings from API responses / localStorage. */
+export function normalizeToken(token) {
+    if (!token || typeof token !== 'string') return null;
+    const cleaned = token.trim();
+    return cleaned.length > 0 ? cleaned : null;
+}
+
 /**
  * Crop an image element based on a ReactCrop crop object.
  */
@@ -76,9 +83,10 @@ export function updateCreditsFromJson(data, setUser) {
 export async function apiFetch(url, options = {}, token = null) {
     const fullUrl = url.startsWith('http') ? url : `${API}${url}`;
     const headers = { ...options.headers };
-    
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+    const authToken = normalizeToken(token);
+
+    if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
     }
     
     // Don't set Content-Type for FormData (browser sets it with boundary)
@@ -89,8 +97,8 @@ export async function apiFetch(url, options = {}, token = null) {
     const res = await fetch(fullUrl, { ...options, headers });
     
     if (!res.ok) {
-        // Auto-logout on 401 (expired or invalid token)
-        if (res.status === 401) {
+        // Only logout when we sent a session token that the server rejected
+        if (res.status === 401 && authToken) {
             window.dispatchEvent(new CustomEvent('rim:session-expired'));
         }
         let errorMessage = `Request failed (${res.status})`;

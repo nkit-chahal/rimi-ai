@@ -8,13 +8,10 @@ import json
 import base64
 from datetime import datetime, timezone
 
-import jwt
 from flask import request
 
 from db import db, db_lock
-
-JWT_SECRET = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
-JWT_ALGORITHM = 'HS256'
+from jwt_tokens import decode_access_token
 
 
 def resolve_user_id(user_id=None):
@@ -30,7 +27,7 @@ def resolve_user_id(user_id=None):
         return None
 
     try:
-        payload = jwt.decode(auth_header[7:], JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = decode_access_token(auth_header[7:].strip())
         resolved = payload.get('user_id')
         return int(resolved) if resolved else None
     except Exception:

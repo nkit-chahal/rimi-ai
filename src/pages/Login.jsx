@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { API } from '../components/studio/shared/helpers';
+import { API, normalizeToken } from '../components/studio/shared/helpers';
 
 export default function Login({ onLogin }) {
   const [mode, setMode] = useState('signin');
@@ -75,7 +75,7 @@ export default function Login({ onLogin }) {
           body: JSON.stringify({ token: googleLoginToken }),
         });
         const data = await res.json();
-        if (data.success && data.user) {
+        if (data.success && data.user && normalizeToken(data.token)) {
           window.history.replaceState(null, '', window.location.pathname + window.location.hash);
           onLogin(data.user, data.token);
           return;
@@ -117,8 +117,11 @@ export default function Login({ onLogin }) {
       });
       const data = await res.json();
 
-      if (data.success && data.user) {
+      if (data.success && data.user && normalizeToken(data.token)) {
         onLogin(data.user, data.token);
+      } else if (data.success && data.user) {
+        setError('Login succeeded but no session token was returned. Please try again.');
+        setIsLoading(false);
       } else {
         setError(data.error || 'Invalid email or password.');
         setIsLoading(false);
@@ -231,7 +234,7 @@ export default function Login({ onLogin }) {
         body: JSON.stringify({ token: googleSignupToken, name: name.trim(), password }),
       });
       const data = await res.json();
-      if (data.success && data.user) {
+      if (data.success && data.user && normalizeToken(data.token)) {
         onLogin(data.user, data.token);
         return;
       }

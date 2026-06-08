@@ -1,15 +1,12 @@
 """Authentication middleware for protecting API endpoints."""
-import os
 import functools
 import logging
 from flask import request, jsonify, g
 import jwt
 from db import db
+from jwt_tokens import decode_access_token
 
 logger = logging.getLogger(__name__)
-
-JWT_SECRET = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
-JWT_ALGORITHM = 'HS256'
 
 
 def _get_current_user():
@@ -17,16 +14,19 @@ def _get_current_user():
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return None
-    token = auth_header[7:]
+    token = auth_header[7:].strip()
+    if not token:
+        return None
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = decode_access_token(token)
         user_id = payload.get('user_id')
         if not user_id:
             return None
         conn = db()
         try:
-            user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+            user = conn.execute('SELECT * FROM users WHERE id = ?', (int(user_id),)).fetchone()
             if not user:
+                logger.warning('JWT user_id=%s not found in database', user_id)
                 return None
             user_dict = dict(user)
             # Reject banned or suspended users
@@ -35,7 +35,14 @@ def _get_current_user():
             return user_dict
         finally:
             conn.close()
-    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+    except jwt.ExpiredSignatureError:
+        logger.info('JWT expired')
+        return None
+    except jwt.InvalidTokenError as exc:
+        logger.warning('JWT invalid: %s', exc)
+        return None
+    except Exception as exc:
+        logger.error('JWT auth failed: %s', exc)
         return None
 
 

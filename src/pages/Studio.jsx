@@ -510,9 +510,16 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     }, [activeProjectId, currentToken]);
 
     useEffect(() => {
-        if (!isAdmin) loadStudioState(1);
-        else setIsLoadingState(false);
-    }, [isAdmin, loadStudioState]);
+        if (isAdmin) {
+            setIsLoadingState(false);
+            return;
+        }
+        if (!currentToken) {
+            setIsLoadingState(false);
+            return;
+        }
+        loadStudioState(1);
+    }, [isAdmin, loadStudioState, currentToken]);
 
     useEffect(() => {
         const onKeyDown = (e) => {
