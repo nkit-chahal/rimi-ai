@@ -30,7 +30,7 @@ DEFAULT_CREDIT_PRICING = [
     # ----- Pattern Extraction (default + per-model overrides) -----
     # Default key falls back to Nano Banana 2 pricing.
     ("extract", "Pattern Extraction (default)", "/api/extract-design", 78, "dynamic", 1),
-    ("extract_gpt_image_2", "Extract — GPT Image 2", "openai/gpt-image-2", 148, "dynamic", 1),
+
 
     ("extract_imagen_ultra", "Extract — Imagen 4 Ultra", "google/imagen-4-ultra", 69, "dynamic", 1),
     ("extract_imagen_fast", "Extract — Imagen 4 Fast", "google/imagen-4-fast", 23, "dynamic", 1),

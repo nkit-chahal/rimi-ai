@@ -192,7 +192,7 @@ EXTRACT_MODELS = [
 # Replaces the old flat `credit_requirement('inspire', 310)`.
 # ---------------------------------------------------------------------------
 MODEL_TO_CREDITS = {
-    'openai/gpt-image-2':              148,
+
 
     'google/imagen-4-ultra':           69,
     'google/imagen-4-fast':            23,
@@ -565,7 +565,7 @@ def generate_inspirations():
             "You are a luxury textile & fashion designer and an expert prompt engineer. "
             f"Analyze the user's basic pattern idea: '{user_prompt}'. "
             f"The user wants a creativity level of {creativity} out of 5 (1 = very safe/faithful, 5 = extremely wild/abstract/bold). "
-            "Write a highly professional, rich, and sophisticated prompt for an AI image generator (like openai/gpt-image-2) "
+            "Write a highly professional, rich, and sophisticated prompt for an AI image generator "
             "that describes a stunning, flat 2D repeating fabric pattern tile in meticulous detail. "
             "Focus on the exact arrangement of motifs, luxurious color palette (use specific designer color terms), "
             "composition, spacing, and fine artistic textures. "
@@ -670,21 +670,12 @@ def generate_inspirations():
                     if 'flux' in model_id:
                         replicate_input["width"] = width
                         replicate_input["height"] = height
-                    elif 'openai' in model_id:
-                        # GPT-Image-2 uses size strings
-                        size_map = {512: "1024x1024", 1024: "1024x1024", 1536: "1536x1536", 2048: "2048x2048"}
-                        replicate_input["size"] = size_map.get(resolution, "1024x1024")
                     elif 'seedream' in model_id:
                         replicate_input["image_size"] = f"{width}x{height}"
                     
-                    # Reference image - model-specific key names
+                    # Reference image
                     if data_uri:
-                        if 'openai' in model_id:
-                            replicate_input["input_images"] = [data_uri]
-                        elif 'flux' in model_id:
-                            replicate_input["image"] = data_uri
-                        else:
-                            replicate_input["image"] = data_uri
+                        replicate_input["image"] = data_uri
                         
                     start_time = time.time()
                     output = replicate.run(model_id, input=replicate_input)
@@ -693,7 +684,7 @@ def generate_inspirations():
                     # Exact Per-Image Costs from Replicate Invoice JSON
                     # These models are billed per-image, not per-second!
                     per_image_costs = {
-                        'openai/gpt-image-2': 0.128,
+
                         'xai/grok-imagine-image': 0.02,
                         'google/imagen-4-fast': 0.02,
                         'google/imagen-4-ultra': 0.06, # Estimated from fast
