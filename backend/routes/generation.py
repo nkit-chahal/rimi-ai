@@ -210,7 +210,7 @@ MODEL_TO_CREDITS = {
     'xai/grok-imagine-image':          23,
     'replicate/seamless-texture':      84,
     'fofr/style-transfer':             23,
-    'lucataco/remove-bg':              2,
+    '851-labs/background-remover':     2,
 }
 DEFAULT_INSPIRE_CREDITS = 148  # safe default = GPT-Image-2 rate
 

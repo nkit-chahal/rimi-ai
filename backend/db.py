@@ -63,7 +63,7 @@ DEFAULT_CREDIT_PRICING = [
     ("upscale", "Super Resolution", "/api/upscale", 23, "dynamic", 1),
     ("vectorize", "Vectorize (cloud)", "/api/vectorize cloud", 12, "fixed", 1),
     ("vectorizeLocal", "Vectorize (local)", "/api/vectorize local", 3, "fixed", 1),
-    ("removeBg", "Remove Background", "lucataco/remove-bg", 2, "fixed", 1),
+    ("removeBg", "Remove Background", "851-labs/background-remover", 2, "fixed", 1),
     ("styleTransfer", "Style Transfer", "fofr/style-transfer", 23, "dynamic", 1),
 
     # ----- Local / cheap CPU-side tools -----

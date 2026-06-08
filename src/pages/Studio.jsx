@@ -17,6 +17,7 @@ import SeamlessTool from '../components/studio/tools/SeamlessTool';
 import LibraryTool from '../components/studio/tools/LibraryTool';
 import ImageLayersTool from '../components/studio/tools/ImageLayersTool';
 import VectorizeTool from '../components/studio/tools/VectorizeTool';
+import RemoveBgTool from '../components/studio/tools/RemoveBgTool';
 import InspireTool from '../components/studio/tools/InspireTool';
 import ColorwaysTool from '../components/studio/tools/ColorwaysTool';
 import ColorwayManagerTool from '../components/studio/tools/ColorwayManagerTool';
@@ -57,6 +58,7 @@ const NAV = [
             { id: 'inspire', label: 'Inspirations', icon: 'M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7h2c3.1 0 5.5-2.5 5.5-5.5C22 6 17.5 2 12 2z' },
             { id: 'vectorize', label: 'Vectorize', icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z' },
             { id: 'upscale', label: 'Super Resolution', icon: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7' },
+            { id: 'removebg', label: 'Remove Background', icon: 'M3 7h18M3 12h18M8 7v10M16 7v10M5 7V5a2 2 0 012-2h10a2 2 0 012 2v2' },
             { id: 'imagelayers', label: 'Image Layers', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' },
             { id: 'colorways', label: 'Colorways', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z' },
             { id: 'colorway-manager', label: 'Colorway Manager', icon: 'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83' },
@@ -101,7 +103,7 @@ const emptyState = {
 
 export default function Studio({ onBack, currentUser, currentToken, onLogout }) {
     const adminTools = ['admin-dashboard', 'admin-users', 'admin-projects', 'admin-logs', 'admin-credits'];
-    const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace'];
+    const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'removebg', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace'];
     const isAdmin = currentUser?.role === 'admin';
 
     const [tool, _setTool] = useState(() => {
@@ -166,6 +168,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const [seamlessUrl, setSeamlessUrl] = useState(null);
     const [vecUrl, setVecUrl] = useState(null);
     const [upscaleUrl, setUpscaleUrl] = useState(null);
+    const [removeBgUrl, setRemoveBgUrl] = useState(null);
     const [cwUrl, setCwUrl] = useState(null);
     const [repeatUrl, setRepeatUrl] = useState(null);
     const [isRepeat, setIsRepeat] = useState(false);
@@ -1135,6 +1138,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         if (tool === 'library') return <LibraryTool {...commonProps} />;
         if (tool === 'imagelayers') return <ImageLayersTool {...commonProps} />;
         if (tool === 'vectorize' || tool === 'upscale') return <VectorizeTool {...commonProps} vecUrl={vecUrl} setVecUrl={setVecUrl} upscaleUrl={upscaleUrl} setUpscaleUrl={setUpscaleUrl} />;
+        if (tool === 'removebg') return <RemoveBgTool {...commonProps} removeBgUrl={removeBgUrl} setRemoveBgUrl={setRemoveBgUrl} />;
         if (tool === 'inspire') return <InspireTool {...commonProps} />;
         if (tool === 'colorways') return <ColorwaysTool {...commonProps} cwUrl={cwUrl} setCwUrl={setCwUrl} />;
         if (tool === 'colorway-manager') return <ColorwayManagerTool {...commonProps} />;
@@ -1497,6 +1501,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                                                     if (t.type === 'seamless') setSeamlessUrl(t.resultUrl);
                                                                     if (t.type === 'vectorize') setVecUrl(t.resultUrl);
                                                                     if (t.type === 'upscale') setUpscaleUrl(t.resultUrl);
+                                                                    if (t.type === 'removebg') setRemoveBgUrl(t.resultUrl);
                                                                     setShowBgTasksDropdown(false);
                                                                 }} style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'rgba(99, 102, 241, 0.08)', color: '#6366f1', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>View</button>
                                                                 <a href={t.resultUrl.startsWith('http') ? t.resultUrl : `${API}${t.resultUrl}`} download onClick={(e) => forceDownload(e, t.resultUrl.startsWith('http') ? t.resultUrl : `${API}${t.resultUrl}`)} style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff', borderRadius: '6px', fontWeight: 700, textDecoration: 'none', textAlign: 'center' }}>Download</a>
@@ -1608,7 +1613,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                     </div>
                 )}
 
-                <div className={`st-workspace ${!['dashboard', 'repeat', 'vectorize', 'upscale', 'imagelayers'].includes(tool) ? 'full-width' : ''}`}>
+                <div className={`st-workspace ${!['dashboard', 'repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers'].includes(tool) ? 'full-width' : ''}`}>
                     <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
                         <div className="st-page-head">
                             <div>
@@ -1620,6 +1625,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                                                 : tool === 'billing' ? 'Buy AI credit packs through Razorpay Standard Checkout.'
                                                     : tool === 'workspace' ? 'Manage projects, switch workspaces, and organize your design pipeline.'
                                                         : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.'
+                                                        : tool === 'removebg' ? 'Remove backgrounds instantly and download transparent PNGs for print-ready assets.'
                                                         : tool === 'measurement' ? 'View real-world dimensions, DPI calculations, and production readiness.'
                                                             : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.'
                                                                 : 'Upload artwork and generate print-ready assets.'
@@ -1627,7 +1633,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             </div>
                         </div>
 
-                        {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'workspace' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && !tool.startsWith('admin')) && (
+                        {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'workspace' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && tool !== 'vectorize' && tool !== 'upscale' && tool !== 'removebg' && tool !== 'imagelayers' && !tool.startsWith('admin')) && (
                             <div
                                 className={`st-upload ${isDrag ? 'dragging' : ''} ${preview ? 'has-image' : ''}`}
                                 onClick={() => fileRef.current?.click()}
@@ -1653,7 +1659,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                             renderCanvas()
                         )}
                     </main>
-                    {['dashboard', 'repeat', 'vectorize', 'upscale', 'imagelayers'].includes(tool) && (
+                    {['dashboard', 'repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers'].includes(tool) && (
                         <aside className="st-right-panel" ref={setRightPanelEl} />
                     )}
                 </div>

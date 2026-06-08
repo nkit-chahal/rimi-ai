@@ -21,11 +21,12 @@ def register_all_blueprints(app):
     from routes.billing import bp as billing_bp
     from routes.google_auth import bp as google_auth_bp
     from routes.credits import bp as credits_bp
+    from routes.remove_bg import bp as remove_bg_bp
 
     for blueprint in [
         studio_bp, upload_bp, color_bp, generation_bp, seamless_bp,
         repeat_bp, vectorize_bp, layers_bp, mockups_bp, colorways_bp,
         exports_bp, pipeline_bp, projects_bp, admin_bp, billing_bp,
-        google_auth_bp, credits_bp,
+        google_auth_bp, credits_bp, remove_bg_bp,
     ]:
         app.register_blueprint(blueprint)
