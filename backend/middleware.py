@@ -50,6 +50,8 @@ def login_required(f):
     """Decorator that requires a valid JWT token."""
     @functools.wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return '', 200
         user = _get_current_user()
         if not user:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
@@ -62,6 +64,8 @@ def admin_required(f):
     """Decorator that requires a valid JWT token with admin role."""
     @functools.wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return '', 200
         user = _get_current_user()
         if not user:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401

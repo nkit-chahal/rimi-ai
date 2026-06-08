@@ -390,6 +390,58 @@ def admin_projects():
         conn.close()
 
 
+@bp.route('/api/admin/budget', methods=['GET', 'POST', 'OPTIONS'])
+@admin_required
+def admin_budget():
+    if request.method == 'OPTIONS':
+        return jsonify({'success': True})
+
+    settings_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'admin_settings.json')
+    
+    # Handle POST to update budget
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        try:
+            budget = float(data.get('budget', 50.0))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Invalid budget value'}), 400
+        
+        try:
+            with open(settings_path, 'w') as f:
+                json.dump({'budget': budget}, f)
+        except Exception as e:
+            print(f"Failed to write admin settings: {e}")
+    else:
+        # Handle GET - read budget
+        budget = 50.0  # default
+        if os.path.exists(settings_path):
+            try:
+                with open(settings_path, 'r') as f:
+                    config = json.load(f)
+                    budget = float(config.get('budget', 50.0))
+            except Exception as e:
+                print(f"Failed to read admin settings: {e}")
+
+    # Query replicate logs for total cost
+    conn = db()
+    try:
+        row = conn.execute("SELECT SUM(cost_usd) AS total_spent FROM replicate_logs").fetchone()
+        total_spent = float(row['total_spent'] or 0.0) if row else 0.0
+    except Exception as e:
+        print(f"Error querying replicate logs: {e}")
+        total_spent = 0.0
+    finally:
+        conn.close()
+
+    remaining = budget - total_spent
+    return jsonify({
+        'success': True,
+        'budget': budget,
+        'totalSpent': total_spent,
+        'remaining': remaining
+    })
+
+
 @bp.route('/api/admin/users', methods=['GET'])
 @admin_required
 def admin_users():
