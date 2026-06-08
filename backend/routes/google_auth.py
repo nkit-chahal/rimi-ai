@@ -276,6 +276,7 @@ def google_complete_signup():
     token = data.get("token", "")
     name = (data.get("name") or "").strip()
     password = data.get("password") or ""
+    fingerprint = data.get("fingerprint", "")
 
     if not token or not name or not password:
         return jsonify({"success": False, "error": "Name and password are required"}), 400
@@ -291,6 +292,12 @@ def google_complete_signup():
             return jsonify({"success": False, "error": "Google signup token was already used"}), 400
         if datetime.fromisoformat(row["expires_at"]) < utc_now():
             return jsonify({"success": False, "error": "Google signup token expired"}), 400
+
+        from signup_guard import check_signup_guards, record_signup_guard, get_client_ip
+        ip_address = get_client_ip()
+        allowed, reason = check_signup_guards(ip_address, fingerprint, row["email"])
+        if not allowed:
+            return jsonify({"success": False, "error": reason}), 400
 
         existing = conn.execute(
             "SELECT id FROM users WHERE google_sub = ? OR email = ?",
@@ -326,6 +333,11 @@ def google_complete_signup():
         conn.execute("UPDATE google_signup_tokens SET used_at = ? WHERE token = ?", (now.isoformat(), token))
         last_login_at = record_login(conn, user_id, "google")
         conn.commit()
+
+        try:
+            record_signup_guard(user_id, ip_address, fingerprint, row["email"])
+        except Exception as guard_exc:
+            print(f"Failed to record signup guard: {guard_exc}")
 
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         jwt_token = issue_access_token(user_id, user['role'])

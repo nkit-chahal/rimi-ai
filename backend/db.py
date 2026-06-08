@@ -505,6 +505,17 @@ def _pg_schema_sql():
             used_at TEXT,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS signup_guards (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            ip_address TEXT,
+            device_fingerprint TEXT,
+            normalized_email TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sg_ip ON signup_guards (ip_address);
+        CREATE INDEX IF NOT EXISTS idx_sg_fp ON signup_guards (device_fingerprint);
+        CREATE INDEX IF NOT EXISTS idx_sg_email ON signup_guards (normalized_email);
     """
 
 
@@ -820,6 +831,18 @@ def init_db():
                 used_at TEXT,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS signup_guards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                ip_address TEXT,
+                device_fingerprint TEXT,
+                normalized_email TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_sg_ip ON signup_guards (ip_address);
+            CREATE INDEX IF NOT EXISTS idx_sg_fp ON signup_guards (device_fingerprint);
+            CREATE INDEX IF NOT EXISTS idx_sg_email ON signup_guards (normalized_email);
         """)
 
         def ensure_column(table, column, definition):

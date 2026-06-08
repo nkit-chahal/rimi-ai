@@ -191,6 +191,7 @@ def signup_request_otp():
     email = (data.get('email') or '').strip().lower()
     password = data.get('password') or ''
     name = (data.get('name') or '').strip()
+    fingerprint = data.get('fingerprint', '')
 
     if not email or not password or not name:
         return jsonify({'success': False, 'error': 'Name, email, and password are required'}), 400
@@ -198,6 +199,12 @@ def signup_request_otp():
         return jsonify({'success': False, 'error': 'Enter a valid email address'}), 400
     if len(password) < 8:
         return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
+
+    from signup_guard import check_signup_guards, get_client_ip
+    ip_address = get_client_ip()
+    allowed, reason = check_signup_guards(ip_address, fingerprint, email)
+    if not allowed:
+        return jsonify({'success': False, 'error': reason}), 400
 
     conn = db()
     try:
@@ -249,6 +256,7 @@ def signup_verify_otp():
     data = request.get_json() or {}
     email = (data.get('email') or '').strip().lower()
     otp = (data.get('otp') or '').strip()
+    fingerprint = data.get('fingerprint', '')
 
     if not email or not otp:
         return jsonify({'success': False, 'error': 'Email and verification code are required'}), 400
@@ -271,6 +279,12 @@ def signup_verify_otp():
             conn.commit()
             return jsonify({'success': False, 'error': 'Invalid verification code'}), 400
 
+        from signup_guard import check_signup_guards, record_signup_guard, get_client_ip
+        ip_address = get_client_ip()
+        allowed, reason = check_signup_guards(ip_address, fingerprint, email)
+        if not allowed:
+            return jsonify({'success': False, 'error': reason}), 400
+
         existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
         if existing:
             conn.execute("DELETE FROM email_otps WHERE email = ?", (email,))
@@ -280,7 +294,7 @@ def signup_verify_otp():
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         reset_at = (now + timedelta(days=30)).isoformat()
         initials = _initials_from_name(pending["name"])
-        conn.execute(
+        cur = conn.execute(
             """
             INSERT INTO users
             (email, password, name, initials, role, plan, credits_used, credits_limit, reset_at,
@@ -289,8 +303,15 @@ def signup_verify_otp():
             """,
             (email, pending["password_hash"], pending["name"], initials, SIGNUP_DEFAULT_CREDITS, reset_at, now.isoformat()),
         )
+        user_id = cur.lastrowid
         conn.execute("DELETE FROM email_otps WHERE email = ?", (email,))
         conn.commit()
+
+        try:
+            record_signup_guard(user_id, ip_address, fingerprint, email)
+        except Exception as guard_exc:
+            print(f"Failed to record signup guard: {guard_exc}")
+
         return jsonify({'success': True, 'message': 'Email verified. You can sign in now.'})
     except Exception as e:
         conn.rollback()

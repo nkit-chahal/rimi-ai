@@ -12,6 +12,43 @@ function clearAuthQueryParams() {
   window.history.replaceState(null, '', window.location.pathname + window.location.hash);
 }
 
+function generateFingerprint() {
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.textBaseline = "top";
+      ctx.font = "14px Arial";
+      ctx.fillStyle = "#f60";
+      ctx.fillRect(10, 10, 50, 50);
+      ctx.fillStyle = "#069";
+      ctx.fillText("rimi_fp_1", 10, 30);
+    }
+    const canvasData = canvas.toDataURL();
+    const components = [
+      navigator.userAgent,
+      navigator.language,
+      navigator.platform,
+      screen.width + 'x' + screen.height,
+      screen.colorDepth,
+      new Date().getTimezoneOffset(),
+      canvasData
+    ];
+    const str = components.join('|');
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0, ch; i < str.length; i++) {
+      ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+  } catch (e) {
+    return 'err_' + Date.now();
+  }
+}
+
 export default function Login({ onLogin }) {
   const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
@@ -27,9 +64,20 @@ export default function Login({ onLogin }) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [googlePhase, setGooglePhase] = useState(readGooglePhaseFromUrl);
+  const [isRegisteredDevice, setIsRegisteredDevice] = useState(false);
   const oauthHandledRef = useRef(false);
   const onLoginRef = useRef(onLogin);
   onLoginRef.current = onLogin;
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('__rimi_registered') === '1') {
+        setIsRegisteredDevice(true);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
 
   useEffect(() => {
     if (oauthHandledRef.current) return;
@@ -107,6 +155,11 @@ export default function Login({ onLogin }) {
           data = null;
         }
         if (res.ok && data?.success && data.user && normalizeToken(data.token)) {
+          try {
+            localStorage.setItem('__rimi_registered', '1');
+          } catch (e) {
+            console.error(e);
+          }
           clearAuthQueryParams();
           prefetchStudioState(data.token);
           onLoginRef.current(data.user, data.token);
@@ -152,6 +205,11 @@ export default function Login({ onLogin }) {
       const data = await res.json();
 
       if (data.success && data.user && normalizeToken(data.token)) {
+        try {
+          localStorage.setItem('__rimi_registered', '1');
+        } catch (e) {
+          console.error(e);
+        }
         prefetchStudioState(data.token);
         onLogin(data.user, data.token);
       } else if (data.success && data.user) {
@@ -191,7 +249,7 @@ export default function Login({ onLogin }) {
       const res = await fetch(`${API}/api/signup/request-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), password }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), password, fingerprint: generateFingerprint() }),
       });
       const data = await res.json();
       if (!data.success) {
@@ -224,12 +282,18 @@ export default function Login({ onLogin }) {
       const res = await fetch(`${API}/api/signup/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: pendingEmail, otp }),
+        body: JSON.stringify({ email: pendingEmail, otp, fingerprint: generateFingerprint() }),
       });
       const data = await res.json();
       if (!data.success) {
         setError(data.error || 'Verification failed.');
         return;
+      }
+      try {
+        localStorage.setItem('__rimi_registered', '1');
+        setIsRegisteredDevice(true);
+      } catch (e) {
+        console.error(e);
       }
       setNotice(data.message || 'Email verified. You can sign in now.');
       setMode('signin');
@@ -266,10 +330,16 @@ export default function Login({ onLogin }) {
       const res = await fetch(`${API}/api/auth/google/complete-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: googleSignupToken, name: name.trim(), password }),
+        body: JSON.stringify({ token: googleSignupToken, name: name.trim(), password, fingerprint: generateFingerprint() }),
       });
       const data = await res.json();
       if (data.success && data.user && normalizeToken(data.token)) {
+        try {
+          localStorage.setItem('__rimi_registered', '1');
+          setIsRegisteredDevice(true);
+        } catch (e) {
+          console.error(e);
+        }
         prefetchStudioState(data.token);
         onLogin(data.user, data.token);
         return;
@@ -321,6 +391,27 @@ export default function Login({ onLogin }) {
 
   const renderStatus = () => (
     <>
+      {isRegisteredDevice && (mode === 'signup' || mode === 'googleSetup' || mode === 'verify') && (
+        <div className="login-warning-badge" style={{
+          background: 'rgba(245, 158, 11, 0.15)',
+          border: '1px solid rgba(245, 158, 11, 0.3)',
+          color: '#fbbf24',
+          padding: '8px 12px',
+          borderRadius: '6px',
+          fontSize: '13px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          marginBottom: '16px'
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          <span>Note: A free trial account has already been registered from this browser/device.</span>
+        </div>
+      )}
       {error && (
         <div className="login-error-badge">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
