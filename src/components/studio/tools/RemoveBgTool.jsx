@@ -113,9 +113,7 @@ export default function RemoveBgTool(props) {
                 <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5, margin: '0 0 0.75rem' }}>
                     AI removes the background and returns a transparent PNG. Typical processing time is about 3 seconds.
                 </p>
-                <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.85rem' }}>
-                    Powered by 851-labs/background-remover on Replicate
-                </div>
+
                 <button
                     className={`st-export-btn ${!hasEnoughCredits ? 'insufficient-credits' : ''}`}
                     onClick={removeBackground}

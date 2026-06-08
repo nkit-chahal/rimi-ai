@@ -1230,6 +1230,14 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         return items.find(it => it.id === tool)?.label || 'Studio';
     }, [tool]);
 
+    const shouldShowPageHead = useMemo(() => (
+        tool === 'exports'
+        || tool === 'billing'
+        || tool === 'workspace'
+        || tool.startsWith('admin')
+        || comingSoonToolIds.has(tool)
+    ), [tool, comingSoonToolIds]);
+
     return (
         <div className={`studio ${isSidebarHidden ? 'sidebar-hidden' : ''}`}>
             <StudioBootSplash
@@ -1698,26 +1706,24 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
                 <div className={`st-workspace ${!['dashboard', 'repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers'].includes(tool) ? 'full-width' : ''}`}>
                     <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
-                        <div className="st-page-head">
-                            <div>
-                                <h1 className="st-title">
-                                    {toolLabel}
-                                    {comingSoonToolIds.has(tool) && <span className="st-nav-soon-badge st-title-soon-badge">Soon</span>}
-                                </h1>
-                                {tool !== 'inspire' && <p>{
-                                    comingSoonToolIds.has(tool) ? 'This feature is in development and will be available in an upcoming release.'
-                                        : tool === 'dashboard' ? 'Build, customize, and run AI pipelines to transform your artwork into production-ready patterns.'
-                                            : tool === 'pattern' ? 'Extract clean, seamless patterns using the power of multiple AI models.'
-                                                : tool === 'exports' ? 'View and download your recently exported assets.'
-                                                    : tool === 'billing' ? 'Buy AI credit packs through Razorpay Standard Checkout.'
-                                                        : tool === 'workspace' ? 'Manage projects, switch workspaces, and organize your design pipeline.'
-                                                            : tool === 'colorway-manager' ? 'Generate systematic production colorways with color theory strategies.'
-                                                                : tool === 'removebg' ? 'Remove backgrounds instantly and download transparent PNGs for print-ready assets.'
-                                                                    : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.'
-                                                                        : 'Upload artwork and generate print-ready assets.'
-                                }</p>}
+                        {shouldShowPageHead && (
+                            <div className="st-page-head">
+                                <div>
+                                    <h1 className="st-title">
+                                        {toolLabel}
+                                        {comingSoonToolIds.has(tool) && <span className="st-nav-soon-badge st-title-soon-badge">Soon</span>}
+                                    </h1>
+                                    <p>{
+                                        comingSoonToolIds.has(tool) ? 'This feature is in development and will be available in an upcoming release.'
+                                            : tool === 'exports' ? 'View and download your recently exported assets.'
+                                                : tool === 'billing' ? 'Buy AI credit packs through Razorpay Standard Checkout.'
+                                                    : tool === 'workspace' ? 'Manage projects, switch workspaces, and organize your design pipeline.'
+                                                        : tool.startsWith('admin') ? 'Manage users, view API billing logs, and adjust credit limits.'
+                                                            : ''
+                                    }</p>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'workspace' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && tool !== 'vectorize' && tool !== 'upscale' && tool !== 'removebg' && tool !== 'imagelayers' && !comingSoonToolIds.has(tool) && !tool.startsWith('admin')) && (
                             <ImageDropzone
