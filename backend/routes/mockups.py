@@ -150,11 +150,18 @@ def _generate_single_mockup(
     }
     
     prompt = (
-        f"Use the input image as the fabric print design. The pattern shows: {pattern_description}. "
-        f"Apply this EXACT pattern as a seamless repeating print covering the ENTIRE fabric surface of the product. "
-        f"Product: {base_prompt} "
+        f"Use @Image 1 as the fabric print design. The pattern in @Image 1 shows: {pattern_description}. "
+        f"Apply this EXACT pattern from @Image 1 as a seamless repeating print covering the ENTIRE fabric surface of the product. "
+    )
+    
+    if product_type == "custom_product" and product_reference_data_uri:
+        prompt += f"The product should perfectly match the shape, style, and item type shown in @Image 2. "
+    else:
+        prompt += f"Product: {base_prompt} "
+        
+    prompt += (
         f"Fabric: {fabric_texture} with realistic texture, natural folds, and draping. "
-        f"The pattern must be clearly visible and recognizable — NEVER generate a plain or solid-colored product. "
+        f"The pattern from @Image 1 must be clearly visible and recognizable — NEVER generate a plain or solid-colored product. "
         f"{bg_p.get(background, bg_p['studio'])} {shot_p.get(shot_style, shot_p['editorial'])} "
         f"Photorealistic product photography, 4K."
     )
