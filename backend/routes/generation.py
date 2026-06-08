@@ -198,7 +198,7 @@ MODEL_TO_CREDITS = {
     'google/imagen-4-fast':            23,
     'google/nano-banana':              45,
     'google/nano-banana-2':            78,
-    'google/nano-banana-pro':          173,
+
     'google/upscaler':                 23,
     'bytedance/seedream-4.5':          46,
     'black-forest-labs/flux-schnell':  4,
@@ -698,7 +698,7 @@ def generate_inspirations():
                         'google/imagen-4-ultra': 0.06, # Estimated from fast
                         'google/nano-banana': 0.039,
                         'google/nano-banana-2': 0.067,
-                        'google/nano-banana-pro': 0.150,
+
                         'bytedance/seedream-4.5': 0.04,
                         'black-forest-labs/flux-schnell': 0.003,
                         'black-forest-labs/flux-fill-pro': 0.05,
