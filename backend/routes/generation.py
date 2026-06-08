@@ -109,7 +109,7 @@ def extract_design():
         start_time = time.time()
         output = replicate.run(model_id, input={
             "prompt": "A perfectly flat, 2D seamless repeating pattern tile of the exact fabric design, motif, and colors seen in the input image. Extract the design out of the outfit. High resolution, perfectly flat texture.",
-            "image": data_uri, "aspect_ratio": "1:1"
+            "image_input": [data_uri], "aspect_ratio": "1:1"
         })
         duration = time.time() - start_time
         cost_usd = 0.039
@@ -490,11 +490,10 @@ def extract_edit():
         edit_prompt = f"Edit this pattern tile: {prompt}. Keep it as a flat 2D seamless repeating pattern tile, high resolution."
 
         replicate_input = {"prompt": edit_prompt, "aspect_ratio": "1:1"}
-        input_key = model_cfg.get('input_key') or 'image'
-        if model_cfg.get('input_list'):
-            replicate_input[input_key] = [data_uri]
+        if 'nano-banana' in model_id:
+            replicate_input["image_input"] = [data_uri]
         else:
-            replicate_input[input_key] = data_uri
+            replicate_input["image"] = data_uri
 
         print(f"  [Extract Edit] Editing with {model_id}: {prompt[:80]}...")
         start_time = time.time()
@@ -676,7 +675,10 @@ def generate_inspirations():
                     
                     # Reference image
                     if data_uri:
-                        replicate_input["image"] = data_uri
+                        if 'nano-banana' in model_id:
+                            replicate_input["image_input"] = [data_uri]
+                        else:
+                            replicate_input["image"] = data_uri
                         
                     start_time = time.time()
                     output = replicate.run(model_id, input=replicate_input)

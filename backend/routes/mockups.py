@@ -146,7 +146,7 @@ def _generate_single_mockup(
                 MODEL_ID,
                 input={
                     "prompt": prompt,
-                    "image": input_images[0],
+                    "image_input": input_images,
                     "aspect_ratio": "1:1",
                 }
             )
