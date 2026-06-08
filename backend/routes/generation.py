@@ -195,7 +195,7 @@ EXTRACT_MODELS = [
 MODEL_TO_CREDITS = {
 
 
-    'google/imagen-4-ultra':           69,
+
     'google/imagen-4-fast':            23,
     'google/nano-banana':              45,
     'google/nano-banana-2':            78,
@@ -688,7 +688,7 @@ def generate_inspirations():
 
                         'xai/grok-imagine-image': 0.02,
                         'google/imagen-4-fast': 0.02,
-                        'google/imagen-4-ultra': 0.06, # Estimated from fast
+
                         'google/nano-banana': 0.039,
                         'google/nano-banana-2': 0.067,
 
