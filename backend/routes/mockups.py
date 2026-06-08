@@ -107,15 +107,18 @@ def _generate_single_mockup(
     if product_type == "custom_product" and product_reference_data_uri:
         input_images.append(product_reference_data_uri)
 
-    # 2. Construct Prompt — with strong pattern enforcement
+    # 2. Construct Prompt — with aggressive pattern enforcement
     base_prompt = PRODUCT_PROMPTS.get(product_type, PRODUCT_PROMPTS['custom_product'])
     prompt = (
-        f"CRITICAL: You MUST use the exact pattern/print from the attached reference image as the fabric design. "
-        f"Do NOT generate a plain or solid-colored product. The entire surface of the product must be covered with "
-        f"the provided pattern, repeated seamlessly across the fabric. "
-        f"{base_prompt} "
-        f"The fabric material is {fabric_texture} with realistic texture and natural draping. "
-        f"The pattern from the reference image must be clearly visible and recognizable on every part of the product surface."
+        f"TASK: Apply the pattern from the FIRST input image onto a product as its fabric print. "
+        f"The input image IS the pattern/print design — use it EXACTLY as the textile surface design. "
+        f"NEVER generate a plain, solid-colored, or white product. "
+        f"The ENTIRE visible fabric surface MUST display the provided pattern, repeated and wrapped realistically. "
+        f"Product: {base_prompt} "
+        f"Fabric material: {fabric_texture} with realistic texture, natural folds, and draping. "
+        f"The pattern must be clearly recognizable, with correct colors and motifs from the reference image, "
+        f"applied as a seamless repeating print across the full product surface. "
+        f"Photorealistic product photography with accurate fabric rendering."
     )
     
     bg_p = {
