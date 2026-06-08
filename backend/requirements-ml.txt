@@ -1,0 +1,7 @@
+# Optional heavy ML dependencies for local / GPU background removal (briaai/RMBG-2.0).
+# NOT installed in production (Railway) to keep the image small.
+# Install on top of the base requirements:
+#   pip install -r requirements.txt -r requirements-ml.txt
+torch
+torchvision
+transformers

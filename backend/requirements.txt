@@ -17,6 +17,9 @@ vtracer
 scikit-learn
 reportlab
 colour-science
-torch
-torchvision
-transformers
+
+# NOTE: torch / torchvision / transformers are intentionally NOT listed here.
+# They add several GB to the deployed image and are only used as an optional
+# high-quality background-removal model (briaai/RMBG-2.0) in auth.py, which
+# already falls back to a chroma-key method when they are unavailable.
+# For local/GPU setups that want the model, install: pip install -r requirements-ml.txt
