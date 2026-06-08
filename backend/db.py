@@ -52,8 +52,8 @@ DEFAULT_CREDIT_PRICING = [
 
     # ----- Mockups / Mappings -----
     # Uses MODEL_ID = google/nano-banana-2 in backend/routes/mockups.py.
-    # Per-call cost ($0.067 -> 78 credits). Input images compressed to 768px.
-    ("mappings", "Mappings / Mockups", "/api/generate-mockup", 78, "dynamic", 1),
+    # Per-call cost ($0.067 -> 67 credits, zero margin). Input images compressed to 768px.
+    ("mappings", "Mappings / Mockups", "/api/generate-mockup", 67, "dynamic", 1),
 
     # ----- Image Layers -----
     ("imageLayers", "Image Layers (3-layer default)", "/api/image-layers", 69, "dynamic", 1),
