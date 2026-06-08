@@ -28,8 +28,8 @@ DEFAULT_CREDIT_PRICING = [
     ("export", "Export", "Standard export", 0, "fixed", 1),
 
     # ----- Pattern Extraction (default + per-model overrides) -----
-    # Default key falls back to GPT-Image-2 pricing.
-    ("extract", "Pattern Extraction (default)", "/api/extract-design", 148, "dynamic", 1),
+    # Default key falls back to Nano Banana 2 pricing.
+    ("extract", "Pattern Extraction (default)", "/api/extract-design", 78, "dynamic", 1),
     ("extract_gpt_image_2", "Extract — GPT Image 2", "openai/gpt-image-2", 148, "dynamic", 1),
 
     ("extract_imagen_ultra", "Extract — Imagen 4 Ultra", "google/imagen-4-ultra", 69, "dynamic", 1),
@@ -44,7 +44,7 @@ DEFAULT_CREDIT_PRICING = [
     ("extract_flux_schnell", "Extract — Flux Schnell", "black-forest-labs/flux-schnell", 4, "dynamic", 1),
 
     # ----- Inspirations (mirrors extract pricing per model) -----
-    ("inspire", "Inspirations (default)", "/api/generate-inspirations", 148, "dynamic", 1),
+    ("inspire", "Inspirations (default)", "/api/generate-inspirations", 45, "dynamic", 1),
 
     # ----- Seamless -----
     ("seamless", "Make Seamless (Flux Fill Pro)", "/api/make-seamless", 58, "dynamic", 1),

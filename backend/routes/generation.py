@@ -213,7 +213,7 @@ MODEL_TO_CREDITS = {
     'fofr/style-transfer':             23,
     '851-labs/background-remover':     2,
 }
-DEFAULT_INSPIRE_CREDITS = 148  # safe default = GPT-Image-2 rate
+DEFAULT_INSPIRE_CREDITS = 45  # safe default = Nano Banana rate
 
 
 def _describe_image_for_extraction(data_uri):
