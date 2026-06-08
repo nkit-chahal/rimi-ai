@@ -179,11 +179,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const [repeatUrl, setRepeatUrl] = useState(null);
     const [isRepeat, setIsRepeat] = useState(false);
     const [rightPanelEl, setRightPanelEl] = useState(null);
-    const [pipelineEditorOpen, setPipelineEditorOpen] = useState(false);
-
-    useEffect(() => {
-        if (tool !== 'dashboard') setPipelineEditorOpen(false);
-    }, [tool]);
 
     const addBgTask = (type, label, filename, triggerFn) => {
         const taskId = Date.now().toString();
@@ -1211,7 +1206,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         if (tool === 'workspace') return renderWorkspaceManager();
         if (tool === 'billing') return renderBilling();
 
-        if (tool === 'dashboard') return <DashboardTool {...commonProps} onEditorOpenChange={setPipelineEditorOpen} />;
+        if (tool === 'dashboard') return <DashboardTool {...commonProps} />;
         if (tool === 'exports') return <ExportsTool {...commonProps} />;
         if (tool === 'pattern') return <PatternTool {...commonProps} enhUrl={enhUrl} setEnhUrl={setEnhUrl} />;
         if (tool === 'seamless') return <SeamlessTool {...commonProps} seamlessUrl={seamlessUrl} setSeamlessUrl={setSeamlessUrl} />;
@@ -1701,9 +1696,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                     </div>
                 )}
 
-                <div className={`st-workspace ${!['repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers'].includes(tool) || tool === 'dashboard' ? 'full-width' : ''} ${tool === 'dashboard' && pipelineEditorOpen ? 'pipeline-editor-open' : ''}`}>
-                    <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''} ${tool === 'dashboard' && pipelineEditorOpen ? 'pipeline-canvas-main' : ''}`}>
-                        {!(tool === 'dashboard' && pipelineEditorOpen) && (
+                <div className={`st-workspace ${!['dashboard', 'repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers'].includes(tool) ? 'full-width' : ''}`}>
+                    <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
                         <div className="st-page-head">
                             <div>
                                 <h1 className="st-title">
@@ -1724,7 +1718,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                 }</p>}
                             </div>
                         </div>
-                        )}
 
                         {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'workspace' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && tool !== 'vectorize' && tool !== 'upscale' && tool !== 'removebg' && tool !== 'imagelayers' && !comingSoonToolIds.has(tool) && !tool.startsWith('admin')) && (
                             <ImageDropzone
@@ -1746,7 +1739,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             renderCanvas()
                         )}
                     </main>
-                    {['repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers'].includes(tool) && (
+                    {['dashboard', 'repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers'].includes(tool) && (
                         <aside className="st-right-panel" ref={setRightPanelEl} />
                     )}
                 </div>

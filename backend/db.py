@@ -565,9 +565,6 @@ def _pg_run_migrations(conn):
     _pg_ensure_column(conn, "exports", "user_id", "INTEGER")
     _pg_ensure_column(conn, "project_controls", "print_height", "INTEGER NOT NULL DEFAULT 12")
     _pg_ensure_column(conn, "project_controls", "fabric_width", "INTEGER NOT NULL DEFAULT 54")
-    _pg_ensure_column(conn, "saved_workflows", "graph_json", "TEXT")
-    _pg_ensure_column(conn, "saved_workflows", "updated_at", "TEXT")
-    _pg_ensure_column(conn, "pipeline_runs", "graph_json", "TEXT")
 
     # Assign orphaned projects to the first user so studio-state queries work.
     conn.execute(
@@ -841,9 +838,6 @@ def init_db():
         ensure_column("exports", "user_id", "INTEGER REFERENCES users(id)")
         ensure_column("project_controls", "print_height", "INTEGER NOT NULL DEFAULT 12")
         ensure_column("project_controls", "fabric_width", "INTEGER NOT NULL DEFAULT 54")
-        ensure_column("saved_workflows", "graph_json", "TEXT")
-        ensure_column("saved_workflows", "updated_at", "TEXT")
-        ensure_column("pipeline_runs", "graph_json", "TEXT")
 
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
         conn.commit()
