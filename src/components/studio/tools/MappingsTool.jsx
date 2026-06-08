@@ -229,21 +229,23 @@ export default function MappingsTool(props) {
         setError('');
 
         const trigger = async () => {
+            const payload = {
+                patternFilename: mappingPrint.filename,
+                products: Array.from(mappingSelectedProducts),
+                category: mappingCategory,
+                customPrompt: mappingCustomPrompt,
+                background: mappingBackground,
+                shotStyle: mappingShotStyle,
+                fabricTexture: mappingFabricTexture,
+                projectId: activeProject.id,
+                userId: user.id,
+            };
+            if (mappingCustomReferencePreview) payload.productReferenceDataUri = mappingCustomReferencePreview;
+            if (mappingCustomMask) payload.maskDataUri = mappingCustomMask;
+
             const d = await apiFetch('/api/generate-mockups-batch', {
                 method: 'POST',
-                body: JSON.stringify({
-                    patternFilename: mappingPrint.filename,
-                    products: Array.from(mappingSelectedProducts),
-                    category: mappingCategory,
-                    customPrompt: mappingCustomPrompt,
-                    background: mappingBackground,
-                    shotStyle: mappingShotStyle,
-                    fabricTexture: mappingFabricTexture,
-                    productReferenceDataUri: mappingCustomReferencePreview,
-                    maskDataUri: mappingCustomMask,
-                    projectId: activeProject.id,
-                    userId: user.id,
-                }),
+                body: JSON.stringify(payload),
             }, currentToken);
 
             if (d.success && d.mockups?.length) {

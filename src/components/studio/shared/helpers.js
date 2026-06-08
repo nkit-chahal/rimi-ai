@@ -125,8 +125,15 @@ export async function apiFetch(url, options = {}, token = null) {
         headers['Content-Type'] = 'application/json';
     }
     
-    const res = await fetch(fullUrl, { ...options, headers });
-    
+    let res;
+    try {
+        res = await fetch(fullUrl, { ...options, headers });
+    } catch {
+        throw new Error(
+            'Could not reach the server. Long AI jobs (mockups, patterns) can take 1–2 minutes — if this keeps failing, retry with fewer products or check that the backend is running.'
+        );
+    }
+
     if (!res.ok) {
         // Only logout when we sent a session token that the server rejected
         if (res.status === 401 && authToken) {
