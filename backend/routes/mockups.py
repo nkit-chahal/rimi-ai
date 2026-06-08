@@ -12,7 +12,7 @@ from io import BytesIO
 from scipy import ndimage
 from flask import Blueprint, request, jsonify
 
-from config import UPLOAD_DIR, RESULTS_DIR
+from config import UPLOAD_DIR, RESULTS_DIR, groq_client
 from auth import (
     log_export, log_replicate_call, check_credits,
     credit_error_payload, credit_requirement, get_updated_credits, record_activity,
@@ -107,19 +107,35 @@ def _generate_single_mockup(
     if product_type == "custom_product" and product_reference_data_uri:
         input_images.append(product_reference_data_uri)
 
-    # 2. Construct Prompt — with aggressive pattern enforcement
+    # 2. Use Groq Vision to describe the pattern, then build a rich prompt
     base_prompt = PRODUCT_PROMPTS.get(product_type, PRODUCT_PROMPTS['custom_product'])
-    prompt = (
-        f"TASK: Apply the pattern from the FIRST input image onto a product as its fabric print. "
-        f"The input image IS the pattern/print design — use it EXACTLY as the textile surface design. "
-        f"NEVER generate a plain, solid-colored, or white product. "
-        f"The ENTIRE visible fabric surface MUST display the provided pattern, repeated and wrapped realistically. "
-        f"Product: {base_prompt} "
-        f"Fabric material: {fabric_texture} with realistic texture, natural folds, and draping. "
-        f"The pattern must be clearly recognizable, with correct colors and motifs from the reference image, "
-        f"applied as a seamless repeating print across the full product surface. "
-        f"Photorealistic product photography with accurate fabric rendering."
-    )
+    
+    # Ask Groq to analyze the pattern image
+    pattern_description = ""
+    try:
+        print(f"  [Mockup] Describing pattern with Groq Vision...")
+        completion = groq_client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": pattern_uri}},
+                    {"type": "text", "text": (
+                        "Describe this textile/fabric pattern design in precise detail for an AI image generator. "
+                        "Focus on: exact motifs, shapes, icons, characters, colors (use specific names), "
+                        "background color, artistic style, arrangement, and overall mood. "
+                        "2-3 sentences max. Output ONLY the description."
+                    )}
+                ]
+            }],
+            temperature=0.2,
+            max_completion_tokens=200,
+        )
+        pattern_description = completion.choices[0].message.content.strip()
+        print(f"  [Mockup] Pattern described: {pattern_description[:120]}...")
+    except Exception as e:
+        print(f"  [Mockup] Groq description failed, using generic prompt: {e}")
+        pattern_description = "a detailed repeating textile pattern"
     
     bg_p = {
         "studio": "Premium studio background.",
@@ -132,7 +148,16 @@ def _generate_single_mockup(
         "flat lay": "Flat-lay top-down photography.",
         "close-up": "Close-up emphasizing material texture."
     }
-    prompt += f" {bg_p.get(background, bg_p['studio'])} {shot_p.get(shot_style, shot_p['editorial'])}"
+    
+    prompt = (
+        f"Use the input image as the fabric print design. The pattern shows: {pattern_description}. "
+        f"Apply this EXACT pattern as a seamless repeating print covering the ENTIRE fabric surface of the product. "
+        f"Product: {base_prompt} "
+        f"Fabric: {fabric_texture} with realistic texture, natural folds, and draping. "
+        f"The pattern must be clearly visible and recognizable — NEVER generate a plain or solid-colored product. "
+        f"{bg_p.get(background, bg_p['studio'])} {shot_p.get(shot_style, shot_p['editorial'])} "
+        f"Photorealistic product photography, 4K."
+    )
     if custom_prompt.strip():
         prompt += f" User art direction: {custom_prompt.strip()}"
 
