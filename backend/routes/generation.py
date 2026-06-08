@@ -172,8 +172,8 @@ EXTRACT_MODELS = [
         'input_key': None,
         'input_list': False,
         'supports_image': False,
-        'cost_per_image': 0.030,  # ~2 MP per run at $0.015/MP I/O + $0.015/run
-        'credits': 35,
+        'cost_per_image': 0.090,  # Avg based on megapixel billing
+        'credits': 104,
     },
     {
         'id': 'bytedance/seedream-4.5',
@@ -203,7 +203,7 @@ MODEL_TO_CREDITS = {
     'bytedance/seedream-4.5':          46,
     'black-forest-labs/flux-schnell':  4,
     'black-forest-labs/flux-fill-pro': 58,
-    'black-forest-labs/flux-2-pro':    35,
+    'black-forest-labs/flux-2-pro':    104,
     'black-forest-labs/flux-2-flex':   156,
     'qwen/qwen-image-edit':            35,
     'qwen/qwen-image-layered':         69,
