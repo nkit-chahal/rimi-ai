@@ -204,7 +204,7 @@ MODEL_TO_CREDITS = {
     'bytedance/seedream-4.5':          46,
     'black-forest-labs/flux-schnell':  4,
     'black-forest-labs/flux-fill-pro': 58,
-    'black-forest-labs/flux-2-pro':    104,
+
 
     'qwen/qwen-image-edit':            35,
     'qwen/qwen-image-layered':         69,
@@ -696,7 +696,7 @@ def generate_inspirations():
                         'black-forest-labs/flux-schnell': 0.003,
                         'black-forest-labs/flux-fill-pro': 0.05,
                         'qwen/qwen-image-layered': 0.04, # 0.01 + 0.03 run cost
-                        'black-forest-labs/flux-2-pro': 0.09 # Avg based on megapixel billing
+
                     }
                     
                     # Determine cost
