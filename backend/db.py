@@ -51,9 +51,9 @@ DEFAULT_CREDIT_PRICING = [
     ("seamless_texture", "Seamless Texture (text-to-img)", "replicate/seamless-texture", 84, "dynamic", 1),
 
     # ----- Mockups / Mappings -----
-    # Uses MODEL_ID = google/nano-banana in backend/routes/mockups.py.
-    # Per-call cost ($0.039 -> 45 credits).
-    ("mappings", "Mappings / Mockups", "/api/generate-mockup", 45, "dynamic", 1),
+    # Uses MODEL_ID = bytedance/seedream-4.5 in backend/routes/mockups.py.
+    # Per-call cost ($0.040 -> 46 credits).
+    ("mappings", "Mappings / Mockups", "/api/generate-mockup", 46, "dynamic", 1),
 
     # ----- Image Layers -----
     ("imageLayers", "Image Layers (3-layer default)", "/api/image-layers", 69, "dynamic", 1),

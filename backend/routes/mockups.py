@@ -1,4 +1,4 @@
-"""Mockup generation routes: single and batch product mockups via Nano Banana."""
+"""Mockup generation routes: single and batch product mockups via Seedream 4.5."""
 import os
 import uuid
 import base64
@@ -21,7 +21,7 @@ import storage
 
 bp = Blueprint('mockups', __name__)
 
-MODEL_ID = "google/nano-banana"
+MODEL_ID = "bytedance/seedream-4.5"
 MAX_RETRIES = 3
 RETRY_BACKOFF_SECONDS = 5
 
@@ -133,7 +133,7 @@ def _generate_single_mockup(
     if custom_prompt.strip():
         prompt += f" User art direction: {custom_prompt.strip()}"
 
-    # 3. Call Nano Banana
+    # 3. Call Seedream 4.5
     print(f"  [Mockup] Running {MODEL_ID} for '{product_type}'...")
     print(f"  [Mockup] Prompt: {prompt[:200]}...")
     result_url = None
@@ -151,9 +151,9 @@ def _generate_single_mockup(
                 }
             )
             duration = time.time() - t0
-            # mockups uses MODEL_ID = google/nano-banana ($0.039/image).
-            credits_used = credit_requirement('mappings', 45)
-            cost_usd = 0.039
+            # mockups uses MODEL_ID = bytedance/seedream-4.5 ($0.040/image).
+            credits_used = credit_requirement('mappings', 46)
+            cost_usd = 0.040
             log_replicate_call(project_id, MODEL_ID, duration, credits_used, cost_usd)
 
             if isinstance(output, list) and len(output) > 0:
@@ -207,7 +207,7 @@ def generate_mockup():
     if not product_type: return jsonify({"error": "productType is required"}), 400
     if not pattern_filename and not pattern_url: return jsonify({"error": "patternFilename or patternUrl is required"}), 400
 
-    required_credits = credit_requirement('mappings', 45)
+    required_credits = credit_requirement('mappings', 46)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
@@ -255,7 +255,7 @@ def generate_mockups_batch():
     if not pattern_filename: return jsonify({"error": "patternFilename is required"}), 400
     if not products: return jsonify({"error": "products must be a non-empty list"}), 400
 
-    required_credits = credit_requirement('mappings', 45, len(products))
+    required_credits = credit_requirement('mappings', 46, len(products))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
