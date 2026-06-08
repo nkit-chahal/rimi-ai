@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import { I } from '../shared/StudioIcons';
 import { API, apiFetch, forceDownload } from '../shared/helpers';
