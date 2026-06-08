@@ -165,16 +165,7 @@ EXTRACT_MODELS = [
         'cost_per_image': 0.04,
         'credits': 46,
     },
-    {
-        'id': 'black-forest-labs/flux-schnell',
-        'name': 'Flux Schnell',
-        'prompt': '',  # Will be generated from image description
-        'input_key': None,
-        'input_list': False,
-        'supports_image': False,
-        'cost_per_image': 0.003,
-        'credits': 4,
-    },
+
     {
         'id': 'google/nano-banana',
         'name': 'Nano Banana',

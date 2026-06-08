@@ -10,7 +10,7 @@ import { useImageDropzone } from '../shared/useImageDropzone';
 const EXTRACT_MODEL_DEFS = [
     { id: 'xai/grok-imagine-image', name: 'Grok Imagine', sub: 'xAI', brand: 'xai', logo: 'GR', credits: 23, accent: '#1d9bf0' },
     { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: 46, accent: '#f59e0b' },
-    { id: 'black-forest-labs/flux-schnell', name: 'Flux Schnell', sub: 'Black Forest Labs', brand: 'bfl', logo: 'FS', credits: 4, accent: '#a855f7' },
+
     { id: 'google/nano-banana', name: 'Nano Banana', sub: 'Google', brand: 'google', logo: 'NB', credits: 45, accent: '#34a853' },
     { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', credits: 78, accent: '#4285f4' },
 ];
