@@ -193,7 +193,7 @@ EXTRACT_MODELS = [
 # ---------------------------------------------------------------------------
 MODEL_TO_CREDITS = {
     'openai/gpt-image-2':              148,
-    'openai/gpt-image-1.5':            157,
+
     'google/imagen-4-ultra':           69,
     'google/imagen-4-fast':            23,
     'google/nano-banana':              45,
