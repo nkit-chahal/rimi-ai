@@ -16,6 +16,37 @@ export function normalizeToken(token) {
     return cleaned.length > 0 ? cleaned : null;
 }
 
+const STUDIO_PREFETCH_KEY = 'rim_studio_prefetch';
+
+/** Warm studio-state while login UI is still visible. */
+export function prefetchStudioState(token, projectId = 1) {
+    const authToken = normalizeToken(token);
+    if (!authToken) return;
+    const url = `${API}/api/studio-state?projectId=${projectId}`;
+    fetch(url, { headers: { Authorization: `Bearer ${authToken}` } })
+        .then((r) => r.json())
+        .then((d) => {
+            if (d?.success && d.state) {
+                sessionStorage.setItem(STUDIO_PREFETCH_KEY, JSON.stringify(d));
+            }
+        })
+        .catch(() => {});
+}
+
+/** Read and clear prefetched studio-state from session storage. */
+export function consumeStudioPrefetch() {
+    try {
+        const raw = sessionStorage.getItem(STUDIO_PREFETCH_KEY);
+        if (!raw) return null;
+        sessionStorage.removeItem(STUDIO_PREFETCH_KEY);
+        const parsed = JSON.parse(raw);
+        return parsed?.success && parsed.state ? parsed : null;
+    } catch {
+        sessionStorage.removeItem(STUDIO_PREFETCH_KEY);
+        return null;
+    }
+}
+
 /**
  * Crop an image element based on a ReactCrop crop object.
  */

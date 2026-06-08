@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
+import ImageDropzone from '../shared/ImageDropzone';
+import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function SeamlessTool({
     uploaded,
@@ -10,13 +12,12 @@ export default function SeamlessTool({
     setError,
     addBgTask,
     updateCreditsFromResponse,
-    setUploads,
-    tool,
-    currentToken,
-    state,
     creditPricing,
     seamlessUrl: parentSeamlessUrl,
-    setSeamlessUrl: parentSetSeamlessUrl
+    setSeamlessUrl: parentSetSeamlessUrl,
+    handlePreUpload,
+    onUploadInvalid,
+    onUploadPaste,
 }) {
     // Local state
     const [seamlessMode, setSeamlessMode] = useState('generate');
@@ -26,10 +27,13 @@ export default function SeamlessTool({
     const [isSeamless, setIsSeamless] = useState(false);
     const [seamlessProgress, setSeamlessProgress] = useState(0);
     const [seamlessStatus, setSeamlessStatus] = useState('');
-    const [isDrag, setIsDrag] = useState(false);
-
-    const fileRef = useRef(null);
     const hasActiveSeamlessRun = useRef(false);
+
+    const { pasteProps, openFilePicker, inputProps } = useImageDropzone({
+        onFile: handlePreUpload,
+        onInvalidFile: onUploadInvalid,
+        onPasteSuccess: onUploadPaste,
+    });
 
     const seamlessUrl = parentSeamlessUrl !== undefined ? parentSeamlessUrl : localSeamlessUrl;
     const setSeamlessUrl = parentSetSeamlessUrl !== undefined ? parentSetSeamlessUrl : setLocalSeamlessUrl;
@@ -71,48 +75,6 @@ export default function SeamlessTool({
         const t = setTimeout(() => { setSeamlessProgress(0); setSeamlessStatus(''); }, 2000);
         return () => clearTimeout(t);
     }, [isSeamless]);
-
-    // File Upload Handler
-    const handleUpload = async (file) => {
-        if (!file) return;
-        setError('');
-        try {
-            const formData = new FormData();
-            formData.append('image', file);
-            formData.append('projectId', activeProject.id);
-            formData.append('userId', user.id);
-
-            const r = await fetch(`${API}/api/upload`, {
-                method: 'POST',
-                headers: { ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}) },
-                body: formData,
-            });
-            const d = await r.json();
-            if (d.success) {
-                setUploads(prev => ({
-                    ...prev,
-                    [tool]: {
-                        file: {
-                            ...file,
-                            filename: d.filename,
-                            originalName: file.name
-                        },
-                        url: prev[tool]?.url
-                    }
-                }));
-                updateCreditsFromResponse(d);
-            } else setError(d.error);
-        } catch {
-            setError('Backend upload failed.');
-        }
-    };
-
-    const handlePreUpload = (file) => {
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        setUploads(prev => ({ ...prev, [tool]: { file, url } }));
-        handleUpload(file);
-    };
 
     // Fix existing tile (offset + inpaint)
     const makeSeamless = async () => {
@@ -193,7 +155,7 @@ export default function SeamlessTool({
     const bestTileIndex = seamlessTiles.length > 0 ? seamlessTiles.reduce((best, tile, idx) => tile.score > seamlessTiles[best].score ? idx : best, 0) : -1;
 
     return (
-        <div className="st-pattern-layout" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', padding: '2rem' }}>
+        <div {...pasteProps} className="st-pattern-layout" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', padding: '2rem' }}>
             {/* Spring-Physics Segmented Control */}
             <div className="st-segmented-control">
                 <div className="st-segment-highlight" style={{ left: seamlessMode === 'generate' ? '4px' : '50%', width: 'calc(50% - 4px)' }} />
@@ -325,33 +287,14 @@ export default function SeamlessTool({
                 /* ═══════ FIX EXISTING WORKSPACE ═══════ */
                 <>
                     {!preview ? (
-                        /* Creative Dropzone */
-                        <div
-                            className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
-                            onClick={() => fileRef.current?.click()}
-                            onDrop={(e) => { e.preventDefault(); setIsDrag(false); handlePreUpload(e.dataTransfer.files[0]); }}
-                            onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                            onDragLeave={() => setIsDrag(false)}
-                        >
-                            <div className="st-particles">
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                                <div className="st-particle" />
-                            </div>
-                            <div className="st-dropzone-icon-wrap">
-                                <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={36} />
-                            </div>
-                            <h2 className="st-dropzone-title">Upload a pattern tile to fix</h2>
-                            <p className="st-dropzone-desc">AI will analyze and fix edge seams using offset & inpaint</p>
-                            <div className="st-dropzone-badges">
-                                <span className="st-dropzone-badge">PNG</span>
-                                <span className="st-dropzone-badge">JPG</span>
-                                <span className="st-dropzone-badge">TIFF</span>
-                            </div>
-                        </div>
+                        <ImageDropzone
+                            title="Upload a pattern tile to fix"
+                            description="Drag & drop, paste, or click — AI will analyze and fix edge seams using offset & inpaint"
+                            badges={['PNG', 'JPG', 'WEBP']}
+                            onFile={handlePreUpload}
+                            onInvalidFile={onUploadInvalid}
+                            onPasteSuccess={onUploadPaste}
+                        />
                     ) : (
                         /* Comparison Workspace */
                         <div className="st-comparison-workspace">
@@ -359,7 +302,7 @@ export default function SeamlessTool({
                             <div className="st-comparison-card">
                                 <div className="st-comparison-card-head">
                                     <span>Original Input</span>
-                                    <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }}>Replace</button>
+                                    <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }}>Replace</button>
                                 </div>
                                 <div className="st-comparison-card-body">
                                     <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -432,7 +375,7 @@ export default function SeamlessTool({
                     )}
                 </>
             )}
-            <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0])} />
+            <input {...inputProps} />
         </div>
     );
 }

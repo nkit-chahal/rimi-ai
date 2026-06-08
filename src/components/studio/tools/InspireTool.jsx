@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
+import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function InspireTool({
     uploaded,
@@ -12,7 +13,10 @@ export default function InspireTool({
     setUploads,
     tool,
     currentToken,
-    creditPricing
+    creditPricing,
+    handlePreUpload,
+    onUploadInvalid,
+    onUploadPaste,
 }) {
     // State variables
     const [prompt, setPrompt] = useState('');
@@ -30,7 +34,11 @@ export default function InspireTool({
     const [analysis, setAnalysis] = useState(null);
     const [showModelModal, setShowModelModal] = useState(false);
 
-    const fileRef = useRef(null);
+    const { rootProps, pasteProps, inputProps, isDrag } = useImageDropzone({
+        onFile: handlePreUpload,
+        onInvalidFile: onUploadInvalid,
+        onPasteSuccess: onUploadPaste,
+    });
 
     // Per-model credit costs.  IDs MUST match MODEL_TO_CREDITS keys in
     // backend/routes/generation.py and Replicate's actual model slugs.
@@ -61,48 +69,6 @@ export default function InspireTool({
     }, 0) || (creditPricing?.inspire || 148);
     const inspireCreditCost = variants * creditsPerVariant;
     const hasEnoughInspireCredits = userRemainingCredits >= inspireCreditCost;
-
-    // File Upload Handler
-    const handleUpload = async (file) => {
-        if (!file) return;
-        setError('');
-        try {
-            const formData = new FormData();
-            formData.append('image', file);
-            formData.append('projectId', activeProject.id);
-            formData.append('userId', user.id);
-
-            const r = await fetch(`${API}/api/upload`, {
-                method: 'POST',
-                headers: { ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}) },
-                body: formData,
-            });
-            const d = await r.json();
-            if (d.success) {
-                setUploads(prev => ({
-                    ...prev,
-                    [tool]: {
-                        file: {
-                            ...file,
-                            filename: d.filename,
-                            originalName: file.name
-                        },
-                        url: prev[tool]?.url
-                    }
-                }));
-                updateCreditsFromResponse(d);
-            } else setError(d.error);
-        } catch {
-            setError('Backend upload failed.');
-        }
-    };
-
-    const handlePreUpload = (file) => {
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        setUploads(prev => ({ ...prev, [tool]: { file, url } }));
-        handleUpload(file);
-    };
 
     // Auto Describe Reference Image
     const descImg = async () => {
@@ -211,7 +177,7 @@ export default function InspireTool({
     };
 
     return (
-        <div className="st-inspire-main st-inspire-studio">
+        <div {...pasteProps} className="st-inspire-main st-inspire-studio">
             {/* Modal for AI Preferences */}
             {showModelModal && (
                 <div className="st-model-modal-overlay" onClick={() => setShowModelModal(false)}>
@@ -338,11 +304,14 @@ export default function InspireTool({
                     </div>
 
                     <div className="st-inspire-compose-row">
-                        <button className={`st-inspire-upload-zone ${preview ? 'has-image' : ''}`} onClick={() => fileRef.current?.click()}>
+                        <div
+                            className={`st-inspire-upload-zone ${preview ? 'has-image' : ''} ${isDrag ? 'dragging' : ''}`}
+                            {...rootProps}
+                        >
                             <span><I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={18} /></span>
                             <strong>{preview ? 'Replace Reference Image' : 'Upload Reference Image'}</strong>
-                            <small>JPG, PNG, or WebP</small>
-                        </button>
+                            <small>Drag, paste, or click — JPG, PNG, or WebP</small>
+                        </div>
                         <div className={`st-inspire-photo-preview ${preview ? 'has-image' : ''}`}>
                             {preview ? (
                                 <img src={preview} alt="Uploaded reference preview" />
@@ -508,7 +477,7 @@ export default function InspireTool({
                     </div>
                 </aside>
             </section>
-            <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0])} />
+            <input {...inputProps} />
         </div>
     );
 }

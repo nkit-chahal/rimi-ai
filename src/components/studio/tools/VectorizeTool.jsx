@@ -1,10 +1,16 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
+import ImageDropzone from '../shared/ImageDropzone';
+import { useImageDropzone } from '../shared/useImageDropzone';
 import { createPortal } from 'react-dom';
 
 export default function VectorizeTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, vecUrl, setVecUrl, upscaleUrl, setUpscaleUrl, tool, rightPanelEl, handleUpload, handlePreUpload } = props;
+    const {
+        uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse,
+        creditPricing, vecUrl, setVecUrl, upscaleUrl, setUpscaleUrl, tool, rightPanelEl,
+        handlePreUpload, onUploadInvalid, onUploadPaste,
+    } = props;
 
     const [vecEngine, setVecEngine] = useState('api');
     const [vecColors, setVecColors] = useState(32);
@@ -18,8 +24,11 @@ export default function VectorizeTool(props) {
     const hasEnoughVectorizeCredits = userRemainingCredits >= vectorizeCreditCost;
     const upscaleCreditCost = creditPricing.upscale || 23;
     const hasEnoughUpscaleCredits = userRemainingCredits >= upscaleCreditCost;
-    const [isDrag, setIsDrag] = useState(false);
-    const fileRef = useRef(null);
+    const { pasteProps, openFilePicker, inputProps } = useImageDropzone({
+        onFile: handlePreUpload,
+        onInvalidFile: onUploadInvalid,
+        onPasteSuccess: onUploadPaste,
+    });
 
     const vectorize = async () => {
         const activeUrl = preview || activeProject.heroImageUrl;
@@ -117,43 +126,28 @@ export default function VectorizeTool(props) {
         if (!preview) {
             return (
                 <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
-                    <div
-                        className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
-                        onClick={() => fileRef.current?.click()}
-                        onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                        onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                        onDragLeave={() => setIsDrag(false)}
-                    >
-                        <div className="st-particles">
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                        </div>
-                        <div className="st-dropzone-icon-wrap">
-                            {tool === 'vectorize' ? <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={36} /> : <I d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" s={36} />}
-                        </div>
-                        <h2 className="st-dropzone-title">Upload artwork to {toolTitle}</h2>
-                        <p className="st-dropzone-desc">Drag & drop or click to browse — AI will process your high-fidelity asset</p>
-                        <div className="st-dropzone-badges">
-                            <span className="st-dropzone-badge">PNG</span>
-                            <span className="st-dropzone-badge">JPG</span>
-                            <span className="st-dropzone-badge">TIFF</span>
-                        </div>
-                    </div>
+                    <ImageDropzone
+                        title={`Upload artwork to ${toolTitle}`}
+                        description="Drag & drop, paste, or click — AI will process your high-fidelity asset"
+                        badges={['PNG', 'JPG', 'WEBP']}
+                        icon={tool === 'vectorize'
+                            ? <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={36} />
+                            : <I d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" s={36} />}
+                        onFile={handlePreUpload}
+                        onInvalidFile={onUploadInvalid}
+                        onPasteSuccess={onUploadPaste}
+                    />
                 </div>
             );
         }
 
         return (
-            <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+            <div {...pasteProps} className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div className="st-comparison-workspace">
                     <div className="st-comparison-card">
                         <div className="st-comparison-card-head">
                             <span>Original Input</span>
-                            <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} />
                                 Replace
                             </button>
@@ -227,6 +221,7 @@ export default function VectorizeTool(props) {
                         </div>
                     </div>
                 </div>
+                <input {...inputProps} />
             </div>
         );
 

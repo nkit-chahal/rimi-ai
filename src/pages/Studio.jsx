@@ -29,8 +29,11 @@ import MappingsTool from '../components/studio/tools/MappingsTool';
 
 // Shared icons & helpers
 import { I } from '../components/studio/shared/StudioIcons';
-import { API, apiFetch, forceDownload } from '../components/studio/shared/helpers';
+import { API, apiFetch, consumeStudioPrefetch, forceDownload } from '../components/studio/shared/helpers';
+import ImageDropzone from '../components/studio/shared/ImageDropzone';
+import { isImageFile } from '../components/studio/shared/imageUpload';
 import StudioCommandPalette from '../components/studio/shared/StudioCommandPalette';
+import StudioBootSplash from '../components/StudioBootSplash';
 
 const GarmentPreview3D = lazy(() => import('../components/GarmentPreview3D'));
 
@@ -101,7 +104,9 @@ const emptyState = {
     suggestion: '',
 };
 
-export default function Studio({ onBack, currentUser, currentToken, onLogout }) {
+const BOOT_SPLASH_MIN_MS = 2200;
+
+export default function Studio({ onBack, currentUser, currentToken, onLogout, isBootEntry = false, onBootComplete }) {
     const adminTools = ['admin-dashboard', 'admin-users', 'admin-projects', 'admin-logs', 'admin-credits'];
     const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'removebg', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace'];
     const isAdmin = currentUser?.role === 'admin';
@@ -131,10 +136,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
     const projectDropdownRef = useRef(null);
     const [controlTab, setControlTab] = useState('controls');
     const [uploads, setUploads] = useState({});
-    const [isDrag, setIsDrag] = useState(false);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [isLoadingState, setIsLoadingState] = useState(true);
+    const [showBootSplash, setShowBootSplash] = useState(isBootEntry);
+    const bootStartedAtRef = useRef(Date.now());
+    const bootCompletedRef = useRef(false);
     const [paymentStatus, setPaymentStatus] = useState({ loadingPackId: null, message: '', error: '' });
     const [razorpayKeyId, setRazorpayKeyId] = useState(import.meta.env.VITE_RAZORPAY_KEY_ID || '');
 
@@ -146,7 +153,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         razorpayConfigured: false,
     });
 
-    const fileRef = useRef(null);
     const hasLoadedControls = useRef(false);
 
     const [bgTasks, setBgTasks] = useState([]);
@@ -492,37 +498,92 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         return () => document.removeEventListener('mousedown', handler);
     }, [showAccountDropdown]);
 
-    const loadStudioState = useCallback(async (projectId = activeProjectId) => {
+    const applyStudioState = useCallback((studioState) => {
+        hasLoadedControls.current = false;
+        setState(studioState);
+        setActiveProjectId(studioState.activeProject.id);
+        window.setTimeout(() => { hasLoadedControls.current = true; }, 0);
+    }, []);
+
+    const loadStudioState = useCallback(async (projectId = activeProjectId, { silent = false } = {}) => {
         if (!currentToken) return;
-        setError('');
+        if (!silent) setError('');
         try {
             const d = await apiFetch(`/api/studio-state?projectId=${projectId}`, {}, currentToken);
             if (!d.success) throw new Error(d.error || 'Failed to load studio state');
-            hasLoadedControls.current = false;
-            setState(d.state);
-            setActiveProjectId(d.state.activeProject.id);
-            window.setTimeout(() => { hasLoadedControls.current = true; }, 0);
+            applyStudioState(d.state);
         } catch (err) {
             if (err.status !== 401) {
-                setError(err.message || 'Failed to load workspace.');
+                if (!silent) setError(err.message || 'Failed to load workspace.');
             }
             console.warn('Studio state load failed:', err.message);
         } finally {
-            setIsLoadingState(false);
+            if (!silent) setIsLoadingState(false);
         }
-    }, [activeProjectId, currentToken]);
+    }, [activeProjectId, applyStudioState, currentToken]);
 
     useEffect(() => {
         if (isAdmin) {
             setIsLoadingState(false);
+            setShowBootSplash(false);
             return;
         }
         if (!currentToken) {
             setIsLoadingState(false);
+            setShowBootSplash(false);
             return;
         }
-        loadStudioState(1);
-    }, [isAdmin, loadStudioState, currentToken]);
+
+        let cancelled = false;
+
+        const loadInitialWorkspace = async () => {
+            setIsLoadingState(true);
+            setError('');
+
+            const prefetched = consumeStudioPrefetch();
+            if (prefetched?.state) {
+                applyStudioState(prefetched.state);
+            }
+
+            try {
+                const requests = [
+                    apiFetch(`/api/studio-state?projectId=1`, {}, currentToken),
+                    fetch(`${API}/api/credit-pricing`).then((r) => r.json()).catch(() => null),
+                ];
+                const [stateRes, pricingRes] = await Promise.all(requests);
+                if (cancelled) return;
+
+                if (stateRes?.success && stateRes.state) {
+                    applyStudioState(stateRes.state);
+                } else if (!prefetched?.state) {
+                    throw new Error(stateRes?.error || 'Failed to load studio state');
+                }
+
+                if (pricingRes?.success && pricingRes.pricing) {
+                    setCreditPricing(pricingRes.pricing);
+                }
+            } catch (err) {
+                if (!cancelled && err.status !== 401 && !prefetched?.state) {
+                    setError(err.message || 'Failed to load workspace.');
+                }
+                console.warn('Initial studio load failed:', err.message);
+            } finally {
+                if (!cancelled) setIsLoadingState(false);
+            }
+        };
+
+        loadInitialWorkspace();
+        return () => { cancelled = true; };
+    }, [applyStudioState, currentToken, isAdmin]);
+
+    useEffect(() => {
+        if (!showBootSplash || isLoadingState) return undefined;
+
+        const elapsed = Date.now() - bootStartedAtRef.current;
+        const remaining = Math.max(0, BOOT_SPLASH_MIN_MS - elapsed);
+        const timer = window.setTimeout(() => setShowBootSplash(false), remaining);
+        return () => window.clearTimeout(timer);
+    }, [showBootSplash, isLoadingState]);
 
     useEffect(() => {
         const onKeyDown = (e) => {
@@ -653,8 +714,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
         return () => window.clearTimeout(id);
     }, [controls, activeProject?.id, currentToken]);
 
-    const handlePreUpload = (file, context) => {
+    const handlePreUpload = (file) => {
         if (!file) return;
+        if (!isImageFile(file)) {
+            setError('Invalid file type. Supported: JPG, PNG, WEBP');
+            return;
+        }
         const url = URL.createObjectURL(file);
         setUploads(prev => ({ ...prev, [tool]: { file, url } }));
         handleUpload(file);
@@ -1118,7 +1183,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
             creditPricing,
             rightPanelEl,
             handleUpload,
-            handlePreUpload
+            handlePreUpload,
+            onUploadInvalid: setError,
+            onUploadPaste: () => showNotice('Image pasted'),
         };
 
         // Routing canvas rendering
@@ -1160,6 +1227,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
 
     return (
         <div className={`studio ${isSidebarHidden ? 'sidebar-hidden' : ''}`}>
+            <StudioBootSplash
+                visible={showBootSplash}
+                dataReady={!isLoadingState}
+                minDurationMs={BOOT_SPLASH_MIN_MS}
+                onHidden={() => {
+                    if (!bootCompletedRef.current) {
+                        bootCompletedRef.current = true;
+                        onBootComplete?.();
+                    }
+                }}
+            />
             {/* Sidebar nav */}
             {!isSidebarHidden && (
                 <aside className="st-sidebar">
@@ -1634,26 +1712,20 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout }) 
                         </div>
 
                         {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'workspace' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && tool !== 'vectorize' && tool !== 'upscale' && tool !== 'removebg' && tool !== 'imagelayers' && !tool.startsWith('admin')) && (
-                            <div
-                                className={`st-upload ${isDrag ? 'dragging' : ''} ${preview ? 'has-image' : ''}`}
-                                onClick={() => fileRef.current?.click()}
-                                onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                                onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                                onDragLeave={() => setIsDrag(false)}
-                            >
-                                {preview ? (
-                                    <div className="st-upload-preview"><img src={preview} alt="Uploaded" /><div><span className="st-upload-name">{uploaded?.originalName || 'Image'}</span><span className="st-upload-hint">Click to replace</span></div></div>
-                                ) : (
-                                    <div className="st-upload-empty"><I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /><span>Upload Image</span></div>
-                                )}
-                            </div>
+                            <ImageDropzone
+                                variant="compact"
+                                preview={preview}
+                                previewLabel={uploaded?.originalName || 'Image'}
+                                onFile={handlePreUpload}
+                                onInvalidFile={setError}
+                                onPasteSuccess={() => showNotice('Image pasted')}
+                            />
                         )}
-                        <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0], 'tool')} />
 
-                        {isLoadingState ? (
+                        {isLoadingState && !showBootSplash ? (
                             <div className="st-loading-layout" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '320px', gap: '1rem' }}>
                                 <div className="st-spinner" style={{ width: '36px', height: '36px', borderWidth: '3px' }} />
-                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>Synchronizing studio workspace...</span>
+                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>Loading workspace…</span>
                             </div>
                         ) : (
                             renderCanvas()

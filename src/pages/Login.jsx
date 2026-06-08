@@ -1,5 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { API, normalizeToken } from '../components/studio/shared/helpers';
+import React, { useEffect, useRef, useState } from 'react';
+import { API, normalizeToken, prefetchStudioState } from '../components/studio/shared/helpers';
+
+function readGooglePhaseFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('google_login_token')) return 'completing';
+  if (params.get('google_signup_token')) return 'signup';
+  return null;
+}
+
+function clearAuthQueryParams() {
+  window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+}
 
 export default function Login({ onLogin }) {
   const [mode, setMode] = useState('signin');
@@ -15,22 +26,32 @@ export default function Login({ onLogin }) {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [googlePhase, setGooglePhase] = useState(readGooglePhaseFromUrl);
+  const oauthHandledRef = useRef(false);
+  const onLoginRef = useRef(onLogin);
+  onLoginRef.current = onLogin;
 
   useEffect(() => {
+    if (oauthHandledRef.current) return;
+
     const params = new URLSearchParams(window.location.search);
     const googleError = params.get('google_error');
     const googleLoginToken = params.get('google_login_token');
     const googleSignupTokenParam = params.get('google_signup_token');
 
     if (googleError) {
+      oauthHandledRef.current = true;
       setError(googleError);
-      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+      setGooglePhase(null);
+      clearAuthQueryParams();
       return;
     }
 
     if (googleSignupTokenParam) {
+      oauthHandledRef.current = true;
+      setGooglePhase('signup');
+
       const loadGoogleSignup = async () => {
-        setIsLoading(true);
         setError('');
         try {
           const res = await fetch(`${API}/api/auth/google/signup-token`, {
@@ -41,9 +62,11 @@ export default function Login({ onLogin }) {
           const data = await res.json();
           if (!data.success) {
             setError(data.error || 'Google signup could not be completed.');
+            clearAuthQueryParams();
+            setGooglePhase(null);
             return;
           }
-          window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+          clearAuthQueryParams();
           setGoogleSignupToken(googleSignupTokenParam);
           setGoogleSignupEmail(data.email || '');
           setEmail(data.email || '');
@@ -52,10 +75,11 @@ export default function Login({ onLogin }) {
           setConfirmPassword('');
           setMode('googleSetup');
           setNotice('Google verified your email. Set a password to finish signup.');
+          setGooglePhase(null);
         } catch {
           setError('Unable to complete Google signup. Please try again.');
-        } finally {
-          setIsLoading(false);
+          clearAuthQueryParams();
+          setGooglePhase(null);
         }
       };
 
@@ -65,8 +89,10 @@ export default function Login({ onLogin }) {
 
     if (!googleLoginToken) return;
 
+    oauthHandledRef.current = true;
+    setGooglePhase('completing');
+
     const exchangeGoogleToken = async () => {
-      setIsLoading(true);
       setError('');
       try {
         const res = await fetch(`${API}/api/auth/google/exchange`, {
@@ -74,22 +100,30 @@ export default function Login({ onLogin }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: googleLoginToken }),
         });
-        const data = await res.json();
-        if (data.success && data.user && normalizeToken(data.token)) {
-          window.history.replaceState(null, '', window.location.pathname + window.location.hash);
-          onLogin(data.user, data.token);
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+        if (res.ok && data?.success && data.user && normalizeToken(data.token)) {
+          clearAuthQueryParams();
+          prefetchStudioState(data.token);
+          onLoginRef.current(data.user, data.token);
           return;
         }
-        setError(data.error || 'Google login could not be completed.');
+        clearAuthQueryParams();
+        setError(data?.error || 'Google login could not be completed. Please try again.');
+        setGooglePhase(null);
       } catch {
-        setError('Unable to complete Google login. Please try again.');
-      } finally {
-        setIsLoading(false);
+        clearAuthQueryParams();
+        setError('Unable to complete Google login. Check your connection and try again.');
+        setGooglePhase(null);
       }
     };
 
     exchangeGoogleToken();
-  }, [onLogin]);
+  }, []);
 
   const switchMode = (nextMode) => {
     setMode(nextMode);
@@ -118,6 +152,7 @@ export default function Login({ onLogin }) {
       const data = await res.json();
 
       if (data.success && data.user && normalizeToken(data.token)) {
+        prefetchStudioState(data.token);
         onLogin(data.user, data.token);
       } else if (data.success && data.user) {
         setError('Login succeeded but no session token was returned. Please try again.');
@@ -235,6 +270,7 @@ export default function Login({ onLogin }) {
       });
       const data = await res.json();
       if (data.success && data.user && normalizeToken(data.token)) {
+        prefetchStudioState(data.token);
         onLogin(data.user, data.token);
         return;
       }
@@ -247,8 +283,40 @@ export default function Login({ onLogin }) {
   };
 
   const handleGoogleLogin = () => {
+    if (googlePhase) return;
     setError('');
-    window.location.href = `${API}/api/auth/google/start`;
+    setNotice('');
+    setGooglePhase('redirecting');
+    window.setTimeout(() => {
+      window.location.href = `${API}/api/auth/google/start`;
+    }, 80);
+  };
+
+  const renderGoogleOverlay = () => {
+    if (!googlePhase) return null;
+    const messages = {
+      redirecting: {
+        title: 'Redirecting to Google',
+        detail: 'Opening secure Google sign-in…',
+      },
+      completing: {
+        title: 'Completing sign in',
+        detail: 'Verifying your Google account and starting your studio session…',
+      },
+      signup: {
+        title: 'Verifying Google account',
+        detail: 'Preparing your signup details…',
+      },
+    };
+    const copy = messages[googlePhase] || messages.completing;
+
+    return (
+      <div className="login-oauth-overlay" role="status" aria-live="polite">
+        <div className="login-oauth-spinner" aria-hidden="true" />
+        <strong>{copy.title}</strong>
+        <p>{copy.detail}</p>
+      </div>
+    );
   };
 
   const renderStatus = () => (
@@ -282,7 +350,8 @@ export default function Login({ onLogin }) {
           <span className="login-logo-text">RIMI AI</span>
         </div>
 
-        <div className="login-card">
+        <div className={`login-card ${googlePhase ? 'is-oauth-busy' : ''}`}>
+          {renderGoogleOverlay()}
           <div className="login-header">
             <h2>{mode === 'signin' ? 'Welcome Back' : mode === 'googleSetup' ? 'Finish Google Signup' : 'Verify Email'}</h2>
             <p>{mode === 'verify' ? `Enter the code sent to ${pendingEmail}.` : mode === 'googleSetup' ? `Verified Google email: ${googleSignupEmail}` : 'Access the generative pattern intelligence studio.'}</p>
@@ -312,7 +381,7 @@ export default function Login({ onLogin }) {
                   <input type="password" id="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="login-input" required />
                 </div>
               </div>
-              <button type="submit" className="login-submit-btn" disabled={isLoading}>
+              <button type="submit" className="login-submit-btn" disabled={isLoading || Boolean(googlePhase)}>
                 <span>{isLoading ? 'Signing in...' : 'Sign in'}</span>
               </button>
             </form>
@@ -403,9 +472,11 @@ export default function Login({ onLogin }) {
 
           <div className="login-oauth-section">
             <div className="login-quick-divider"><span>or</span></div>
-            <button type="button" className="login-google-btn" onClick={handleGoogleLogin} disabled={isLoading}>
+            <button type="button" className="login-google-btn" onClick={handleGoogleLogin} disabled={isLoading || Boolean(googlePhase)}>
               <span className="login-google-icon" aria-hidden="true">G</span>
-              <span>Continue with Google</span>
+              <span>
+                {googlePhase === 'redirecting' ? 'Opening Google…' : googlePhase === 'completing' ? 'Completing sign in…' : 'Continue with Google'}
+              </span>
             </button>
           </div>
         </div>

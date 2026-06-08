@@ -1,19 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
+import ImageDropzone from '../shared/ImageDropzone';
+import { useImageDropzone } from '../shared/useImageDropzone';
 
 // Per-model credits must mirror EXTRACT_MODELS in backend/routes/generation.py
 // and DEFAULT_CREDIT_PRICING in backend/db.py.  At 4 credits per INR 1, the
 // credits below give ~57% gross margin per call.
 const EXTRACT_MODEL_DEFS = [
-    { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'AI', credits: 148, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-    { id: 'google/imagen-4-ultra', name: 'Imagen 4 Ultra', sub: 'Google', brand: 'anthropic', logo: 'G', credits: 69, icon: 'M12 2L10.5 8 5 9.5 9.5 12 8 18l4.5-2L17 19l-1.5-5.5L20 10.5 14 9.5z' },
-    { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest Labs', brand: 'deepseek', logo: 'FL', credits: 35, icon: 'M12 2C6.477 2 2 6.477 2 12c0 4.411 2.865 8.166 6.839 9.462.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.699-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.577.688.48C19.138 20.161 22 16.416 22 12c0-5.523-4.477-10-10-10z' },
-    { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'BD', credits: 46, icon: 'M4 4h4v16H4zm6 4h4v12h-4zm6 4h4v8h-4z' }
+    { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'GI', credits: 148, accent: '#10a37f' },
+    { id: 'google/imagen-4-ultra', name: 'Imagen 4 Ultra', sub: 'Google', brand: 'google', logo: 'IU', credits: 69, accent: '#4285f4' },
+    { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest Labs', brand: 'bfl', logo: 'F2', credits: 35, accent: '#6366f1' },
+    { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: 46, accent: '#f59e0b' },
 ];
 
 export default function PatternTool({
-    uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, setUploads, tool, currentToken, state, creditPricing, setEnhUrl, setTool
+    uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, tool, creditPricing, setEnhUrl, setTool,
+    handlePreUpload, onUploadInvalid, onUploadPaste,
 }) {
     // ===== LOCAL STATE =====
     const [extractResults, setExtractResults] = useState(EXTRACT_MODEL_DEFS.map(m => ({ ...m, loading: false, url: null, error: null, duration: 0 })));
@@ -30,50 +33,12 @@ export default function PatternTool({
     const [extractChatMessages, setExtractChatMessages] = useState({});
     const [extractChatInput, setExtractChatInput] = useState('');
     const [isExtractEditing, setIsExtractEditing] = useState(false);
-    const [isDrag, setIsDrag] = useState(false);
-    const fileRef = useRef(null);
 
-    // File Upload Handler
-    const handleUpload = async (file) => {
-        if (!file) return;
-        setError('');
-        try {
-            const formData = new FormData();
-            formData.append('image', file);
-            formData.append('projectId', activeProject.id);
-            formData.append('userId', user.id);
-
-            const r = await fetch(`${API}/api/upload`, {
-                method: 'POST',
-                headers: { ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}) },
-                body: formData,
-            });
-            const d = await r.json();
-            if (d.success) {
-                setUploads(prev => ({
-                    ...prev,
-                    [tool]: {
-                        file: {
-                            ...file,
-                            filename: d.filename,
-                            originalName: file.name
-                        },
-                        url: prev[tool]?.url
-                    }
-                }));
-                updateCreditsFromResponse(d);
-            } else setError(d.error);
-        } catch {
-            setError('Backend upload failed.');
-        }
-    };
-
-    const handlePreUpload = (file) => {
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        setUploads(prev => ({ ...prev, [tool]: { file, url } }));
-        handleUpload(file);
-    };
+    const { pasteProps, openFilePicker, inputProps } = useImageDropzone({
+        onFile: handlePreUpload,
+        onInvalidFile: onUploadInvalid,
+        onPasteSuccess: onUploadPaste,
+    });
 
     const extractDesignMulti = async () => {
         const activeUrl = preview || activeProject.heroImageUrl;
@@ -209,34 +174,20 @@ export default function PatternTool({
     if (!preview) {
         return (
             <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
-                <div
-                    className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
-                    onClick={() => fileRef.current?.click()}
-                    onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                    onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                    onDragLeave={() => setIsDrag(false)}
-                >
-                    <div className="st-particles">
-                        <div className="st-particle" /><div className="st-particle" /><div className="st-particle" />
-                        <div className="st-particle" /><div className="st-particle" /><div className="st-particle" />
-                    </div>
-                    <div className="st-dropzone-icon-wrap">
-                        <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={36} />
-                    </div>
-                    <h2 className="st-dropzone-title">Upload artwork to extract</h2>
-                    <p className="st-dropzone-desc">Drag & drop or click — 4 AI models will compete to extract the best pattern</p>
-                    <div className="st-dropzone-badges">
-                        <span className="st-dropzone-badge">PNG</span>
-                        <span className="st-dropzone-badge">JPG</span>
-                        <span className="st-dropzone-badge">TIFF</span>
-                        <span className="st-dropzone-badge">4 AI Models</span>
-                    </div>
-                </div>
+                <ImageDropzone
+                    title="Upload artwork to extract"
+                    description="Drag & drop, paste, or click — 4 AI models will compete to extract the best pattern"
+                    badges={['PNG', 'JPG', 'WEBP', '4 AI Models']}
+                    onFile={handlePreUpload}
+                    onInvalidFile={onUploadInvalid}
+                    onPasteSuccess={onUploadPaste}
+                />
             </div>
         );
     }
 
     return (
+        <div {...pasteProps} className="st-pattern-paste-wrap">
         <div className="st-pattern-extract-page">
 
             {/* === TOP CARD: Source + AI Models === */}
@@ -245,7 +196,7 @@ export default function PatternTool({
                 <div className="st-pattern-source-card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1f2937' }}>Source Pattern</span>
-                        <button onClick={() => fileRef.current?.click()} style={{
+                        <button type="button" onClick={openFilePicker} style={{
                             background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer',
                             fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px',
                         }}>
@@ -300,41 +251,30 @@ export default function PatternTool({
                             return (
                                 <div
                                     key={m.id}
-                                    className="st-pattern-model-select-card"
+                                    className={`st-pattern-model-select-card ${on ? 'selected' : ''}`}
                                     onClick={() => !anyLoading && setEnabledModels(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
                                     style={{
-                                        border: on ? `2px solid ${m.color}` : '2px solid #e5e7eb',
+                                        '--model-accent': m.accent,
                                         cursor: anyLoading ? 'not-allowed' : 'pointer',
-                                        background: on ? `${m.color}08` : '#fafafa',
                                         opacity: anyLoading ? 0.6 : 1,
                                     }}
                                 >
-                                    {/* Checkbox */}
-                                    <div style={{
-                                        position: 'absolute', top: '10px', right: '10px',
-                                        width: '20px', height: '20px', borderRadius: '50%',
-                                        background: on ? m.color : '#e5e7eb',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        transition: 'all 0.2s ease',
-                                    }}>
-                                        {on && <I d="M5 13l4 4L19 7" s={12} style={{ color: '#fff' }} />}
+                                    <div className={`st-pattern-model-check ${on ? 'on' : ''}`}>
+                                        {on && <I d="M5 13l4 4L19 7" s={12} />}
                                     </div>
-                                    {/* Icon */}
-                                    <div style={{
-                                        width: '40px', height: '40px', borderRadius: '12px',
-                                        background: `${m.color}15`, color: m.color,
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        marginBottom: '10px',
-                                    }}>
-                                        <I d={m.icon} s={22} />
-                                    </div>
-                                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>{m.name}</div>
-                                    <div style={{ fontSize: '0.68rem', color: '#6b7280', lineHeight: 1.4, marginBottom: '8px', minHeight: '2.8em' }}>{info.desc}</div>
-                                    <span style={{
-                                        fontSize: '0.65rem', fontWeight: 600, padding: '3px 8px', borderRadius: '6px',
-                                        background: `${info.tagColor}12`, color: info.tagColor,
-                                        border: `1px solid ${info.tagColor}25`,
-                                    }}>{info.tag}</span>
+                                    <span className={`st-model-brand st-pattern-model-brand ${m.brand}`}>{m.logo}</span>
+                                    <div className="st-pattern-model-name">{m.name}</div>
+                                    <div className="st-pattern-model-desc">{info.desc}</div>
+                                    <span
+                                        className="st-pattern-model-tag"
+                                        style={{
+                                            background: `${info.tagColor}12`,
+                                            color: info.tagColor,
+                                            borderColor: `${info.tagColor}25`,
+                                        }}
+                                    >
+                                        {info.tag}
+                                    </span>
                                 </div>
                             );
                         })}
@@ -397,11 +337,10 @@ export default function PatternTool({
                                 }}
                             >
                                 <div className="st-extract-model-header">
-                                    <span className={`st-model-dot ${model.loading ? 'loading' : ''}`} style={{ backgroundColor: model.color }} />
-                                    <I d={model.icon} s={15} />
+                                    <span className={`st-model-brand st-extract-model-brand ${model.brand}`}>{model.logo}</span>
                                     {model.name}
                                     {model.loading && (
-                                        <span className="st-model-status" style={{ background: `${model.color}18`, color: model.color }}>Processing...</span>
+                                        <span className="st-model-status" style={{ background: `${model.accent}18`, color: model.accent }}>Processing...</span>
                                     )}
                                     {model.url && (
                                         <span className="st-model-status" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
@@ -425,12 +364,12 @@ export default function PatternTool({
                                     ) : model.loading ? (
                                         <div className="st-ai-processing" style={{ transform: 'scale(0.7)' }}>
                                             <div className="st-ai-sparkle-container">
-                                                <div className="st-ai-sparkle-icon" style={{ color: model.color }}>
-                                                    <I d={model.icon} s={24} />
+                                                <div className="st-ai-sparkle-icon" style={{ color: model.accent }}>
+                                                    <span className={`st-model-brand st-extract-model-brand ${model.brand}`}>{model.logo}</span>
                                                 </div>
-                                                <div className="st-ai-ring" style={{ borderColor: `${model.color}40` }} />
-                                                <div className="st-ai-ring" style={{ borderColor: `${model.color}25` }} />
-                                                <div className="st-ai-ring" style={{ borderColor: `${model.color}15` }} />
+                                                <div className="st-ai-ring" style={{ borderColor: `${model.accent}40` }} />
+                                                <div className="st-ai-ring" style={{ borderColor: `${model.accent}25` }} />
+                                                <div className="st-ai-ring" style={{ borderColor: `${model.accent}15` }} />
                                             </div>
                                         </div>
                                     ) : model.error && model.error !== 'disabled' ? (
@@ -440,7 +379,7 @@ export default function PatternTool({
                                         </div>
                                     ) : (
                                         <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: '0.78rem', padding: '1.5rem 0.5rem' }}>
-                                            <I d={model.icon} s={32} />
+                                            <span className={`st-model-brand st-extract-model-brand lg ${model.brand}`}>{model.logo}</span>
                                             <p style={{ marginTop: '0.5rem', fontWeight: 600, color: '#6b7280' }}>Ready to generate</p>
                                             <p style={{ fontSize: '0.68rem', color: '#9ca3af', marginTop: '2px' }}>Click extract to see results</p>
                                         </div>
@@ -537,7 +476,7 @@ export default function PatternTool({
                                 <button
                                     key={m.id}
                                     className={`st-extract-gallery-dot ${i === extractGalleryIndex ? 'active' : ''}`}
-                                    style={i === extractGalleryIndex ? { background: m.color, boxShadow: `0 0 10px ${m.color}80` } : {}}
+                                    style={i === extractGalleryIndex ? { background: m.accent, boxShadow: `0 0 10px ${m.accent}80` } : {}}
                                     onClick={() => setExtractGalleryIndex(i)}
                                     title={m.name}
                                 />
@@ -592,6 +531,8 @@ export default function PatternTool({
                     </div>
                 </div>
             )}
+        </div>
+        <input {...inputProps} />
         </div>
     );
 

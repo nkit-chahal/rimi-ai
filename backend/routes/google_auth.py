@@ -351,7 +351,26 @@ def google_exchange():
     try:
         row = conn.execute(
             """
-            SELECT olt.*, u.*
+            SELECT
+                u.id,
+                u.email,
+                u.password,
+                u.name,
+                u.initials,
+                u.role,
+                u.plan,
+                u.credits_used,
+                u.credits_limit,
+                u.reset_at,
+                u.login_provider,
+                u.google_sub,
+                u.avatar_url,
+                u.email_verified,
+                u.last_login_at,
+                u.created_at,
+                u.status,
+                olt.expires_at AS oauth_expires_at,
+                olt.used_at AS oauth_used_at
             FROM oauth_login_tokens olt
             JOIN users u ON u.id = olt.user_id
             WHERE olt.token = ?
@@ -360,9 +379,9 @@ def google_exchange():
         ).fetchone()
         if not row:
             return jsonify({"success": False, "error": "Invalid Google login token"}), 400
-        if row["used_at"]:
+        if row["oauth_used_at"]:
             return jsonify({"success": False, "error": "Google login token was already used"}), 400
-        if datetime.fromisoformat(row["expires_at"]) < utc_now():
+        if datetime.fromisoformat(row["oauth_expires_at"]) < utc_now():
             return jsonify({"success": False, "error": "Google login token expired"}), 400
 
         conn.execute(
@@ -370,8 +389,6 @@ def google_exchange():
             (utc_now().isoformat(), token),
         )
         conn.commit()
-        # Use u.id from the JOIN — a legacy users.user_id column can shadow
-        # olt.user_id in "SELECT olt.*, u.*" and come back NULL.
         jwt_token = issue_access_token(row['id'], row['role'])
         return jsonify({"success": True, "user": user_payload(row), "token": jwt_token})
     except Exception as exc:

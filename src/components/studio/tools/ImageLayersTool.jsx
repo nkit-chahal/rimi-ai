@@ -3,17 +3,22 @@ import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
 import { createPortal } from 'react-dom';
 import * as fabric from 'fabric';
+import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function ImageLayersTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, rightPanelEl, handleUpload, handlePreUpload, tool } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, rightPanelEl, handlePreUpload, onUploadInvalid, onUploadPaste, tool } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
     const imageLayersCreditCost = creditPricing.imageLayers || 69;
     const hasEnoughImageLayersCredits = userRemainingCredits >= imageLayersCreditCost;
     const layerEditCreditCost = creditPricing.imageLayerEdit || 35;
     const hasEnoughLayerEditCredits = userRemainingCredits >= layerEditCreditCost;
-    const [isDrag, setIsDrag] = useState(false);
-    const fileRef = useRef(null);
+
+    const { pasteProps, inputProps } = useImageDropzone({
+        onFile: handlePreUpload,
+        onInvalidFile: onUploadInvalid,
+        onPasteSuccess: onUploadPaste,
+    });
 
     const [imageLayersResults, setImageLayersResults] = useState([]);
     const [isImageLayering, setIsImageLayering] = useState(false);
@@ -974,7 +979,7 @@ export default function ImageLayersTool(props) {
 
     const renderCanvasBlock = () => {
         return (
-            <div className={`st-layer-editor ${isImageLayersFullscreen ? 'fullscreen' : ''}`}>
+            <div {...pasteProps} className={`st-layer-editor ${isImageLayersFullscreen ? 'fullscreen' : ''}`}>
                 {imageLayersResults.length > 0 ? (
                     <>
                         <div className="st-qwen-layer-hero">
@@ -1205,7 +1210,7 @@ export default function ImageLayersTool(props) {
                                     {[0, 1, 2, 3].map(i => <div key={i} className="st-qwen-empty-card layer" style={{ '--i': i }} />)}
                                 </div>
                                 <div className="st-qwen-empty-title">Qwen-Image-Layered</div>
-                                <div>Upload an image, choose a layer count, then decompose it into editable RGBA layers.</div>
+                                <div>Upload an image (drag, paste, or click above), choose a layer count, then decompose it into editable RGBA layers.</div>
                                 <div className="st-qwen-demo-grid">
                                     {qwenLayerDemoActions.map((demo) => (
                                         <button
@@ -1228,6 +1233,7 @@ export default function ImageLayersTool(props) {
                         )}
                     </div>
                 )}
+                <input {...inputProps} />
             </div>
         );
 

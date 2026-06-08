@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
 import { createPortal } from 'react-dom';
+import { isImageFile } from '../shared/imageUpload';
+import { useImageDropzone } from '../shared/useImageDropzone';
 
 const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
     const canvasRef = useRef(null);
@@ -104,12 +106,16 @@ const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
 };
 
 
+const isMappingFile = (file) => {
+    if (!file) return false;
+    if (isImageFile(file)) return true;
+    return file.type === 'image/svg+xml' || file.name?.toLowerCase().endsWith('.svg');
+};
+
 export default function MappingsTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, onUploadPaste } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
-    const [isDrag, setIsDrag] = useState(false);
-    const fileRef = useRef(null);
 
     const MAPPING_CATEGORIES = [
         { id: 'home', label: 'Home & Decor', desc: 'Bedding, cushions, curtains, rugs & more', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z', color: '#6366f1' },
@@ -179,13 +185,9 @@ export default function MappingsTool(props) {
     const [mappingCustomMask, setMappingCustomMask] = useState(null); // The drawn mask URL
     const [isCanvasOpen, setIsCanvasOpen] = useState(false);
 
-    const mapFileRef = useRef(null);
-
     const handleMappingUpload = (file) => {
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => setMappingPrintPreview(e.target.result);
-        reader.readAsDataURL(file);
+        setMappingPrintPreview(URL.createObjectURL(file));
         const fd = new FormData();
         fd.append('image', file);
         fetch(`${API}/api/upload`, { method: 'POST', body: fd })
@@ -195,6 +197,14 @@ export default function MappingsTool(props) {
             })
             .catch(() => setError('Upload failed'));
     };
+
+    const { rootProps, pasteProps, inputProps, openFilePicker, isDrag } = useImageDropzone({
+        onFile: handleMappingUpload,
+        onInvalidFile: setError,
+        onPasteSuccess: onUploadPaste,
+        accept: '.jpg,.jpeg,.png,.webp,.svg',
+        isValidFile: isMappingFile,
+    });
 
     const toggleMappingProduct = (productId) => {
         setMappingSelectedProducts(prev => {
@@ -262,7 +272,7 @@ export default function MappingsTool(props) {
     const hasEnoughMappingCredits = userRemainingCredits >= mappingCreditCost;
 
     return (
-        <div className="st-map-wizard">
+        <div {...pasteProps} className="st-map-wizard">
             {/* Step indicator */}
             <div className="st-map-steps">
                 {STEPS.map((label, i) => (
@@ -290,10 +300,8 @@ export default function MappingsTool(props) {
                     <p className="st-map-section-desc">Upload a high quality print or pattern</p>
                     <div className="st-map-upload-row">
                         <div
-                            className={`st-map-upload-zone ${mappingPrintPreview ? 'has-image' : ''}`}
-                            onClick={() => !mappingPrintPreview && mapFileRef.current?.click()}
-                            onDrop={(e) => { e.preventDefault(); handleMappingUpload(e.dataTransfer.files[0]); }}
-                            onDragOver={(e) => e.preventDefault()}
+                            className={`st-map-upload-zone ${mappingPrintPreview ? 'has-image' : ''} ${isDrag ? 'dragging' : ''}`}
+                            {...rootProps}
                         >
                             {mappingPrintPreview ? (
                                 <>
@@ -308,14 +316,14 @@ export default function MappingsTool(props) {
                                     <div className="st-map-upload-icon">
                                         <I d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" s={24} />
                                     </div>
-                                    <h3>Drag & drop your image here</h3>
+                                    <h3>Drag, paste, or drop your image here</h3>
                                     <p>or</p>
-                                    <button className="st-map-upload-btn" type="button">Upload Image</button>
-                                    <p className="st-map-upload-formats">Supports: PNG, JPG, SVG (Max 50MB)</p>
+                                    <button className="st-map-upload-btn" type="button" onClick={(e) => { e.stopPropagation(); openFilePicker(); }}>Upload Image</button>
+                                    <p className="st-map-upload-formats">Supports: PNG, JPG, WEBP, SVG (Max 50MB)</p>
                                 </>
                             )}
                         </div>
-                        <input ref={mapFileRef} type="file" accept=".jpg,.jpeg,.png,.webp,.svg" hidden onChange={(e) => handleMappingUpload(e.target.files[0])} />
+                        <input {...inputProps} />
 
                         <div className="st-map-print-preview">
                             <div className="st-map-print-preview-title">Print Preview</div>
@@ -327,7 +335,7 @@ export default function MappingsTool(props) {
                                             Print Name
                                             <span>{mappingPrint?.file?.name || 'pattern.png'}</span>
                                         </div>
-                                        <button className="st-map-replace-btn" onClick={() => mapFileRef.current?.click()}>Replace</button>
+                                        <button className="st-map-replace-btn" onClick={() => openFilePicker()}>Replace</button>
                                     </div>
                                 </>
                             ) : (

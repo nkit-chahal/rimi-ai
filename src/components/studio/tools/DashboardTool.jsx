@@ -2,13 +2,12 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { I } from '../shared/StudioIcons';
 import { API, apiFetch, forceDownload } from '../shared/helpers';
 import { createPortal } from 'react-dom';
+import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function DashboardTool(props) {
-    const { uploaded, preview, activeProject, user, setError, setNotice, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, rightPanelEl, handleUpload, handlePreUpload, setTool } = props;
+    const { uploaded, preview, activeProject, user, setError, setNotice, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, rightPanelEl, setTool, onUploadPaste } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
-    const [isDrag, setIsDrag] = useState(false);
-    const fileRef = useRef(null);
     const STEP_TYPES = [
         { type: 'upload', label: 'Upload', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12', desc: 'Upload artwork' },
         { type: 'extract', label: 'Extract Design', icon: 'M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z', desc: 'AI pattern extraction' },
@@ -60,7 +59,6 @@ export default function DashboardTool(props) {
     const [pipelinePreview, setPipelinePreview] = useState(null);
     const [pipelineRuns, setPipelineRuns] = useState([]);
     const [pipelineFile, setPipelineFile] = useState(null); // uploaded file for pipeline
-    const pipelineFileRef = useRef(null);
     const [showAddMenu, setShowAddMenu] = useState(false);
     const [isDraggingOver, setIsDraggingOver] = useState(false);
     const [pipelineName, setPipelineName] = useState('My Custom Pipeline');
@@ -178,9 +176,7 @@ export default function DashboardTool(props) {
 
     const handlePipelineUpload = (file) => {
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => setPipelinePreview(e.target.result);
-        reader.readAsDataURL(file);
+        setPipelinePreview(URL.createObjectURL(file));
         const fd = new FormData();
         fd.append('image', file);
         fetch(`${API}/api/upload`, { method: 'POST', body: fd })
@@ -188,6 +184,12 @@ export default function DashboardTool(props) {
             .then(d => { if (d.success) setPipelineFile(d); })
             .catch(() => setError('Upload failed'));
     };
+
+    const { rootProps: pipelineUploadProps, pasteProps, inputProps: pipelineInputProps, openFilePicker: openPipelinePicker, isDrag: isPipelineDrag } = useImageDropzone({
+        onFile: handlePipelineUpload,
+        onInvalidFile: setError,
+        onPasteSuccess: onUploadPaste,
+    });
 
     const runPipeline = async () => {
         if (pipelineSteps.length === 0) return;
@@ -402,7 +404,7 @@ export default function DashboardTool(props) {
 
     const renderCanvasBlock = () => {
         return (
-            <div className="st-pipeline-studio">
+            <div {...pasteProps} className="st-pipeline-studio">
                 <div className="st-pl-tabs">
                     <button className={`st-pl-tab ${dashboardTab === 'run' ? 'active' : ''}`} onClick={() => setDashboardTab('run')}>
                         <I d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" s={18} /> My Workflows
@@ -495,7 +497,7 @@ export default function DashboardTool(props) {
                                     <div
                                         className={`st-pl-step ${uploadDone ? 'done' : step.status}`}
                                         onClick={() => {
-                                            if (isUploadStep) pipelineFileRef.current?.click();
+                                            if (isUploadStep) openPipelinePicker();
                                             else if (step.resultUrl) setPipelinePreview(step.resultUrl);
                                         }}
                                     >
@@ -585,13 +587,13 @@ export default function DashboardTool(props) {
 
                 {/* Pipeline upload for first step */}
                 {pipelineSteps.length > 0 && pipelineSteps[0]?.type === 'upload' && !pipelineFile && (
-                    <div className="st-pl-upload-prompt" onClick={() => pipelineFileRef.current?.click()}>
+                    <div className={`st-pl-upload-prompt ${isPipelineDrag ? 'dragging' : ''}`} {...pipelineUploadProps}>
                         <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={24} />
                         <strong>Upload your artwork to get started</strong>
-                        <span>PNG, JPG up to 10MB</span>
+                        <span>Drag, paste, or click — PNG, JPG, WEBP</span>
                     </div>
                 )}
-                <input ref={pipelineFileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0], 'pipeline')} />
+                <input {...pipelineInputProps} />
             </div>
         );
 

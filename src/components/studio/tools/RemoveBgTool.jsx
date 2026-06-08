@@ -1,7 +1,9 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
+import ImageDropzone from '../shared/ImageDropzone';
+import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function RemoveBgTool(props) {
     const {
@@ -16,13 +18,18 @@ export default function RemoveBgTool(props) {
         removeBgUrl,
         setRemoveBgUrl,
         rightPanelEl,
-        handleUpload,
         handlePreUpload,
+        onUploadInvalid,
+        onUploadPaste,
     } = props;
 
     const [isProcessing, setIsProcessing] = useState(false);
-    const [isDrag, setIsDrag] = useState(false);
-    const fileRef = useRef(null);
+
+    const { pasteProps, openFilePicker, inputProps } = useImageDropzone({
+        onFile: handlePreUpload,
+        onInvalidFile: onUploadInvalid,
+        onPasteSuccess: onUploadPaste,
+    });
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
     const creditCost = creditPricing.removeBg || 2;
@@ -111,32 +118,15 @@ export default function RemoveBgTool(props) {
         return (
             <>
                 <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
-                    <div
-                        className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
-                        onClick={() => fileRef.current?.click()}
-                        onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                        onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                        onDragLeave={() => setIsDrag(false)}
-                    >
-                        <div className="st-particles">
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                            <div className="st-particle" />
-                        </div>
-                        <div className="st-dropzone-icon-wrap">
-                            <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={36} />
-                        </div>
-                        <h2 className="st-dropzone-title">Upload artwork to remove background</h2>
-                        <p className="st-dropzone-desc">Drag & drop or click to browse — get a clean transparent PNG in seconds</p>
-                        <div className="st-dropzone-badges">
-                            <span className="st-dropzone-badge">PNG</span>
-                            <span className="st-dropzone-badge">JPG</span>
-                            <span className="st-dropzone-badge">WEBP</span>
-                        </div>
-                    </div>
+                    <ImageDropzone
+                        title="Upload artwork to remove background"
+                        description="Drag & drop, paste, or click — get a clean transparent PNG in seconds"
+                        badges={['PNG', 'JPG', 'WEBP']}
+                        onFile={handlePreUpload}
+                        onInvalidFile={onUploadInvalid}
+                        onPasteSuccess={onUploadPaste}
+                    />
                 </div>
-                <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0], 'removebg')} />
                 {rightPanelEl && createPortal(
                     <div className="st-pl-right" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                         {renderControls()}
@@ -149,12 +139,12 @@ export default function RemoveBgTool(props) {
 
     return (
         <>
-            <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+            <div {...pasteProps} className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div className="st-comparison-workspace">
                     <div className="st-comparison-card">
                         <div className="st-comparison-card-head">
                             <span>Original</span>
-                            <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} />
                                 Replace
                             </button>
@@ -186,7 +176,7 @@ export default function RemoveBgTool(props) {
                         <div className="st-comparison-card-head">
                             <span>Transparent PNG</span>
                             {removeBgUrl && (
-                                <button onClick={(e) => forceDownload(e, removeBgUrl)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                <button type="button" onClick={(e) => forceDownload(e, removeBgUrl)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
                                     <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
                                 </button>
                             )}
@@ -217,8 +207,8 @@ export default function RemoveBgTool(props) {
                         </div>
                     </div>
                 </div>
+                <input {...inputProps} />
             </div>
-            <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={(e) => handlePreUpload(e.target.files[0], 'removebg')} />
             {rightPanelEl && createPortal(
                 <div className="st-pl-right" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {renderControls()}

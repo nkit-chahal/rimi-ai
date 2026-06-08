@@ -1,16 +1,24 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
-import { createPortal } from 'react-dom';
+import ImageDropzone from '../shared/ImageDropzone';
+import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function ColorwaysTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, cwUrl, setCwUrl, handleUpload } = props;
+    const {
+        uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse,
+        creditPricing, cwUrl, setCwUrl, handlePreUpload, onUploadInvalid, onUploadPaste,
+    } = props;
 
     const colorwayCreditCost = creditPricing.recolor || 3;
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
     const hasEnoughColorwayCredits = userRemainingCredits >= colorwayCreditCost;
-    const [isDrag, setIsDrag] = useState(false);
-    const fileRef = useRef(null);
+
+    const { pasteProps, openFilePicker, inputProps } = useImageDropzone({
+        onFile: handlePreUpload,
+        onInvalidFile: onUploadInvalid,
+        onPasteSuccess: onUploadPaste,
+    });
 
     const [cwExtractedPalette, setCwExtractedPalette] = useState([]);
     const [cwTargetPalette, setCwTargetPalette] = useState([]);
@@ -82,43 +90,26 @@ export default function ColorwaysTool(props) {
     if (!preview) {
         return (
             <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
-                <div
-                    className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
-                    onClick={() => fileRef.current?.click()}
-                    onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                    onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                    onDragLeave={() => setIsDrag(false)}
-                >
-                    <div className="st-particles">
-                        <div className="st-particle" />
-                        <div className="st-particle" />
-                        <div className="st-particle" />
-                        <div className="st-particle" />
-                        <div className="st-particle" />
-                        <div className="st-particle" />
-                    </div>
-                    <div className="st-dropzone-icon-wrap">
-                        <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={36} />
-                    </div>
-                    <h2 className="st-dropzone-title">Upload artwork for Colorways</h2>
-                    <p className="st-dropzone-desc">Drag & drop or click to browse — map and generate new colorways</p>
-                    <div className="st-dropzone-badges">
-                        <span className="st-dropzone-badge">PNG</span>
-                        <span className="st-dropzone-badge">JPG</span>
-                        <span className="st-dropzone-badge">TIFF</span>
-                    </div>
-                </div>
+                <ImageDropzone
+                    title="Upload artwork for Colorways"
+                    description="Drag & drop, paste, or click — map and generate new colorways"
+                    badges={['PNG', 'JPG', 'WEBP']}
+                    icon={<I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={36} />}
+                    onFile={handlePreUpload}
+                    onInvalidFile={onUploadInvalid}
+                    onPasteSuccess={onUploadPaste}
+                />
             </div>
         );
     }
 
     return (
-        <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
+        <div {...pasteProps} className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
             <div className="st-comparison-workspace">
                 <div className="st-comparison-card">
                     <div className="st-comparison-card-head">
                         <span>Original Artwork</span>
-                        <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} /> Replace
                         </button>
                     </div>
@@ -251,6 +242,7 @@ export default function ColorwaysTool(props) {
                     </div>
                 </div>
             )}
+            <input {...inputProps} />
         </div>
     );
 

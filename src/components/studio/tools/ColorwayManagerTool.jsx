@@ -1,14 +1,22 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload } from '../shared/helpers';
-import { createPortal } from 'react-dom';
+import ImageDropzone from '../shared/ImageDropzone';
+import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function ColorwayManagerTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, handleUpload } = props;
+    const {
+        uploaded, preview, activeProject, user, setError, updateCreditsFromResponse,
+        creditPricing, handlePreUpload, onUploadInvalid, onUploadPaste,
+    } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
-    const [isDrag, setIsDrag] = useState(false);
-    const fileRef = useRef(null);
+
+    const { pasteProps, inputProps } = useImageDropzone({
+        onFile: handlePreUpload,
+        onInvalidFile: onUploadInvalid,
+        onPasteSuccess: onUploadPaste,
+    });
 
     const [cwmPalette, setCwmPalette] = useState([]);
     const [cwmColorways, setCwmColorways] = useState([]);
@@ -122,38 +130,21 @@ export default function ColorwayManagerTool(props) {
     if (!preview) {
         return (
             <div className="st-pattern-layout" style={{ display: 'flex', flex: 1, padding: '2rem' }}>
-                <div
-                    className={`st-dropzone-creative ${isDrag ? 'dragging' : ''}`}
-                    onClick={() => fileRef.current?.click()}
-                    onDrop={(e) => { e.preventDefault(); setIsDrag(false); handleUpload(e.dataTransfer.files[0]); }}
-                    onDragOver={(e) => { e.preventDefault(); setIsDrag(true); }}
-                    onDragLeave={() => setIsDrag(false)}
-                >
-                    <div className="st-particles">
-                        <div className="st-particle" />
-                        <div className="st-particle" />
-                        <div className="st-particle" />
-                        <div className="st-particle" />
-                        <div className="st-particle" />
-                        <div className="st-particle" />
-                    </div>
-                    <div className="st-dropzone-icon-wrap">
-                        <I d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V17a4 4 0 01-4 4H7z" s={36} />
-                    </div>
-                    <h2 className="st-dropzone-title">Upload artwork to manage colorways</h2>
-                    <p className="st-dropzone-desc">Drag & drop or click to browse — mass-generate production palettes</p>
-                    <div className="st-dropzone-badges">
-                        <span className="st-dropzone-badge">PNG</span>
-                        <span className="st-dropzone-badge">JPG</span>
-                        <span className="st-dropzone-badge">TIFF</span>
-                    </div>
-                </div>
+                <ImageDropzone
+                    title="Upload artwork to manage colorways"
+                    description="Drag & drop, paste, or click — mass-generate production palettes"
+                    badges={['PNG', 'JPG', 'WEBP']}
+                    icon={<I d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V17a4 4 0 01-4 4H7z" s={36} />}
+                    onFile={handlePreUpload}
+                    onInvalidFile={onUploadInvalid}
+                    onPasteSuccess={onUploadPaste}
+                />
             </div>
         );
     }
 
     return (
-        <div className="st-tool-content st-pattern-layout" style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem' }}>
+        <div {...pasteProps} className="st-tool-content st-pattern-layout" style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem' }}>
             {/* Palette Extraction */}
             {cwmPalette.length === 0 ? (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -322,6 +313,7 @@ export default function ColorwayManagerTool(props) {
                     </div>
                 </>
             )}
+            <input {...inputProps} />
         </div>
     );
 

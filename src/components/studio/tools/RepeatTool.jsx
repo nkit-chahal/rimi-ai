@@ -1,10 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useImageDropzone } from '../shared/useImageDropzone';
 import { I } from '../shared/StudioIcons';
 import { API, apiFetch, forceDownload } from '../shared/helpers';
 import { createPortal } from 'react-dom';
 
 export default function RepeatTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, controls, updateControls, repeatUrl, setRepeatUrl, isRepeat, setIsRepeat, rightPanelEl, handleUpload, handlePreUpload, tool, state, setState, setUploads, currentToken } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, controls, updateControls, repeatUrl, setRepeatUrl, isRepeat, setIsRepeat, rightPanelEl, handlePreUpload, onUploadInvalid, onUploadPaste, tool, state, setState, setUploads, currentToken } = props;
+
+    const { pasteProps, inputProps } = useImageDropzone({
+        onFile: handlePreUpload,
+        onInvalidFile: onUploadInvalid,
+        onPasteSuccess: onUploadPaste,
+    });
 
     const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
     const [canvasZoom, setCanvasZoom] = useState(1);
@@ -127,9 +134,6 @@ export default function RepeatTool(props) {
             gridSize: calcExportGrid(nextFab, nextW),
         });
     }, [updateControls, rptW, rptH, fabW, calcExportGrid]);
-    const [isDrag, setIsDrag] = useState(false);
-    const fileRef = useRef(null);
-
     const createRepeat = async () => {
         if (!uploaded && !preview) {
             setError('Upload an image first to export a repeat set.');
@@ -418,7 +422,7 @@ export default function RepeatTool(props) {
 
     const renderCanvasBlock = () => {
         return (
-            <div className="st-repeat-layout">
+            <div {...pasteProps} className="st-repeat-layout">
                 <div className="st-repeat-board">
                     <div className="st-repeat-toolbar">
                         <div className="st-tb-group">
@@ -459,6 +463,7 @@ export default function RepeatTool(props) {
                         </div>
                     </div>
                 </div>
+                <input {...inputProps} />
             </div>
         );
 
