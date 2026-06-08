@@ -98,6 +98,20 @@ BILLING_PLANS = [
         ],
     },
     {
+        "id": "business",
+        "label": "Business",
+        "description": "High-output studios and small teams.",
+        "credits": 34993,
+        "amount": 499900,
+        "currency": "INR",
+        "badge": "",
+        "features": [
+            "34,993 AI credits",
+            "~80 full design workflows",
+            "Ideal for multi-designer teams",
+        ],
+    },
+    {
         "id": "scale",
         "label": "Scale",
         "description": "Large credit top-up for production teams.",
