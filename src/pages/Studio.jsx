@@ -29,6 +29,7 @@ import MappingsTool from '../components/studio/tools/MappingsTool';
 // Shared icons & helpers
 import { I } from '../components/studio/shared/StudioIcons';
 import { API, apiFetch, consumeStudioPrefetch, forceDownload } from '../components/studio/shared/helpers';
+import { loadRazorpay } from '../components/studio/shared/loadRazorpay';
 import ImageDropzone from '../components/studio/shared/ImageDropzone';
 import { isImageFile } from '../components/studio/shared/imageUpload';
 import StudioCommandPalette from '../components/studio/shared/StudioCommandPalette';
@@ -405,6 +406,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     useEffect(() => {
         if (tool !== 'billing' || !currentToken) return;
         fetchBillingOverview();
+        loadRazorpay().catch(() => {});
         fetch(`${API}/api/billing/razorpay-config`, {
             headers: { 'Authorization': `Bearer ${currentToken}` },
         })
@@ -779,12 +781,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             return;
         }
 
-        if (!window.Razorpay) {
-            setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay checkout script is not loaded.' });
-            return;
-        }
-
         try {
+            const Razorpay = await loadRazorpay();
             const orderRes = await fetch(`${API}/api/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
@@ -798,7 +796,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                 throw new Error(orderData.error || 'Unable to create payment order.');
             }
 
-            const checkout = new window.Razorpay({
+            const checkout = new Razorpay({
                 key: orderData.key_id || razorpayKeyId,
                 amount: orderData.amount,
                 currency: orderData.currency,
