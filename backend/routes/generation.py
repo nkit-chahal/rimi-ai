@@ -93,6 +93,7 @@ def extract_design():
     if user_id:
         try: user_id = int(user_id)
         except ValueError: user_id = None
+    model_id = data.get('modelId', 'openai/gpt-image-2')
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
     required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 148))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
