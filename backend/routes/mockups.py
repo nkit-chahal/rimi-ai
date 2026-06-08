@@ -1,4 +1,4 @@
-"""Mockup generation routes: single and batch product mockups via Nano Banana 2."""
+"""Mockup generation routes: single and batch product mockups via GPT Image 2 (low)."""
 import os
 import uuid
 import base64
@@ -21,7 +21,7 @@ import storage
 
 bp = Blueprint('mockups', __name__)
 
-MODEL_ID = "google/nano-banana-2"
+MODEL_ID = "openai/gpt-image-2"
 MAX_RETRIES = 3
 RETRY_BACKOFF_SECONDS = 5
 MAX_INPUT_PX = 768  # Compress input images to save on per-megapixel billing
@@ -161,25 +161,25 @@ def _generate_single_mockup(
     }
     
     prompt = (
-        f"Use @Image 1 as the fabric print design. The pattern in @Image 1 shows: {pattern_description}. "
-        f"Apply this EXACT pattern from @Image 1 as a seamless repeating print covering the ENTIRE fabric surface of the product. "
+        f"Use #1 as the fabric print design. The pattern in #1 shows: {pattern_description}. "
+        f"Apply this EXACT pattern from #1 as a seamless repeating print covering the ENTIRE fabric surface of the product. "
     )
     
     if product_type == "custom_product" and product_reference_data_uri:
-        prompt += f"The product should perfectly match the shape, style, and item type shown in @Image 2. "
+        prompt += f"The product should perfectly match the shape, style, and item type shown in #2. "
     else:
         prompt += f"Product: {base_prompt} "
         
     prompt += (
         f"Fabric: {fabric_texture} with realistic texture, natural folds, and draping. "
-        f"The pattern from @Image 1 must be clearly visible and recognizable — NEVER generate a plain or solid-colored product. "
+        f"The pattern from #1 must be clearly visible and recognizable — NEVER generate a plain or solid-colored product. "
         f"{bg_p.get(background, bg_p['studio'])} {shot_p.get(shot_style, shot_p['editorial'])} "
         f"Photorealistic product photography, 4K."
     )
     if custom_prompt.strip():
         prompt += f" User art direction: {custom_prompt.strip()}"
 
-    # 3. Call Nano Banana 2
+    # 3. Call GPT Image 2 (low quality tier — $0.012/image)
     print(f"  [Mockup] Running {MODEL_ID} for '{product_type}'...")
     print(f"  [Mockup] Prompt: {prompt[:200]}...")
     result_url = None
@@ -192,20 +192,22 @@ def _generate_single_mockup(
                 MODEL_ID,
                 input={
                     "prompt": prompt,
-                    "image_input": input_images,
+                    "input_images": input_images,
+                    "quality": "low",
                     "aspect_ratio": "1:1",
                 }
             )
             duration = time.time() - t0
-            # nano-banana-2: $0.067/image
-            credits_used = credit_requirement('mappings', 78)
-            cost_usd = 0.067
+            # gpt-image-2 quality=low: $0.012/image
+            credits_used = credit_requirement('mappings', 14)
+            cost_usd = 0.012
             log_replicate_call(project_id, MODEL_ID, duration, credits_used, cost_usd)
 
             if isinstance(output, list) and len(output) > 0:
-                result_url = str(output[0])
+                out = output[0]
+                result_url = out.url if hasattr(out, 'url') else str(out)
             else:
-                result_url = str(output)
+                result_url = output.url if hasattr(output, 'url') else str(output)
             
             print(f"  [Mockup] Done ({duration:.1f}s): {result_url[:80]}...")
             break
@@ -253,7 +255,7 @@ def generate_mockup():
     if not product_type: return jsonify({"error": "productType is required"}), 400
     if not pattern_filename and not pattern_url: return jsonify({"error": "patternFilename or patternUrl is required"}), 400
 
-    required_credits = credit_requirement('mappings', 78)
+    required_credits = credit_requirement('mappings', 14)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
@@ -301,7 +303,7 @@ def generate_mockups_batch():
     if not pattern_filename: return jsonify({"error": "patternFilename is required"}), 400
     if not products: return jsonify({"error": "products must be a non-empty list"}), 400
 
-    required_credits = credit_requirement('mappings', 78, len(products))
+    required_credits = credit_requirement('mappings', 14, len(products))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
