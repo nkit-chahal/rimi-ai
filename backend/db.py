@@ -17,10 +17,10 @@ db_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 # Credit pricing
 # Economics: INR 100 = USD 1.  1 credit = $0.001 of vendor budget.
-# Razorpay ~3% + target 40% profit  =>  vendor cost budget = 57% of gross.
+# Razorpay ~3% + target 24% profit  =>  vendor cost budget = 70% of gross.
 # Per-call credits include a +15% safety markup over raw vendor cost to absorb
 # Groq side-calls and invoice variance.   credits = ceil(cost_usd * 1150)
-# Pack pricing: 5.5 credits per INR 1 (gives ~42% margin after Razorpay).
+# Pack pricing: 7 credits per INR 1 (gives ~24% margin after Razorpay).
 # ---------------------------------------------------------------------------
 DEFAULT_CREDIT_PRICING = [
     # ----- Uploads / Exports (free) -----

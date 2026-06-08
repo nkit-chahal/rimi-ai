@@ -16,13 +16,13 @@ bp = Blueprint("billing", __name__)
 RAZORPAY_ORDERS_URL = "https://api.razorpay.com/v1/orders"
 
 # ---------------------------------------------------------------------------
-# Billing plans  (Option A: 4 credits per INR 1, ~57% gross margin)
+# Billing plans  (7 credits per INR 1, ~24% gross margin after Razorpay)
 # Economics (INR 100 = USD 1):
 #   - Razorpay fee    : ~3% of gross
 #   - Vendor budget   : 1 credit = $0.001 of true vendor cost
-#                       At 4 credits/INR we collect INR 0.25 per credit and
-#                       spend INR 0.10  =>  ~57% gross margin per recharge
-#   - After Razorpay  : ~54% gross  (covers hosting, free-tier abuse, failed
+#                       At 7 credits/INR we collect INR 0.143 per credit and
+#                       spend INR 0.10  =>  ~27% gross margin per recharge
+#   - After Razorpay  : ~24% gross  (covers hosting, free-tier abuse, failed
 #                       runs, Groq side-calls; leaves room for GST + tax)
 # ---------------------------------------------------------------------------
 BILLING_PLANS = [
@@ -45,27 +45,27 @@ BILLING_PLANS = [
         "id": "starter",
         "label": "Starter",
         "description": "Small production runs and evaluation.",
-        "credits": 1996,
+        "credits": 3493,
         "amount": 49900,
         "currency": "INR",
         "badge": "",
         "features": [
-            "1,996 AI credits",
-            "~13 Pattern Extractions (GPT Image 2)",
-            "~34 Make-Seamless / Mockup runs",
+            "3,493 AI credits",
+            "~77 Pattern Extractions (Nano Banana)",
+            "~52 Mockups / ~60 Seamless runs",
         ],
     },
     {
         "id": "creator",
         "label": "Creator",
         "description": "Best value for active textile workflows.",
-        "credits": 3996,
+        "credits": 6993,
         "amount": 99900,
         "currency": "INR",
         "badge": "Popular",
         "features": [
-            "3,996 AI credits",
-            "~27 Pattern Extractions, ~68 Seamless runs",
+            "6,993 AI credits",
+            "~16 full design workflows",
             "Recommended for active studios",
         ],
     },
@@ -73,13 +73,13 @@ BILLING_PLANS = [
         "id": "pro",
         "label": "Pro",
         "description": "For frequent studio use and client work.",
-        "credits": 11996,
+        "credits": 20993,
         "amount": 299900,
         "currency": "INR",
         "badge": "",
         "features": [
-            "11,996 AI credits",
-            "High-volume generation buffer",
+            "20,993 AI credits",
+            "~48 full design workflows",
             "All AI tools unlocked",
         ],
     },
@@ -87,13 +87,13 @@ BILLING_PLANS = [
         "id": "scale",
         "label": "Scale",
         "description": "Large credit top-up for production teams.",
-        "credits": 27996,
+        "credits": 48993,
         "amount": 699900,
         "currency": "INR",
         "badge": "",
         "features": [
-            "27,996 AI credits",
-            "Best per-credit rate",
+            "48,993 AI credits",
+            "~113 full design workflows",
             "Designed for team production usage",
         ],
     },
@@ -101,25 +101,25 @@ BILLING_PLANS = [
         "id": "enterprise",
         "label": "Enterprise",
         "description": "For agencies and high-volume teams.",
-        "credits": 59996,
+        "credits": 104993,
         "amount": 1499900,
         "currency": "INR",
         "badge": "",
         "features": [
-            "59,996 AI credits",
+            "104,993 AI credits",
+            "~242 full design workflows",
             "Priority support",
-            "Bulk seat licensing on request",
         ],
     },
 ]
 
-# Custom top-up: 4 credits per INR 1 (matches all subscription plans).
+# Custom top-up: 7 credits per INR 1 (matches all subscription plans).
 # Internal accounting convention: INR 100 = USD 1, 1 credit = $0.001 of vendor
-# budget.  At 4 cr/INR we collect INR 0.25 per credit and spend INR 0.10,
-# giving ~57% gross margin (~54% after Razorpay's ~3% fee).
-CUSTOM_CREDITS_PER_RUPEE = 4
-CUSTOM_MIN_AMOUNT_INR = 100       # Minimum INR 100  -> 400 credits
-CUSTOM_MAX_AMOUNT_INR = 100000    # Maximum INR 1,00,000 -> 4,00,000 credits
+# budget.  At 7 cr/INR we collect INR 0.143 per credit and spend INR 0.10,
+# giving ~27% gross margin (~24% after Razorpay's ~3% fee).
+CUSTOM_CREDITS_PER_RUPEE = 7
+CUSTOM_MIN_AMOUNT_INR = 100       # Minimum INR 100  -> 700 credits
+CUSTOM_MAX_AMOUNT_INR = 100000    # Maximum INR 1,00,000 -> 7,00,000 credits
 INR_PER_USD = 100                 # INR 100 = $1 for internal accounting
 
 
