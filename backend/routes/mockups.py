@@ -1,4 +1,4 @@
-"""Mockup generation routes: single and batch product mockups via Flux Fill Pro."""
+"""Mockup generation routes: single and batch product mockups via Nano Banana."""
 import os
 import uuid
 import base64
@@ -21,7 +21,7 @@ import storage
 
 bp = Blueprint('mockups', __name__)
 
-MODEL_ID = "openai/gpt-image-2"
+MODEL_ID = "google/nano-banana"
 MAX_RETRIES = 3
 RETRY_BACKOFF_SECONDS = 5
 
@@ -133,7 +133,7 @@ def _generate_single_mockup(
     if custom_prompt.strip():
         prompt += f" User art direction: {custom_prompt.strip()}"
 
-    # 3. Call GPT-Image-2
+    # 3. Call Nano Banana
     print(f"  [Mockup] Running {MODEL_ID} for '{product_type}'...")
     print(f"  [Mockup] Prompt: {prompt[:200]}...")
     result_url = None
@@ -146,16 +146,14 @@ def _generate_single_mockup(
                 MODEL_ID,
                 input={
                     "prompt": prompt,
-                    "input_images": input_images,
+                    "image": input_images[0],
                     "aspect_ratio": "1:1",
-                    "output_format": "png",
-                    "quality": "high",
                 }
             )
             duration = time.time() - t0
-            # mockups uses MODEL_ID = openai/gpt-image-2 ($0.128/image).
-            credits_used = credit_requirement('mappings', 148)
-            cost_usd = 0.128
+            # mockups uses MODEL_ID = google/nano-banana ($0.039/image).
+            credits_used = credit_requirement('mappings', 45)
+            cost_usd = 0.039
             log_replicate_call(project_id, MODEL_ID, duration, credits_used, cost_usd)
 
             if isinstance(output, list) and len(output) > 0:
@@ -209,7 +207,7 @@ def generate_mockup():
     if not product_type: return jsonify({"error": "productType is required"}), 400
     if not pattern_filename and not pattern_url: return jsonify({"error": "patternFilename or patternUrl is required"}), 400
 
-    required_credits = credit_requirement('mappings', 148)
+    required_credits = credit_requirement('mappings', 45)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
@@ -257,7 +255,7 @@ def generate_mockups_batch():
     if not pattern_filename: return jsonify({"error": "patternFilename is required"}), 400
     if not products: return jsonify({"error": "products must be a non-empty list"}), 400
 
-    required_credits = credit_requirement('mappings', 148, len(products))
+    required_credits = credit_requirement('mappings', 45, len(products))
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
