@@ -521,8 +521,35 @@ def _split_sql_script(sql):
     return [stmt.strip() for stmt in re.split(r';\s*\n', cleaned) if stmt.strip()]
 
 
+# Serialize PostgreSQL DDL across Gunicorn workers (prevents ALTER TABLE deadlocks).
+PG_INIT_ADVISORY_LOCK = 82910421
+
+
+def _pg_column_exists(conn, table, column):
+    row = conn.execute(
+        """
+        SELECT 1 AS ok
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = ? AND column_name = ?
+        LIMIT 1
+        """,
+        (table, column),
+    ).fetchone()
+    return bool(row)
+
+
 def _pg_ensure_column(conn, table, column, definition):
-    conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}")
+    if _pg_column_exists(conn, table, column):
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _pg_advisory_lock(conn):
+    conn.execute("SELECT pg_advisory_lock(?)", (PG_INIT_ADVISORY_LOCK,))
+
+
+def _pg_advisory_unlock(conn):
+    conn.execute("SELECT pg_advisory_unlock(?)", (PG_INIT_ADVISORY_LOCK,))
 
 
 def _pg_run_migrations(conn):
@@ -550,14 +577,27 @@ def _pg_run_migrations(conn):
     )
 
 
+def _pg_init_schema_and_migrations(conn):
+    """Create tables and apply column migrations — must run under advisory lock."""
+    conn.executescript(_pg_schema_sql())
+    _pg_run_migrations(conn)
+
+
 def init_db():
     conn = db()
 
     if _USE_PG:
-        # PostgreSQL: create all tables, then migrate existing deployments
-        conn.executescript(_pg_schema_sql())
-        _pg_run_migrations(conn)
-        conn.commit()
+        # Only one Gunicorn worker may run DDL at a time (others wait, then skip fast).
+        _pg_advisory_lock(conn)
+        try:
+            _pg_init_schema_and_migrations(conn)
+            conn.commit()
+        finally:
+            try:
+                _pg_advisory_unlock(conn)
+                conn.commit()
+            except Exception:
+                conn.rollback()
     else:
         # SQLite: original schema + migration
         try:
