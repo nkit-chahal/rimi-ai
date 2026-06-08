@@ -204,7 +204,7 @@ MODEL_TO_CREDITS = {
     'black-forest-labs/flux-schnell':  4,
     'black-forest-labs/flux-fill-pro': 58,
     'black-forest-labs/flux-2-pro':    104,
-    'black-forest-labs/flux-2-flex':   156,
+
     'qwen/qwen-image-edit':            35,
     'qwen/qwen-image-layered':         69,
     'recraft-ai/recraft-vectorize':    12,

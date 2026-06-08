@@ -35,7 +35,7 @@ DEFAULT_CREDIT_PRICING = [
     ("extract_imagen_ultra", "Extract — Imagen 4 Ultra", "google/imagen-4-ultra", 69, "dynamic", 1),
     ("extract_imagen_fast", "Extract — Imagen 4 Fast", "google/imagen-4-fast", 23, "dynamic", 1),
     ("extract_flux_2_pro", "Extract — Flux 2 Pro", "black-forest-labs/flux-2-pro", 104, "dynamic", 1),
-    ("extract_flux_2_flex", "Extract — Flux 2 Flex", "black-forest-labs/flux-2-flex", 156, "dynamic", 1),
+
     ("extract_seedream", "Extract — Seedream 4.5", "bytedance/seedream-4.5", 46, "dynamic", 1),
     ("extract_nano_banana", "Extract — Nano Banana", "google/nano-banana", 45, "dynamic", 1),
     ("extract_nano_banana_2", "Extract — Nano Banana 2", "google/nano-banana-2", 78, "dynamic", 1),
