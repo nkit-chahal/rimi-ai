@@ -879,12 +879,7 @@ export default function ImageLayersTool(props) {
             if (!data.success) throw new Error(data.error || 'Layer export failed');
             updateCreditsFromResponse(data);
 
-            const link = document.createElement('a');
-            link.href = `${API}${data.resultUrl}`;
-            link.download = data.resultUrl.split('/').pop() || 'composed_layers.png';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            await forceDownload(null, `${API}${data.resultUrl}`, data.resultUrl.split('/').pop() || 'composed_layers.png');
         } catch (e) {
             console.error(e);
             setError(e.message || 'Layer export failed');

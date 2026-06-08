@@ -1587,7 +1587,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                                                     if (t.type === 'removebg') setRemoveBgUrl(t.resultUrl);
                                                                     setShowBgTasksDropdown(false);
                                                                 }} style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'rgba(99, 102, 241, 0.08)', color: '#6366f1', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>View</button>
-                                                                <a href={t.resultUrl.startsWith('http') ? t.resultUrl : `${API}${t.resultUrl}`} download onClick={(e) => forceDownload(e, t.resultUrl.startsWith('http') ? t.resultUrl : `${API}${t.resultUrl}`)} style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff', borderRadius: '6px', fontWeight: 700, textDecoration: 'none', textAlign: 'center' }}>Download</a>
+                                                                <button type="button" onClick={(e) => forceDownload(e, t.resultUrl.startsWith('http') ? t.resultUrl : `${API}${t.resultUrl}`)} style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff', borderRadius: '6px', fontWeight: 700, border: 'none', cursor: 'pointer' }}>Download</button>
                                                             </div>
                                                         </div>
                                                     )}

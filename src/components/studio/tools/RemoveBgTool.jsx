@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, apiFetch, forceDownload } from '../shared/helpers';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
@@ -15,6 +15,7 @@ export default function RemoveBgTool(props) {
         addBgTask,
         updateCreditsFromResponse,
         creditPricing,
+        currentToken,
         removeBgUrl,
         setRemoveBgUrl,
         rightPanelEl,
@@ -35,9 +36,37 @@ export default function RemoveBgTool(props) {
     const creditCost = creditPricing.removeBg || 2;
     const hasEnoughCredits = userRemainingCredits >= creditCost;
 
-    const removeBackground = async () => {
+    const serverFilename = uploaded?.filename;
+    const isUploading = Boolean(uploaded && !serverFilename);
+
+    const resolveImagePayload = () => {
+        if (serverFilename) {
+            return { filename: serverFilename, imageUrl: null };
+        }
+
         const activeUrl = preview || activeProject?.heroImageUrl;
-        if (!uploaded && !activeUrl) {
+        if (!activeUrl) return null;
+
+        if (activeUrl.startsWith('http')) {
+            return { filename: '', imageUrl: activeUrl };
+        }
+
+        if (activeUrl.startsWith('blob:')) {
+            return null;
+        }
+
+        const name = activeUrl.split('/').pop();
+        return name ? { filename: name, imageUrl: null } : null;
+    };
+
+    const removeBackground = async () => {
+        if (isUploading) {
+            setError('Image is still uploading — wait a moment and try again.');
+            return;
+        }
+
+        const payload = resolveImagePayload();
+        if (!payload) {
             setError('Upload an image first');
             return;
         }
@@ -46,30 +75,20 @@ export default function RemoveBgTool(props) {
             return;
         }
 
-        let safeFilename = uploaded?.filename;
-        let safeUrl = !uploaded ? activeUrl : null;
-
-        if (!safeFilename && safeUrl && !safeUrl.startsWith('http')) {
-            safeFilename = safeUrl.split('/').pop();
-            safeUrl = null;
-        }
-
         setIsProcessing(true);
         setError('');
         setRemoveBgUrl(null);
 
         const trigger = async () => {
-            const res = await fetch(`${API}/api/remove-bg`, {
+            const data = await apiFetch('/api/remove-bg', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    filename: safeFilename,
-                    imageUrl: safeUrl,
+                    ...payload,
                     projectId: activeProject.id,
                     userId: user?.id,
                 }),
-            });
-            const data = await res.json();
+            }, currentToken);
+
             if (data.success) {
                 const fullUrl = `${API}${data.resultUrl}`;
                 setRemoveBgUrl(fullUrl);
@@ -81,7 +100,7 @@ export default function RemoveBgTool(props) {
             throw new Error(data.error || 'Background removal failed');
         };
 
-        addBgTask('removebg', 'Remove Background', safeFilename || 'image.png', trigger);
+        addBgTask('removebg', 'Remove Background', payload.filename || 'image.png', trigger);
     };
 
     const renderControls = () => (
@@ -100,7 +119,7 @@ export default function RemoveBgTool(props) {
                 <button
                     className={`st-export-btn ${!hasEnoughCredits ? 'insufficient-credits' : ''}`}
                     onClick={removeBackground}
-                    disabled={isProcessing || (!uploaded && !preview && !activeProject?.heroImageUrl) || !hasEnoughCredits}
+                    disabled={isProcessing || isUploading || (!serverFilename && !preview && !activeProject?.heroImageUrl) || !hasEnoughCredits}
                     title={!hasEnoughCredits ? `Need ${creditCost} credits. You have ${userRemainingCredits} remaining.` : 'Remove background'}
                 >
                     {isProcessing ? 'Removing...' : hasEnoughCredits ? 'Remove Background' : `Need ${creditCost} credits`}
@@ -158,7 +177,7 @@ export default function RemoveBgTool(props) {
                         <button
                             className={`st-extract-btn-creative ${!hasEnoughCredits ? 'insufficient-credits' : ''}`}
                             onClick={removeBackground}
-                            disabled={isProcessing || !preview || !hasEnoughCredits}
+                            disabled={isProcessing || isUploading || !preview || !hasEnoughCredits}
                             title={!hasEnoughCredits ? `Need ${creditCost} credits. You have ${userRemainingCredits} remaining.` : 'Remove Background'}
                         >
                             <div className={isProcessing ? 'spin-icon' : ''}>

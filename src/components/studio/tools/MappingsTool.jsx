@@ -596,9 +596,9 @@ export default function MappingsTool(props) {
                                         <img src={`${API}${result.mockupUrl}`} alt={result.productType} />
                                         <div className="st-map-result-info">
                                             <span className="st-map-result-name">{result.productType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
-                                            <a className="st-map-result-dl" href={`${API}${result.mockupUrl}`} download onClick={(e) => forceDownload(e, `${API}${result.mockupUrl}`)}>
+                                            <button type="button" className="st-map-result-dl" onClick={(e) => forceDownload(e, `${API}${result.mockupUrl}`)}>
                                                 <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
-                                            </a>
+                                            </button>
                                         </div>
                                     </div>
                                 ))}

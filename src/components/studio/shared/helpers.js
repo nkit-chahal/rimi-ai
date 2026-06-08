@@ -75,18 +75,75 @@ export async function getCroppedImg(imageElement, crop, fileName) {
     });
 }
 
-/**
- * Force-download a file from a URL by using a temporary anchor tag.
- */
-export function forceDownload(e, url) {
-    if (e) e.preventDefault();
+function filenameFromUrl(url, fallback = 'download') {
+    try {
+        const path = url.startsWith('http') ? new URL(url).pathname : url;
+        const base = path.split('/').pop()?.split('?')[0];
+        return base || fallback;
+    } catch {
+        return url.split('/').pop()?.split('?')[0] || fallback;
+    }
+}
+
+function triggerBlobDownload(href, filename) {
     const a = document.createElement('a');
-    a.href = url;
-    a.download = url.split('/').pop() || 'download';
+    a.href = href;
+    a.download = filename;
+    a.rel = 'noopener';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+}
+
+/** Resolve a user-facing URL to the path/query the download proxy understands. */
+function toDownloadTarget(url) {
+    if (url.startsWith('blob:') || url.startsWith('data:')) return url;
+
+    const absolute = url.startsWith('http')
+        ? url
+        : `${API}${url.startsWith('/') ? url : `/${url}`}`;
+
+    try {
+        const parsed = new URL(absolute);
+        if (!url.startsWith('http') || (API && absolute.startsWith(API))) {
+            return parsed.pathname;
+        }
+        return absolute;
+    } catch {
+        return url;
+    }
+}
+
+/**
+ * Force-download a file. Cross-origin assets (Vercel UI + Railway API) cannot use
+ * <a download> directly — we fetch via /api/download and save as a blob instead.
+ */
+export async function forceDownload(e, url, filename) {
+    if (e?.preventDefault) e.preventDefault();
+    if (!url) return;
+
+    const name = filename || filenameFromUrl(url);
+
+    if (url.startsWith('blob:') || url.startsWith('data:')) {
+        triggerBlobDownload(url, name);
+        return;
+    }
+
+    const target = toDownloadTarget(url);
+    const proxyUrl = `${API}/api/download?url=${encodeURIComponent(target)}`;
+
+    try {
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error(`Download failed (${res.status})`);
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        triggerBlobDownload(objectUrl, name);
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+    } catch {
+        // Last resort: navigate to proxy URL (server sets Content-Disposition: attachment)
+        window.location.assign(proxyUrl);
+    }
 }
 
 /**
