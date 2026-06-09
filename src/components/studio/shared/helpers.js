@@ -173,7 +173,7 @@ export function updateCreditsFromJson(data, setUser) {
 export async function apiFetch(url, options = {}, token = null) {
     const fullUrl = url.startsWith('http') ? url : `${API}${url}`;
     const headers = { ...options.headers };
-    const authToken = normalizeToken(token);
+    const authToken = normalizeToken(token) || normalizeToken(options.token);
 
     if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;

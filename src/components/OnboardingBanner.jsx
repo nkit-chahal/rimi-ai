@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { API, apiFetch } from './studio/shared/helpers';
+import { apiFetch } from './studio/shared/helpers';
 
 export default function OnboardingBanner({ token, onProjectCreated }) {
   const [visible, setVisible] = useState(false);
@@ -7,7 +7,7 @@ export default function OnboardingBanner({ token, onProjectCreated }) {
 
   useEffect(() => {
     if (!token) return;
-    apiFetch(`${API}/api/onboarding/status`, { token })
+    apiFetch('/api/onboarding/status', {}, token)
       .then((data) => setVisible(Boolean(data.needsOnboarding)))
       .catch(() => setVisible(false));
   }, [token]);
@@ -17,10 +17,7 @@ export default function OnboardingBanner({ token, onProjectCreated }) {
   const createSample = async () => {
     setBusy(true);
     try {
-      const data = await apiFetch(`${API}/api/onboarding/sample-project`, {
-        method: 'POST',
-        token,
-      });
+      const data = await apiFetch('/api/onboarding/sample-project', { method: 'POST' }, token);
       setVisible(false);
       onProjectCreated?.(data.projectId);
     } finally {

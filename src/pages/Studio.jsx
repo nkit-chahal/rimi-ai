@@ -269,7 +269,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const [brandPalettesLoading, setBrandPalettesLoading] = useState(false);
 
     const fetchBrandPalettes = useCallback(() => {
-        if (!activeProject?.id) return;
+        if (!activeProject?.id || !currentToken || isLoadingState) return;
         setBrandPalettesLoading(true);
         apiFetch(`/api/brand-palettes?projectId=${activeProject.id}`, {}, currentToken)
             .then((d) => {
@@ -277,11 +277,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                 setBrandPalettesLoading(false);
             })
             .catch(() => setBrandPalettesLoading(false));
-    }, [activeProject?.id, currentToken]);
+    }, [activeProject?.id, currentToken, isLoadingState]);
 
     useEffect(() => {
-        if (activeProject?.id) fetchBrandPalettes();
-    }, [fetchBrandPalettes, activeProject?.id]);
+        if (activeProject?.id && !isLoadingState) fetchBrandPalettes();
+    }, [fetchBrandPalettes, activeProject?.id, isLoadingState]);
 
     // Admin state
     const [adminUsers, setAdminUsers] = useState([]);
