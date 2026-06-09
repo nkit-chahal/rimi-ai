@@ -5,21 +5,25 @@ from datetime import datetime, timezone
 
 from db import db, rows_to_dicts
 from auth import log_export
-from middleware import login_required
+from middleware import login_required, project_access_from_payload, assert_project_access
 
 bp = Blueprint('pipeline', __name__)
 
 
 # --------------- Pipeline Runs ---------------
 @bp.route('/api/pipeline-runs', methods=['POST'])
+@login_required
 def create_pipeline_run():
     """Create a new pipeline run record (status=running)."""
     data = request.get_json()
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn = db()
     cur = conn.execute(
         "INSERT INTO pipeline_runs (project_id, name, steps_json, settings_json, status, created_at) VALUES (?, ?, ?, ?, 'running', ?)",
-        (data.get('projectId', 1), data.get('name', 'Custom Pipeline'),
+        (project_id, data.get('name', 'Custom Pipeline'),
          json.dumps(data.get('steps', [])), json.dumps(data.get('settings', {})), now)
     )
     run_id = cur.lastrowid
@@ -29,6 +33,7 @@ def create_pipeline_run():
 
 
 @bp.route('/api/pipeline-runs/<int:run_id>', methods=['PATCH'])
+@login_required
 def update_pipeline_run(run_id):
     """Update a pipeline run's status and results."""
     data = request.get_json() or {}
@@ -36,6 +41,13 @@ def update_pipeline_run(run_id):
     
     # Fetch run details before updating
     run = conn.execute("SELECT * FROM pipeline_runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Pipeline run not found'}), 404
+    denied = assert_project_access(run['project_id'])
+    if denied:
+        conn.close()
+        return denied
     
     sets = []
     vals = []
@@ -170,6 +182,7 @@ def list_pipeline_runs():
 
 # --------------- Saved Workflows ---------------
 @bp.route('/api/workflows', methods=['POST'])
+@login_required
 def save_workflow():
     """Save a workflow configuration."""
     data = request.get_json()
@@ -187,6 +200,7 @@ def save_workflow():
 
 
 @bp.route('/api/workflows')
+@login_required
 def list_workflows():
     """List all saved workflows."""
     conn = db()
@@ -205,6 +219,7 @@ def list_workflows():
 
 
 @bp.route('/api/workflows/<int:wf_id>', methods=['DELETE'])
+@login_required
 def delete_workflow(wf_id):
     """Delete a saved workflow."""
     conn = db()

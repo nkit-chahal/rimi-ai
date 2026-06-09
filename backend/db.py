@@ -516,6 +516,47 @@ def _pg_schema_sql():
         CREATE INDEX IF NOT EXISTS idx_sg_ip ON signup_guards (ip_address);
         CREATE INDEX IF NOT EXISTS idx_sg_fp ON signup_guards (device_fingerprint);
         CREATE INDEX IF NOT EXISTS idx_sg_email ON signup_guards (normalized_email);
+        CREATE TABLE IF NOT EXISTS background_jobs (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            project_id INTEGER,
+            job_type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'queued',
+            payload_json TEXT,
+            result_json TEXT,
+            error TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS share_links (
+            id SERIAL PRIMARY KEY,
+            token TEXT NOT NULL UNIQUE,
+            user_id INTEGER NOT NULL,
+            project_id INTEGER NOT NULL,
+            export_filename TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            key_prefix TEXT NOT NULL,
+            key_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            last_used_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS team_members (
+            id SERIAL PRIMARY KEY,
+            owner_user_id INTEGER NOT NULL,
+            email TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'member',
+            status TEXT NOT NULL DEFAULT 'invited',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_exports_user_project ON exports (user_id, project_id);
+        CREATE INDEX IF NOT EXISTS idx_exports_created ON exports (created_at);
+        CREATE INDEX IF NOT EXISTS idx_replicate_logs_project ON replicate_logs (project_id, created_at);
     """
 
 
@@ -843,6 +884,47 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_sg_ip ON signup_guards (ip_address);
             CREATE INDEX IF NOT EXISTS idx_sg_fp ON signup_guards (device_fingerprint);
             CREATE INDEX IF NOT EXISTS idx_sg_email ON signup_guards (normalized_email);
+            CREATE TABLE IF NOT EXISTS background_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                project_id INTEGER,
+                job_type TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'queued',
+                payload_json TEXT,
+                result_json TEXT,
+                error TEXT,
+                created_at TEXT NOT NULL,
+                completed_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS share_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT NOT NULL UNIQUE,
+                user_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
+                export_filename TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                key_prefix TEXT NOT NULL,
+                key_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_used_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS team_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_user_id INTEGER NOT NULL,
+                email TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                status TEXT NOT NULL DEFAULT 'invited',
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_exports_user_project ON exports (user_id, project_id);
+            CREATE INDEX IF NOT EXISTS idx_exports_created ON exports (created_at);
+            CREATE INDEX IF NOT EXISTS idx_replicate_logs_project ON replicate_logs (project_id, created_at);
         """)
 
         def ensure_column(table, column, definition):
@@ -914,36 +996,6 @@ def init_db():
                 conn.commit()
         except Exception as e:
             print(f"Error during auto-migration: {e}")
-
-    # Seed default accounts (only if users table is empty)
-    user_count_row = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()
-    user_count = user_count_row["c"] if isinstance(user_count_row, dict) else user_count_row[0]
-    if user_count == 0:
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        reset_at = (now + timedelta(days=30)).isoformat()
-        admin_pw = bcrypt.hashpw(b'Admin@123', bcrypt.gensalt()).decode('utf-8')
-        user_pw = bcrypt.hashpw(b'User@123', bcrypt.gensalt()).decode('utf-8')
-
-        if _USE_PG:
-            conn.execute(
-                "INSERT INTO users (email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                ('admin@rimiai.pro', admin_pw, 'Admin', 'AD', 'admin', 'Enterprise', 0, 1000000, reset_at)
-            )
-            conn.execute(
-                "INSERT INTO users (email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
-                ('user@rimiai.pro', user_pw, 'User', 'US', 'user', 'Business Pro', 0, 50000, reset_at)
-            )
-        else:
-            conn.execute(
-                "INSERT OR IGNORE INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (1, 'admin@rimiai.pro', ?, 'Admin', 'AD', 'admin', 'Enterprise', 0, 1000000, ?)",
-                (admin_pw, reset_at)
-            )
-            conn.execute(
-                "INSERT OR IGNORE INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at) VALUES (2, 'user@rimiai.pro', ?, 'User', 'US', 'user', 'Business Pro', 0, 50000, ?)",
-                (user_pw, reset_at)
-            )
-        conn.commit()
-        print("Seeded database with admin and user accounts.")
 
     seed_credit_pricing(conn)
     conn.commit()

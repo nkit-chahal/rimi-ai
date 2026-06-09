@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --primary: #8B5CF6;
+  --primary-hover: #7C3AED;
+  --primary-light: rgba(139, 92, 246, 0.08);
+  --primary-glow: rgba(139, 92, 246, 0.22);
+  --accent: #8B5CF6;
+  --accent-warm: #F43F5E;
+  --accent-cool: #10B981;
+  --bg: #F8FAFC;
+  --bg2: #F1F5F9;
+  --card: #FFFFFF;
+  --text: #0F172A;
+  --text2: #334155;
+  --muted: #64748B;
+  --border: rgba(0, 0, 0, 0.06);
+  --radius: 12px;
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.03);
+  --font: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  --text-primary: var(--text);
+  --text-secondary: var(--text2);
+  --text-muted: var(--muted);
+  --card-bg: var(--card);
+  --bg-tertiary: var(--bg2);
+  --bg-secondary: var(--bg);
+  --gradient-primary: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+  --gradient-hover: linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%);
+  --gradient-glow: 0 0 25px rgba(139, 92, 246, 0.35);
+  --gradient-dark: linear-gradient(180deg, #0B0F19 0%, #111827 100%);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --bg-glass: rgba(255, 255, 255, 0.7);
+  --transition-lux: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.onboarding-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 1rem 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(99, 102, 241, 0.08));
+  border: 1px solid rgba(139, 92, 246, 0.18);
+}
+
+.onboarding-banner p {
+  margin: 0.25rem 0 0;
+  color: var(--text2);
+  font-size: 0.92rem;
+}

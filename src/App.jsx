@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './index.css';
 import Studio from './pages/Studio';
 import Login from './pages/Login';
@@ -63,6 +64,7 @@ function App() {
     localStorage.setItem('rim_user', JSON.stringify(user));
     setIsBootEntry(true);
     setView('studio');
+    window.location.hash = '#/studio';
   }, []);
 
   const handleBootComplete = useCallback(() => {
@@ -74,7 +76,7 @@ function App() {
     setCurrentToken(null);
     localStorage.removeItem('rim_user');
     localStorage.removeItem('rim_token');
-    window.location.hash = '';
+    window.location.hash = '#/login';
     setView('login');
   };
 
@@ -85,22 +87,33 @@ function App() {
     return () => window.removeEventListener('rim:session-expired', onSessionExpired);
   }, []);
 
-  if (view === 'studio') {
-    if (!currentUser) {
-      return <Login onLogin={handleLogin} />;
-    }
-    return (
-      <Studio
-        currentUser={currentUser}
-        currentToken={currentToken}
-        onLogout={handleLogout}
-        isBootEntry={isBootEntry}
-        onBootComplete={handleBootComplete}
-      />
-    );
-  }
-
-  return <Login onLogin={handleLogin} />;
+  return (
+    <HashRouter>
+      <Routes>
+        <Route
+          path="/studio/*"
+          element={
+            currentUser ? (
+              <Studio
+                currentUser={currentUser}
+                currentToken={currentToken}
+                onLogout={handleLogout}
+                isBootEntry={isBootEntry}
+                onBootComplete={handleBootComplete}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/login"
+          element={currentUser ? <Navigate to="/studio" replace /> : <Login onLogin={handleLogin} />}
+        />
+        <Route path="*" element={<Navigate to={currentUser ? '/studio' : '/login'} replace />} />
+      </Routes>
+    </HashRouter>
+  );
 }
 
 export default App;

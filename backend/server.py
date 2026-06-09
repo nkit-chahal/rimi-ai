@@ -10,9 +10,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from db import init_db
+from logging_config import configure_logging
 from routes import register_all_blueprints
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
 
 def create_app():
@@ -59,7 +58,7 @@ def create_app():
         get_remote_address,
         app=app,
         default_limits=["200 per minute"],
-        storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://"),
+        storage_uri=os.getenv("RATELIMIT_STORAGE_URI") or os.getenv("REDIS_URL") or "memory://",
     )
     # Store limiter on app so route modules can use it
     app.limiter = limiter
@@ -69,6 +68,18 @@ def create_app():
 
     # Register all route blueprints
     register_all_blueprints(app)
+
+    configure_logging(app)
+
+    sentry_dsn = os.getenv("SENTRY_DSN", "")
+    if sentry_dsn:
+        try:
+            import sentry_sdk
+            from sentry_sdk.integrations.flask import FlaskIntegration
+
+            sentry_sdk.init(dsn=sentry_dsn, integrations=[FlaskIntegration()], traces_sample_rate=0.1)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Sentry init failed: %s", exc)
 
     return app
 

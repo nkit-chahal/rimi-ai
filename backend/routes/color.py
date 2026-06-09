@@ -3,7 +3,8 @@ import os
 import uuid
 import json
 import time
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
+from middleware import login_required, project_access_from_payload
 from datetime import datetime, timezone
 
 from config import UPLOAD_DIR, RESULTS_DIR
@@ -21,12 +22,8 @@ import storage
 bp = Blueprint('color', __name__)
 
 
-def require_credits(user_id, tool_key='colorReduction', default=3):
-    if user_id:
-        try:
-            user_id = int(user_id)
-        except ValueError:
-            user_id = None
+def require_credits(user_id=None, tool_key='colorReduction', default=3):
+    user_id = user_id or g.current_user['id']
     required_credits = credit_requirement(tool_key, default)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
@@ -35,6 +32,7 @@ def require_credits(user_id, tool_key='colorReduction', default=3):
 
 
 @bp.route('/api/extract-palette', methods=['POST'])
+@login_required
 def extract_palette_api():
     data = request.get_json(silent=True) or {}
     filename = data.get('filename', '')
@@ -60,16 +58,18 @@ def extract_palette_api():
 
 
 @bp.route('/api/recolor', methods=['POST'])
+@login_required
 def recolor_api():
     data = request.get_json()
     filename = data.get('filename', '')
     color_mapping = data.get('colorMapping', [])
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, required_credits, error_response, status_code = require_credits(user_id, 'recolor', 3)
+    user_id, required_credits, error_response, status_code = require_credits(None, 'recolor', 3)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -104,15 +104,17 @@ def recolor_api():
 
 
 @bp.route('/api/tech-pack', methods=['POST'])
+@login_required
 def generate_tech_pack_api():
     data = request.get_json()
     filename = data.get('filename', '')
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, required_credits, error_response, status_code = require_credits(user_id, 'techPack', 2)
+    user_id, required_credits, error_response, status_code = require_credits(None, 'techPack', 2)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(RESULTS_DIR, filename)
@@ -155,6 +157,7 @@ def generate_tech_pack_api():
 
 
 @bp.route('/api/pantone-match', methods=['POST'])
+@login_required
 def pantone_match_api():
     data = request.get_json()
     hex_color = data.get('hex', '').strip()
@@ -172,17 +175,19 @@ def pantone_match_api():
 
 
 @bp.route('/api/color-reduce', methods=['POST'])
+@login_required
 def color_reduce_api():
     data = request.get_json()
     filename = data.get('filename', '')
     n_colors = max(2, min(int(data.get('numColors', 6)), 16))
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
     brand_palette_id = data.get('brandPaletteId')
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, required_credits, error_response, status_code = require_credits(user_id, 'colorReduction', 3)
+    user_id, required_credits, error_response, status_code = require_credits(None, 'colorReduction', 3)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -226,19 +231,21 @@ def color_reduce_api():
 
 
 @bp.route('/api/layer-export', methods=['POST'])
+@login_required
 def layer_export_api():
     data = request.get_json()
     filename = data.get('filename', '')
     n_colors = max(2, min(int(data.get('numColors', 6)), 16))
     export_format = data.get('format', 'zip').lower()
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
     if export_format not in ('zip', 'tiff'):
         return jsonify({'error': 'Format must be zip or tiff'}), 400
-    user_id, required_credits, error_response, status_code = require_credits(user_id, 'layerExport', 2)
+    user_id, required_credits, error_response, status_code = require_credits(None, 'layerExport', 2)
     if error_response:
         return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)

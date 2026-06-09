@@ -85,6 +85,7 @@ def format_file_size(size_bytes):
 
 # --------------- Download Proxy ---------------
 @bp.route('/api/download')
+@login_required
 def download():
     url = request.args.get('url', '')
     if not url:

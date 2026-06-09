@@ -3,7 +3,8 @@ import os
 import uuid
 import base64
 import replicate
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
+from middleware import login_required, project_access_from_payload
 
 from config import UPLOAD_DIR, RESULTS_DIR
 from auth import (
@@ -18,6 +19,7 @@ bp = Blueprint('vectorize', __name__)
 
 # --------------- Vectorize (vtracer Local / Recraft API) ---------------
 @bp.route('/api/vectorize', methods=['POST'])
+@login_required
 def vectorize_image():
     """
     Vectorizes a raster image to SVG.
@@ -36,18 +38,12 @@ def vectorize_image():
     image_url = data.get('imageUrl', '')
     engine = data.get('engine', 'local')
     num_colors = int(data.get('numColors', 32))
-    project_id = int(data.get('projectId', 1))
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
     pricing_key = 'vectorize' if engine == 'api' else 'vectorizeLocal'
     required_credits = get_credit_price(pricing_key, 25 if engine == 'api' else 5)
-
-    # Extract user_id early for credit check
-    user_id_raw = data.get('userId') or data.get('user_id')
-    user_id_early = None
-    if user_id_raw:
-        try:
-            user_id_early = int(user_id_raw)
-        except ValueError:
-            pass
+    user_id_early = g.current_user['id']
     ok, remaining, limit, used = check_credits(user_id_early, required_credits)
     if not ok:
         return jsonify({
@@ -169,12 +165,7 @@ def vectorize_image():
             storage.sync_to_s3(result_path)
             print(f"  [Vectorize] vtracer done! Saved: {result_name} ({os.path.getsize(result_path) // 1024}KB)")
 
-        user_id = data.get('userId') or data.get('user_id')
-        if user_id:
-            try:
-                user_id = int(user_id)
-            except ValueError:
-                user_id = None
+        user_id = g.current_user['id']
 
         try:
             record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
@@ -210,20 +201,17 @@ def vectorize_image():
 
 # --------------- Upscale (Super Resolution) ---------------
 @bp.route('/api/upscale', methods=['POST'])
+@login_required
 def upscale():
     data = request.get_json()
     filename = data.get('filename', '')
     filename = os.path.basename(filename) if filename else ''
     upscale_factor = data.get('upscaleFactor', 'x4')
 
-    # Extract user_id early for credit check
-    user_id_raw = data.get('userId') or data.get('user_id')
-    user_id_early = None
-    if user_id_raw:
-        try:
-            user_id_early = int(user_id_raw)
-        except ValueError:
-            pass
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id_early = g.current_user['id']
     required_credits = credit_requirement('upscale', 23)
     ok, remaining, limit, used = check_credits(user_id_early, required_credits)
     if not ok:
@@ -261,13 +249,7 @@ def upscale():
         credits_used = required_credits
         cost_usd = 0.02
 
-        project_id = int(data.get('projectId', 1))
-        user_id = data.get('userId') or data.get('user_id')
-        if user_id:
-            try:
-                user_id = int(user_id)
-            except ValueError:
-                user_id = None
+        user_id = g.current_user['id']
 
         log_replicate_call(project_id, "google/upscaler", duration, credits_used, cost_usd)
 

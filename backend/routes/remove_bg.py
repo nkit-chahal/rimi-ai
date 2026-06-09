@@ -6,7 +6,8 @@ import uuid
 
 import replicate
 import requests as http_requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
+from middleware import login_required, project_access_from_payload
 
 from auth import (
     check_credits,
@@ -64,19 +65,15 @@ def _image_to_data_uri(filepath, filename):
 
 
 @bp.route('/api/remove-bg', methods=['POST'])
+@login_required
 def remove_background():
     data = request.get_json() or {}
     filename = data.get('filename', '')
     image_url = data.get('imageUrl', '')
-    project_id = int(data.get('projectId', 1))
-
-    user_id_raw = data.get('userId') or data.get('user_id')
-    user_id = None
-    if user_id_raw:
-        try:
-            user_id = int(user_id_raw)
-        except (TypeError, ValueError):
-            user_id = None
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
 
     required_credits = credit_requirement('removeBg', 2)
     ok, remaining, limit, used = check_credits(user_id, required_credits)

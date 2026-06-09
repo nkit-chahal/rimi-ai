@@ -6,6 +6,43 @@ import jwt
 from db import db
 from jwt_tokens import decode_access_token
 
+
+def current_user_id():
+    """Return the authenticated user's id from flask.g."""
+    user = getattr(g, 'current_user', None)
+    return user['id'] if user else None
+
+
+def assert_project_access(project_id):
+    """Verify the current user owns the project (admins bypass). Returns (response, status) or None."""
+    user = g.current_user
+    if user.get('role') == 'admin':
+        return None
+    try:
+        project_id = int(project_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Invalid project ID'}), 400
+    conn = db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM projects WHERE id = ? AND user_id = ?",
+            (project_id, user['id']),
+        ).fetchone()
+        if not row:
+            return jsonify({'success': False, 'error': 'Project not found'}), 404
+        return None
+    finally:
+        conn.close()
+
+
+def project_access_from_payload(data, default_project_id=1):
+    """Parse projectId from request JSON and verify ownership."""
+    project_id = int((data or {}).get('projectId', default_project_id))
+    denied = assert_project_access(project_id)
+    if denied:
+        return project_id, denied
+    return project_id, None
+
 logger = logging.getLogger(__name__)
 
 

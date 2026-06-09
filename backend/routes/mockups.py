@@ -10,7 +10,8 @@ import replicate
 import requests as http_requests
 from io import BytesIO
 from scipy import ndimage
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
+from middleware import login_required, project_access_from_payload
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client
 from auth import (
@@ -233,6 +234,7 @@ def _generate_single_mockup(
 
 
 @bp.route('/api/generate-mockup', methods=['POST'])
+@login_required
 def generate_mockup():
     data = request.get_json()
     pattern_filename = data.get("patternFilename", "")
@@ -244,8 +246,10 @@ def generate_mockup():
     background = data.get("background", "studio")
     shot_style = data.get("shotStyle", "editorial")
     fabric_texture = data.get("fabricTexture", "cotton")
-    project_id = int(data.get("projectId", 1))
-    user_id = _parse_user_id(data)
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
     
     product_reference_data_uri = data.get("productReferenceDataUri")
     mask_data_uri = data.get("maskDataUri")
@@ -282,6 +286,7 @@ def generate_mockup():
 
 
 @bp.route('/api/generate-mockups-batch', methods=['POST'])
+@login_required
 def generate_mockups_batch():
     data = request.get_json()
     pattern_filename = data.get("patternFilename", "")
@@ -292,8 +297,10 @@ def generate_mockups_batch():
     background = data.get("background", "studio")
     shot_style = data.get("shotStyle", "editorial")
     fabric_texture = data.get("fabricTexture", "cotton")
-    project_id = int(data.get("projectId", 1))
-    user_id = _parse_user_id(data)
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
 
     product_reference_data_uri = data.get("productReferenceDataUri")
     mask_data_uri = data.get("maskDataUri")

@@ -1,24 +1,29 @@
 """AI generation routes: describe image, extract design, generate inspirations."""
+import json
 import os
 import uuid
 import base64
 import time
 import concurrent.futures
 import requests as http_requests
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client, safe_filename
+from middleware import login_required, project_access_from_payload
 from auth import (
     check_credits, credit_error_payload, credit_requirement,
     record_activity, get_updated_credits, log_export, log_replicate_call,
 )
 import replicate
 import storage
+from jobs import enqueue_or_run
+from workers import run_generation_job
 
 bp = Blueprint('generation', __name__)
 
 
 @bp.route('/api/describe-image', methods=['POST'])
+@login_required
 def describe_image():
     data = request.get_json()
     filename = data.get('filename', '')
@@ -67,6 +72,7 @@ def describe_image():
 
 
 @bp.route('/api/extract-design', methods=['POST'])
+@login_required
 def extract_design():
     data = request.get_json(silent=True) or request.form
     filename = data.get('filename', '')
@@ -88,11 +94,10 @@ def extract_design():
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
-    if user_id:
-        try: user_id = int(user_id)
-        except ValueError: user_id = None
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
     model_id = data.get('modelId', 'google/nano-banana')
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
     required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 78))
@@ -324,6 +329,7 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
 
 
 @bp.route('/api/extract-design-multi', methods=['POST'])
+@login_required
 def extract_design_multi():
     data = request.get_json()
     filename = data.get('filename', '')
@@ -334,11 +340,10 @@ def extract_design_multi():
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
 
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
-    if user_id:
-        try: user_id = int(user_id)
-        except ValueError: user_id = None
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
 
     required_credits = sum(int(m.get('credits') or credit_requirement('extract', 148)) for m in EXTRACT_MODELS)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
@@ -389,9 +394,25 @@ def extract_design_multi():
 
 
 @bp.route('/api/extract-design-single', methods=['POST'])
+@login_required
 def extract_design_single():
     """Run extraction with a single specified model."""
-    data = request.get_json()
+    data = request.get_json() or {}
+    if data.get("async"):
+        project_id, access_error = project_access_from_payload(data)
+        if access_error:
+            return access_error
+        user_id = g.current_user['id']
+        job = enqueue_or_run(
+            "extract-design-single",
+            user_id,
+            project_id,
+            data,
+            run_generation_job,
+            json.dumps({"toolKey": "extract", "filename": data.get("filename"), "modelId": data.get("modelId")}),
+        )
+        return jsonify({"success": True, **job})
+
     filename = data.get('filename', '')
     filename = os.path.basename(filename) if filename else ''
     model_id = data.get('modelId', '')
@@ -405,11 +426,10 @@ def extract_design_single():
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
 
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
-    if user_id:
-        try: user_id = int(user_id)
-        except ValueError: user_id = None
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
 
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), None)
     if not model_cfg:
@@ -449,23 +469,22 @@ def extract_design_single():
 
 
 @bp.route('/api/extract-edit', methods=['POST'])
+@login_required
 def extract_edit():
     """Edit an extracted pattern result using the same model that generated it."""
     data = request.get_json()
     image_url = data.get('imageUrl', '')
     prompt = data.get('prompt', '')
     model_id = data.get('modelId', 'google/nano-banana')
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
 
     if not prompt:
         return jsonify({'error': 'Prompt is required'}), 400
     if not image_url:
         return jsonify({'error': 'Image URL is required'}), 400
-
-    if user_id:
-        try: user_id = int(user_id)
-        except ValueError: user_id = None
 
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
     required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 78))
@@ -529,6 +548,7 @@ def extract_edit():
 
 
 @bp.route('/api/generate-inspirations', methods=['POST'])
+@login_required
 def generate_inspirations():
     data = request.get_json()
     user_prompt = data.get('prompt', '')
@@ -595,11 +615,10 @@ def generate_inspirations():
     results = []
     errors = []
     total_credits = 0
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
-    if user_id:
-        try: user_id = int(user_id)
-        except ValueError: user_id = None
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
     requested_models = data.get('models') or ['google/nano-banana']
     requested_model_count = 1 if use_seamless else max(1, len(requested_models))
     # Up-front credit check uses the most expensive selected model so the user
