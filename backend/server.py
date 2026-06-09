@@ -13,6 +13,23 @@ from db import init_db
 from logging_config import configure_logging
 from routes import register_all_blueprints
 
+logger = logging.getLogger(__name__)
+
+
+def _rate_limit_storage_uri():
+    """Use Redis when configured and the redis package is installed; otherwise memory."""
+    uri = os.getenv("RATELIMIT_STORAGE_URI") or os.getenv("REDIS_URL") or "memory://"
+    if uri.startswith(("redis://", "rediss://")):
+        try:
+            import redis  # noqa: F401
+        except ImportError:
+            logger.warning(
+                "REDIS_URL is set but the redis package is not installed; "
+                "falling back to in-memory rate limiting"
+            )
+            return "memory://"
+    return uri
+
 
 def create_app():
     app = Flask(__name__)
@@ -58,7 +75,7 @@ def create_app():
         get_remote_address,
         app=app,
         default_limits=["200 per minute"],
-        storage_uri=os.getenv("RATELIMIT_STORAGE_URI") or os.getenv("REDIS_URL") or "memory://",
+        storage_uri=_rate_limit_storage_uri(),
     )
     # Store limiter on app so route modules can use it
     app.limiter = limiter
