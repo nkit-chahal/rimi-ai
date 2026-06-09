@@ -2,7 +2,8 @@
 import os
 import uuid
 import json
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
+from middleware import login_required, assert_project_access, project_access_from_payload
 from datetime import datetime, timezone
 
 from config import UPLOAD_DIR, RESULTS_DIR
@@ -19,10 +20,14 @@ bp = Blueprint('colorways', __name__)
 
 # --------------- Brand Palettes CRUD ---------------
 @bp.route('/api/brand-palettes', methods=['GET'])
+@login_required
 def get_brand_palettes():
     project_id = request.args.get('projectId', type=int) or request.args.get('project_id', type=int)
     if not project_id:
         return jsonify({'error': 'projectId is required'}), 400
+    denied = assert_project_access(project_id)
+    if denied:
+        return denied
     conn = db()
     try:
         rows = conn.execute("SELECT * FROM brand_palettes WHERE project_id = ? ORDER BY created_at DESC", (project_id,)).fetchall()
@@ -35,9 +40,13 @@ def get_brand_palettes():
 
 
 @bp.route('/api/brand-palettes', methods=['POST'])
+@login_required
 def create_brand_palette():
     data = request.get_json() or {}
     project_id = data.get('projectId')
+    denied = assert_project_access(project_id)
+    if denied:
+        return denied
     name = data.get('name')
     colors = data.get('colors')
     if not project_id or not name or not colors:
@@ -58,9 +67,16 @@ def create_brand_palette():
 
 
 @bp.route('/api/brand-palettes/<int:palette_id>', methods=['DELETE'])
+@login_required
 def delete_brand_palette(palette_id):
     conn = db()
     try:
+        row = conn.execute("SELECT project_id FROM brand_palettes WHERE id = ?", (palette_id,)).fetchone()
+        if not row:
+            return jsonify({'error': 'Palette not found'}), 404
+        denied = assert_project_access(row['project_id'])
+        if denied:
+            return denied
         conn.execute("DELETE FROM brand_palettes WHERE id = ?", (palette_id,))
         conn.commit()
         return jsonify({'success': True})
@@ -72,6 +88,7 @@ def delete_brand_palette(palette_id):
 
 # --------------- Colorway Manager ---------------
 @bp.route('/api/colorways/generate', methods=['POST'])
+@login_required
 def generate_colorways():
     """
     Generate production colorways using color theory strategies.
@@ -84,13 +101,10 @@ def generate_colorways():
     locked_indices = set(data.get('lockedIndices', []))
     strategy = data.get('strategy', 'complementary')
     count = int(data.get('count', 4))
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
-    if user_id:
-        try:
-            user_id = int(user_id)
-        except ValueError:
-            user_id = None
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
 
     if not filename or not palette:
         return jsonify({'error': 'Filename and palette are required'}), 400
@@ -183,6 +197,7 @@ def generate_colorways():
 
 
 @bp.route('/api/colorways/export-linecard', methods=['POST'])
+@login_required
 def export_linecard():
     """
     Export a colorway line card as PDF.
@@ -198,7 +213,9 @@ def export_linecard():
     filename = os.path.basename(filename) if filename else ''
     colorways_data = data.get('colorways', [])
     base_palette = data.get('basePalette', [])
-    project_id = int(data.get('projectId', 1))
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
 
     if not colorways_data:
         return jsonify({'error': 'No colorways to export'}), 400

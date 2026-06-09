@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API } from '../shared/helpers';
+import { API, apiFetch } from '../shared/helpers';
 
-export default function PrintAdvisorTool({ uploaded, preview, activeProject, user, controls, setError }) {
+export default function PrintAdvisorTool({ uploaded, preview, activeProject, user, controls, setError, currentToken }) {
     // ===== LOCAL STATE =====
     const [printAdvisorResult, setPrintAdvisorResult] = useState(null);
     const [isPrintAdvisorLoading, setIsPrintAdvisorLoading] = useState(false);
@@ -16,18 +16,16 @@ export default function PrintAdvisorTool({ uploaded, preview, activeProject, use
         setPrintAdvisorResult(null);
         setError('');
         try {
-            const res = await fetch(`${API}/api/print-advisor`, {
+            const d = await apiFetch(`${API}/api/print-advisor`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                token: currentToken,
                 body: JSON.stringify({
                     filename: uploaded.filename,
                     fabricType: printAdvisorFabric,
                     productionVolume: printAdvisorVolume,
                     projectId: activeProject.id,
-                    userId: user.id,
                 }),
             });
-            const d = await res.json();
             if (d.success) {
                 setPrintAdvisorResult(d.analysis);
             } else {

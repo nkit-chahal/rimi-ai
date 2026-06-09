@@ -10,9 +10,53 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from db import init_db
+from logging_config import configure_logging
 from routes import register_all_blueprints
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+logger = logging.getLogger(__name__)
+
+
+def _rate_limit_storage_uri():
+    """Pick a rate-limit backend; never return Redis unless the client library works."""
+    uri = os.getenv("RATELIMIT_STORAGE_URI") or os.getenv("REDIS_URL") or "memory://"
+    if not uri.startswith(("redis://", "rediss://")):
+        return uri
+    try:
+        import redis  # noqa: F401
+        from limits.storage import storage_from_string
+
+        storage_from_string(uri)
+        return uri
+    except Exception as exc:
+        logger.warning(
+            "Redis rate-limit storage unavailable (%s); using in-memory rate limiting",
+            exc,
+        )
+        return "memory://"
+
+
+def _init_rate_limiter(app):
+    """Create Flask-Limiter; always fall back to memory if Redis storage cannot init."""
+    storage_uri = _rate_limit_storage_uri()
+    try:
+        return Limiter(
+            get_remote_address,
+            app=app,
+            default_limits=["200 per minute"],
+            storage_uri=storage_uri,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Rate limiter init failed for %s (%s); using memory://",
+            storage_uri,
+            exc,
+        )
+        return Limiter(
+            get_remote_address,
+            app=app,
+            default_limits=["200 per minute"],
+            storage_uri="memory://",
+        )
 
 
 def create_app():
@@ -54,21 +98,26 @@ def create_app():
     # Security: enforce max upload size (25 MB)
     app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
-    # Rate limiting
-    limiter = Limiter(
-        get_remote_address,
-        app=app,
-        default_limits=["200 per minute"],
-        storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://"),
-    )
-    # Store limiter on app so route modules can use it
-    app.limiter = limiter
+    # Rate limiting (Redis when available; memory fallback so deploy never crashes)
+    app.limiter = _init_rate_limiter(app)
 
     # Initialize the database (create tables, seed data)
     init_db()
 
     # Register all route blueprints
     register_all_blueprints(app)
+
+    configure_logging(app)
+
+    sentry_dsn = os.getenv("SENTRY_DSN", "")
+    if sentry_dsn:
+        try:
+            import sentry_sdk
+            from sentry_sdk.integrations.flask import FlaskIntegration
+
+            sentry_sdk.init(dsn=sentry_dsn, integrations=[FlaskIntegration()], traces_sample_rate=0.1)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Sentry init failed: %s", exc)
 
     return app
 

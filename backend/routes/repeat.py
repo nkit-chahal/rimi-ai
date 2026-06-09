@@ -4,7 +4,8 @@ import os
 import uuid
 import requests as http_requests
 from io import BytesIO
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
+from middleware import login_required, project_access_from_payload
 from PIL import Image, ImageOps
 
 from config import UPLOAD_DIR, RESULTS_DIR
@@ -68,6 +69,7 @@ def _paste_repeat(tile, tiled, repeat_type, col, row, tile_px_w, tile_px_h):
 
 
 @bp.route('/api/create-repeat-set', methods=['POST'])
+@login_required
 def create_repeat_set():
     data = request.get_json() or {}
     filename = os.path.basename(data.get('filename', '') or '')
@@ -80,13 +82,10 @@ def create_repeat_set():
     rotation = int(data.get('rotation', 0))
     dpi = int(data.get('dpi', 300))
     out_format = (data.get('format') or 'PNG').upper()
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
-    if user_id:
-        try:
-            user_id = int(user_id)
-        except (TypeError, ValueError):
-            user_id = None
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
 
     grid_size = data.get('gridSize')
     if grid_size is None:

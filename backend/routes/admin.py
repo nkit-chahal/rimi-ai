@@ -40,7 +40,7 @@ def _is_unique_violation(exc):
 
 
 def _otp_hash(email, otp):
-    secret = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
+    from jwt_tokens import JWT_SECRET as secret
     return hashlib.sha256(f"{email.lower()}:{otp}:{secret}".encode("utf-8")).hexdigest()
 
 

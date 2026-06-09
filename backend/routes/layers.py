@@ -3,7 +3,8 @@ import os
 import uuid
 import base64
 import replicate
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
+from middleware import login_required, project_access_from_payload
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client
 from auth import (
@@ -20,6 +21,7 @@ bp = Blueprint('layers', __name__)
 
 # --------------- Image Layers (Qwen Image Layered) ---------------
 @bp.route('/api/image-layers', methods=['POST'])
+@login_required
 def image_layers():
     """
     Decompose an image into separate RGBA layers using Qwen Image Layered.
@@ -32,19 +34,13 @@ def image_layers():
     num_layers = int(data.get('numLayers', 4))
     description = data.get('description', 'auto')
     output_format = data.get('outputFormat', 'png')
-    project_id = int(data.get('projectId', 1))
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
 
     # Clamp num_layers to Qwen's demo range.
     num_layers = max(2, min(10, num_layers))
-
-    # Extract user_id early for credit check
-    user_id_raw = data.get('userId') or data.get('user_id')
-    user_id = None
-    if user_id_raw:
-        try:
-            user_id = int(user_id_raw)
-        except ValueError:
-            pass
+    user_id = g.current_user['id']
     required_credits = credit_requirement('imageLayers', 69)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
@@ -148,6 +144,7 @@ def image_layers():
 
 # --------------- Caption Layer (Groq Vision) ---------------
 @bp.route('/api/caption-layer', methods=['POST'])
+@login_required
 def caption_layer():
     """
     Auto-name a layer image using Groq Vision.
@@ -219,6 +216,7 @@ def caption_layer():
 
 # --------------- Edit Layer (AI per-layer editing) ---------------
 @bp.route('/api/edit-layer', methods=['POST'])
+@login_required
 def edit_layer():
     """
     AI-edit a single layer image based on a natural language prompt.
@@ -230,15 +228,10 @@ def edit_layer():
     filename = os.path.basename(filename) if filename else ''
     user_prompt = data.get('prompt', '')
     edit_type = data.get('editType', 'freeform')
-    project_id = int(data.get('projectId', 1))
-
-    user_id_raw = data.get('userId') or data.get('user_id')
-    user_id = None
-    if user_id_raw:
-        try:
-            user_id = int(user_id_raw)
-        except ValueError:
-            pass
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
     required_credits = credit_requirement('imageLayerEdit', 35)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
@@ -365,6 +358,7 @@ def edit_layer():
 
 # --------------- Inpaint Layer (Qwen localized edit) ---------------
 @bp.route('/api/inpaint-layer', methods=['POST'])
+@login_required
 def inpaint_layer():
     """
     Localized Qwen edit for one RGBA layer using a painted canvas mask.
@@ -379,15 +373,10 @@ def inpaint_layer():
     canvas_width = int(data.get('canvasWidth', 1024))
     canvas_height = int(data.get('canvasHeight', 1024))
     transform = data.get('transform', {}) or {}
-    project_id = int(data.get('projectId', 1))
-
-    user_id_raw = data.get('userId') or data.get('user_id')
-    user_id = None
-    if user_id_raw:
-        try:
-            user_id = int(user_id_raw)
-        except ValueError:
-            pass
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
 
     required_credits = credit_requirement('imageLayerEdit', 35)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
@@ -508,6 +497,7 @@ def inpaint_layer():
 
 # --------------- Compose Layers (Server-side Pillow) ---------------
 @bp.route('/api/compose-layers', methods=['POST'])
+@login_required
 def compose_layers():
     """
     Flatten visible layers with transforms into a clean PNG.
@@ -518,15 +508,10 @@ def compose_layers():
     layer_data = data.get('layers', [])
     canvas_width = int(data.get('width', 1024))
     canvas_height = int(data.get('height', 1024))
-    project_id = int(data.get('projectId', 1))
-
-    user_id_raw = data.get('userId') or data.get('user_id')
-    user_id = None
-    if user_id_raw:
-        try:
-            user_id = int(user_id_raw)
-        except ValueError:
-            pass
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
 
     if not layer_data:
         return jsonify({'error': 'No layers provided'}), 400

@@ -1,42 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
-
-:root {
-  /* Core Variables */
-  --primary: #8B5CF6;
-  --primary-hover: #7C3AED;
-  --primary-light: rgba(139, 92, 246, 0.08);
-  --primary-glow: rgba(139, 92, 246, 0.22);
-  --accent: #8B5CF6;
-  --accent-warm: #F43F5E;
-  --accent-cool: #10B981;
-  --bg: #F8FAFC;
-  --bg2: #F1F5F9;
-  --card: #FFFFFF;
-  --text: #0F172A;
-  --text2: #334155;
-  --muted: #64748B;
-  --border: rgba(0, 0, 0, 0.06);
-  --radius: 12px;
-  --shadow: 0 10px 30px rgba(15, 23, 42, 0.03);
-  --font: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
-
-  /* Aliases used across tools and admin panels */
-  --text-primary: var(--text);
-  --text-secondary: var(--text2);
-  --text-muted: var(--muted);
-  --card-bg: var(--card);
-  --bg-tertiary: var(--bg2);
-  --bg-secondary: var(--bg);
-
-  /* Luxury Creative Workspace Extensions */
-  --gradient-primary: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
-  --gradient-hover: linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%);
-  --gradient-glow: 0 0 25px rgba(139, 92, 246, 0.35);
-  --gradient-dark: linear-gradient(180deg, #0B0F19 0%, #111827 100%);
-  --border-glass: rgba(255, 255, 255, 0.08);
-  --bg-glass: rgba(255, 255, 255, 0.7);
-  --transition-lux: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* Design tokens live in src/styles/tokens.css */
 
 /* ===== GLOBAL RESETS & SCROLLBAR ===== */
 * {

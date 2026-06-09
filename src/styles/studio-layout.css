@@ -1,0 +1,12 @@
+.tool-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.studio.sidebar-hidden .st-sidebar {
+  display: none;
+}

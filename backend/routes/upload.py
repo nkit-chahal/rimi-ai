@@ -1,7 +1,8 @@
 """Upload and static file serving routes."""
 import os
 import uuid
-from flask import Blueprint, request, jsonify, send_from_directory, Response, abort
+from flask import Blueprint, request, jsonify, send_from_directory, Response, abort, g
+from middleware import login_required
 
 from config import UPLOAD_DIR, RESULTS_DIR, allowed_file, USE_S3
 import storage
@@ -10,6 +11,7 @@ bp = Blueprint('upload', __name__)
 
 
 @bp.route('/api/upload', methods=['POST'])
+@login_required
 def upload_image():
     if 'image' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400

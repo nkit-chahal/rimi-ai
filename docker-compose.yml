@@ -1,0 +1,47 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      FLASK_ENV: development
+      JWT_SECRET: local-dev-jwt-secret
+      DATABASE_URL: postgresql://rimi:rimi@postgres:5432/rimi
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+      CORS_ORIGINS: http://localhost:5173
+    volumes:
+      - ./backend/uploads:/app/backend/uploads
+      - ./backend/results:/app/backend/results
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build: .
+    command: rq worker --url redis://redis:6379/0 rimi-ai
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app/backend
+    depends_on:
+      - redis
+      - backend
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rimi
+      POSTGRES_PASSWORD: rimi
+      POSTGRES_DB: rimi
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:

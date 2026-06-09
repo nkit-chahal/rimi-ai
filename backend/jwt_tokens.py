@@ -4,7 +4,12 @@ from datetime import datetime, timezone, timedelta
 
 import jwt
 
-JWT_SECRET = os.getenv('JWT_SECRET', 'rimi-ai-dev-secret-change-in-production')
+_DEV_JWT_SECRET = 'rimi-ai-dev-secret-change-in-production'
+_IS_PRODUCTION = os.getenv('FLASK_ENV') == 'production'
+_JWT_SECRET_ENV = os.getenv('JWT_SECRET', '')
+if _IS_PRODUCTION and (not _JWT_SECRET_ENV or _JWT_SECRET_ENV == _DEV_JWT_SECRET):
+    raise RuntimeError('JWT_SECRET must be configured in production')
+JWT_SECRET = _JWT_SECRET_ENV or _DEV_JWT_SECRET
 JWT_ALGORITHM = 'HS256'
 JWT_TTL_HOURS = 24
 

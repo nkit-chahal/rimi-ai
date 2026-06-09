@@ -6,7 +6,8 @@ import time
 import numpy as np
 import requests as http_requests
 from io import BytesIO
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
+from middleware import login_required, project_access_from_payload
 from datetime import datetime, timezone
 from PIL import Image, ImageDraw, ImageChops, ImageFilter
 
@@ -23,6 +24,7 @@ bp = Blueprint('seamless', __name__)
 
 
 @bp.route('/api/generate-seamless', methods=['POST'])
+@login_required
 def generate_seamless():
     data = request.get_json()
     user_prompt = data.get('prompt', '')
@@ -31,11 +33,10 @@ def generate_seamless():
     filename = data.get('filename', '')
     filename = os.path.basename(filename) if filename else ''
     image_url = data.get('imageUrl', '')
-    project_id = int(data.get('projectId', 1))
-    user_id = data.get('userId') or data.get('user_id')
-    if user_id:
-        try: user_id = int(user_id)
-        except ValueError: user_id = None
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id = g.current_user['id']
     required_credits = credit_requirement('seamless_texture', 84)
     ok, remaining, limit, used = check_credits(user_id, required_credits)
     if not ok:
@@ -160,17 +161,16 @@ def generate_seamless():
 
 
 @bp.route('/api/make-seamless', methods=['POST'])
+@login_required
 def make_seamless():
     data = request.get_json()
     filename = data.get('filename', '')
     filename = os.path.basename(filename) if filename else ''
     image_url = data.get('imageUrl', '')
-    project_id = int(data.get('projectId', 1))
-    user_id_raw = data.get('userId') or data.get('user_id')
-    user_id_early = None
-    if user_id_raw:
-        try: user_id_early = int(user_id_raw)
-        except ValueError: pass
+    project_id, access_error = project_access_from_payload(data)
+    if access_error:
+        return access_error
+    user_id_early = g.current_user['id']
     required_credits = credit_requirement('seamless', 58)
     ok, remaining, limit, used = check_credits(user_id_early, required_credits)
     if not ok:

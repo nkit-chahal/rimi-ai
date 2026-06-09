@@ -2,29 +2,11 @@ import React, { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspens
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
-// Admin panel imports
-import AdminDashboard from '../components/studio/admin/AdminDashboard';
-import AdminUsers from '../components/studio/admin/AdminUsers';
-import AdminProjects from '../components/studio/admin/AdminProjects';
-import AdminLogs from '../components/studio/admin/AdminLogs';
-import AdminCredits from '../components/studio/admin/AdminCredits';
 
-// Tool panel imports
-import DashboardTool from '../components/studio/tools/DashboardTool';
-import ExportsTool from '../components/studio/tools/ExportsTool';
-import PatternTool from '../components/studio/tools/PatternTool';
-import SeamlessTool from '../components/studio/tools/SeamlessTool';
 import ToolComingSoon from '../components/studio/shared/ToolComingSoon';
 import { COMING_SOON_TOOLS } from '../components/studio/shared/comingSoonTools';
-import ImageLayersTool from '../components/studio/tools/ImageLayersTool';
-import VectorizeTool from '../components/studio/tools/VectorizeTool';
-import RemoveBgTool from '../components/studio/tools/RemoveBgTool';
-import InspireTool from '../components/studio/tools/InspireTool';
-import ColorwaysTool from '../components/studio/tools/ColorwaysTool';
-import ColorwayManagerTool from '../components/studio/tools/ColorwayManagerTool';
-import VectorProTool from '../components/studio/tools/VectorProTool';
-import RepeatTool from '../components/studio/tools/RepeatTool';
-import MappingsTool from '../components/studio/tools/MappingsTool';
+import { resolveToolComponent } from '../router/toolRegistry';
+import OnboardingBanner from '../components/OnboardingBanner';
 
 // Shared icons & helpers
 import { I } from '../components/studio/shared/StudioIcons';
@@ -1228,29 +1210,45 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         };
 
         // Routing canvas rendering
-        if (tool === 'admin-dashboard') return <AdminDashboard adminStats={adminStats} budgetData={budgetData} adminUsers={adminUsers} setTool={setTool} renderBudgetBanner={renderBudgetBanner} />;
-        if (tool === 'admin-users') return <AdminUsers renderBudgetBanner={renderBudgetBanner} adminUsersLoading={adminUsersLoading} adminUsers={adminUsers} currentToken={currentToken} fetchAdminUsers={fetchAdminUsers} />;
-        if (tool === 'admin-projects') return <AdminProjects renderBudgetBanner={renderBudgetBanner} adminProjectsLoading={adminProjectsLoading} adminProjects={adminProjects} />;
-        if (tool === 'admin-logs') return <AdminLogs renderBudgetBanner={renderBudgetBanner} replicateLogsLoading={replicateLogsLoading} replicateLogs={replicateLogs} loginEvents={loginEvents} adminAuditEvents={adminAuditEvents} />;
-        if (tool === 'admin-credits') return <AdminCredits renderBudgetBanner={renderBudgetBanner} adminUsers={adminUsers} adminSelectedUserId={adminSelectedUserId} setAdminSelectedUserId={setAdminSelectedUserId} adminUsersLoading={adminUsersLoading} currentToken={currentToken} fetchAdminUsers={fetchAdminUsers} />;
+        const LazyTool = resolveToolComponent(tool);
+        if (LazyTool && tool.startsWith('admin-')) {
+            const adminProps = {
+                'admin-dashboard': { adminStats, budgetData, adminUsers, setTool, renderBudgetBanner },
+                'admin-users': { renderBudgetBanner, adminUsersLoading, adminUsers, currentToken, fetchAdminUsers },
+                'admin-projects': { renderBudgetBanner, adminProjectsLoading, adminProjects },
+                'admin-logs': { renderBudgetBanner, replicateLogsLoading, replicateLogs, loginEvents, adminAuditEvents },
+                'admin-credits': { renderBudgetBanner, adminUsers, adminSelectedUserId, setAdminSelectedUserId, adminUsersLoading, currentToken, fetchAdminUsers },
+            }[tool];
+            return (
+                <ReactSuspense fallback={<div className="tool-loading">Loading…</div>}>
+                    <LazyTool {...adminProps} />
+                </ReactSuspense>
+            );
+        }
 
         if (tool === 'workspace') return renderWorkspaceManager();
         if (tool === 'billing') return renderBilling();
 
-        if (tool === 'dashboard') return <DashboardTool {...commonProps} />;
-        if (tool === 'exports') return <ExportsTool {...commonProps} />;
-        if (tool === 'pattern') return <PatternTool {...commonProps} enhUrl={enhUrl} setEnhUrl={setEnhUrl} />;
-        if (tool === 'seamless') return <SeamlessTool {...commonProps} seamlessUrl={seamlessUrl} setSeamlessUrl={setSeamlessUrl} />;
         if (COMING_SOON_TOOLS[tool]) return <ToolComingSoon {...COMING_SOON_TOOLS[tool]} />;
-        if (tool === 'imagelayers') return <ImageLayersTool {...commonProps} />;
-        if (tool === 'vectorize' || tool === 'upscale') return <VectorizeTool {...commonProps} vecUrl={vecUrl} setVecUrl={setVecUrl} upscaleUrl={upscaleUrl} setUpscaleUrl={setUpscaleUrl} />;
-        if (tool === 'removebg') return <RemoveBgTool {...commonProps} removeBgUrl={removeBgUrl} setRemoveBgUrl={setRemoveBgUrl} />;
-        if (tool === 'inspire') return <InspireTool {...commonProps} />;
-        if (tool === 'colorways') return <ColorwaysTool {...commonProps} cwUrl={cwUrl} setCwUrl={setCwUrl} />;
-        if (tool === 'colorway-manager') return <ColorwayManagerTool {...commonProps} />;
-        if (tool === 'vectorpro') return <VectorProTool {...commonProps} brandPalettes={brandPalettes} />;
-        if (tool === 'mappings') return <MappingsTool {...commonProps} />;
-        if (tool === 'repeat') return <RepeatTool {...commonProps} repeatUrl={repeatUrl} setRepeatUrl={setRepeatUrl} isRepeat={isRepeat} setIsRepeat={setIsRepeat} />;
+
+        const toolExtras = {
+            pattern: { enhUrl, setEnhUrl },
+            seamless: { seamlessUrl, setSeamlessUrl },
+            vectorize: { vecUrl, setVecUrl, upscaleUrl, setUpscaleUrl },
+            upscale: { vecUrl, setVecUrl, upscaleUrl, setUpscaleUrl },
+            removebg: { removeBgUrl, setRemoveBgUrl },
+            colorways: { cwUrl, setCwUrl },
+            vectorpro: { brandPalettes },
+            repeat: { repeatUrl, setRepeatUrl, isRepeat, setIsRepeat },
+        };
+        const LazyUserTool = resolveToolComponent(tool);
+        if (LazyUserTool) {
+            return (
+                <ReactSuspense fallback={<div className="tool-loading">Loading…</div>}>
+                    <LazyUserTool {...commonProps} {...(toolExtras[tool] || {})} />
+                </ReactSuspense>
+            );
+        }
 
         return null;
     };
@@ -1282,6 +1280,15 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                     }
                 }}
             />
+            {!isAdmin && (
+                <OnboardingBanner
+                    token={currentToken}
+                    onProjectCreated={(projectId) => {
+                        setActiveProjectId(projectId);
+                        loadStudioState(projectId);
+                    }}
+                />
+            )}
             {/* Sidebar nav */}
             {!isSidebarHidden && (
                 <aside className="st-sidebar">
