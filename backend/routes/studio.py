@@ -174,4 +174,5 @@ def update_project_controls(project_id):
         conn.commit()
         conn.close()
 
-    return jsonify({'success': True, 'state': get_studio_state(project_id, user_id)})
+    state = get_studio_state(project_id, user_id)
+    return jsonify({'success': True, 'state': {'controls': state['controls']}})

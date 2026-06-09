@@ -136,6 +136,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     });
 
     const hasLoadedControls = useRef(false);
+    const lastSyncedControlsRef = useRef(null);
+    const workspaceLoadIdRef = useRef(0);
 
     const [bgTasks, setBgTasks] = useState([]);
     const [showBgTasksDropdown, setShowBgTasksDropdown] = useState(false);
@@ -514,10 +516,13 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
     const applyStudioState = useCallback((studioState) => {
         hasLoadedControls.current = false;
+        lastSyncedControlsRef.current = JSON.stringify(studioState.controls || {});
         setState(studioState);
         setActiveProjectId(studioState.activeProject.id);
         window.setTimeout(() => { hasLoadedControls.current = true; }, 0);
     }, []);
+
+    const workspaceHydrated = state.activeProject?.name && state.activeProject.name !== 'Loading...';
 
     const loadStudioState = useCallback(async (projectId = activeProjectId, { silent = false } = {}) => {
         if (!currentToken) return;
@@ -548,24 +553,27 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             return;
         }
 
-        let cancelled = false;
-
+        const loadId = ++workspaceLoadIdRef.current;
         const loadInitialWorkspace = async () => {
             setIsLoadingState(true);
             setError('');
 
             const prefetched = consumeStudioPrefetch();
+            const prefetchedProjectId = prefetched?.state?.activeProject?.id;
             if (prefetched?.state) {
                 applyStudioState(prefetched.state);
             }
 
+            const loadingTimeout = window.setTimeout(() => {
+                if (loadId === workspaceLoadIdRef.current) {
+                    setIsLoadingState(false);
+                }
+            }, 12000);
+
             try {
-                const requests = [
-                    apiFetch(`/api/studio-state?projectId=1`, {}, currentToken),
-                    fetch(`${API}/api/credit-pricing`).then((r) => r.json()).catch(() => null),
-                ];
-                const [stateRes, pricingRes] = await Promise.all(requests);
-                if (cancelled) return;
+                const projectQuery = prefetchedProjectId || activeProjectId || 1;
+                const stateRes = await apiFetch(`/api/studio-state?projectId=${projectQuery}`, {}, currentToken);
+                if (loadId !== workspaceLoadIdRef.current) return;
 
                 if (stateRes?.success && stateRes.state) {
                     applyStudioState(stateRes.state);
@@ -573,21 +581,29 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                     throw new Error(stateRes?.error || 'Failed to load studio state');
                 }
 
-                if (pricingRes?.success && pricingRes.pricing) {
-                    setCreditPricing(pricingRes.pricing);
-                }
+                fetch(`${API}/api/credit-pricing`)
+                    .then((r) => r.json())
+                    .then((pricingRes) => {
+                        if (pricingRes?.success && pricingRes.pricing) {
+                            setCreditPricing(pricingRes.pricing);
+                        }
+                    })
+                    .catch(() => {});
             } catch (err) {
-                if (!cancelled && err.status !== 401 && !prefetched?.state) {
+                if (loadId === workspaceLoadIdRef.current && err.status !== 401 && !prefetched?.state) {
                     setError(err.message || 'Failed to load workspace.');
                 }
                 console.warn('Initial studio load failed:', err.message);
             } finally {
-                if (!cancelled) setIsLoadingState(false);
+                window.clearTimeout(loadingTimeout);
+                if (loadId === workspaceLoadIdRef.current) {
+                    setIsLoadingState(false);
+                }
             }
         };
 
         loadInitialWorkspace();
-        return () => { cancelled = true; };
+        return () => { workspaceLoadIdRef.current += 1; };
     }, [applyStudioState, currentToken, isAdmin]);
 
     useEffect(() => {
@@ -717,7 +733,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     }, []);
 
     useEffect(() => {
-        if (!hasLoadedControls.current) return;
+        if (!hasLoadedControls.current || isLoadingState || !activeProject?.id) return;
+        const serialized = JSON.stringify(controls);
+        if (lastSyncedControlsRef.current === serialized) return;
+
         const id = window.setTimeout(async () => {
             try {
                 const d = await apiFetch(
@@ -725,19 +744,20 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                     { method: 'PATCH', body: JSON.stringify(controls) },
                     currentToken,
                 );
-                if (d.success && d.state) {
-                    setState(prev => ({
+                if (d.success && d.state?.controls) {
+                    const merged = { ...controls, ...d.state.controls };
+                    lastSyncedControlsRef.current = JSON.stringify(merged);
+                    setState((prev) => ({
                         ...prev,
-                        ...d.state,
                         controls: { ...prev.controls, ...d.state.controls },
                     }));
                 }
             } catch {
                 console.warn('Control sync failed.');
             }
-        }, 350);
+        }, 500);
         return () => window.clearTimeout(id);
-    }, [controls, activeProject?.id, currentToken]);
+    }, [controls, activeProject?.id, currentToken, isLoadingState]);
 
     const handlePreUpload = (file) => {
         if (!file) return;
@@ -1283,6 +1303,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             {!isAdmin && (
                 <OnboardingBanner
                     token={currentToken}
+                    ready={workspaceHydrated && !isLoadingState}
                     onProjectCreated={(projectId) => {
                         setActiveProjectId(projectId);
                         loadStudioState(projectId);
@@ -1774,7 +1795,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             />
                         )}
 
-                        {isLoadingState && !showBootSplash ? (
+                        {isLoadingState && !showBootSplash && !workspaceHydrated ? (
                             <div className="st-loading-layout" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '320px', gap: '1rem' }}>
                                 <div className="st-spinner" style={{ width: '36px', height: '36px', borderWidth: '3px' }} />
                                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>Loading workspace…</span>

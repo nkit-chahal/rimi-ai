@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from './studio/shared/helpers';
 
-export default function OnboardingBanner({ token, onProjectCreated }) {
+export default function OnboardingBanner({ token, onProjectCreated, ready = true }) {
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !ready) return;
     apiFetch('/api/onboarding/status', {}, token)
       .then((data) => setVisible(Boolean(data.needsOnboarding)))
       .catch(() => setVisible(false));
-  }, [token]);
+  }, [token, ready]);
 
   if (!visible) return null;
 

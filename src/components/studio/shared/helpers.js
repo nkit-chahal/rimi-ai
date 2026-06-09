@@ -170,27 +170,39 @@ export function updateCreditsFromJson(data, setUser) {
  * @param {string} token - Optional JWT token for authentication
  * @returns {Promise<object>} Parsed JSON response
  */
+const DEFAULT_FETCH_TIMEOUT_MS = 30000;
+
 export async function apiFetch(url, options = {}, token = null) {
     const fullUrl = url.startsWith('http') ? url : `${API}${url}`;
     const headers = { ...options.headers };
     const authToken = normalizeToken(token) || normalizeToken(options.token);
+    const timeoutMs = options.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+    const { timeoutMs: _omit, token: _tokenOpt, ...fetchOptions } = options;
 
     if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;
     }
     
     // Don't set Content-Type for FormData (browser sets it with boundary)
-    if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
+    if (fetchOptions.body && !(fetchOptions.body instanceof FormData) && !headers['Content-Type']) {
         headers['Content-Type'] = 'application/json';
     }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
     
     let res;
     try {
-        res = await fetch(fullUrl, { ...options, headers });
-    } catch {
+        res = await fetch(fullUrl, { ...fetchOptions, headers, signal: controller.signal });
+    } catch (err) {
+        if (err?.name === 'AbortError') {
+            throw new Error('Request timed out. The server may be busy — please try again.');
+        }
         throw new Error(
             'Could not reach the server. Long AI jobs (mockups, patterns) can take 1–2 minutes — if this keeps failing, retry with fewer products or check that the backend is running.'
         );
+    } finally {
+        window.clearTimeout(timeoutId);
     }
 
     if (!res.ok) {
