@@ -22,7 +22,8 @@ jobs:
         env:
           JWT_SECRET: ci-test-secret
           FLASK_ENV: testing
-        run: pytest -q
+          PYTHONPATH: .
+        run: python -m pytest -q
 
   frontend:
     runs-on: ubuntu-latest

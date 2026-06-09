@@ -1,7 +1,12 @@
 import os
-import tempfile
+import sys
+from pathlib import Path
 
 import pytest
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 os.environ.setdefault("FLASK_ENV", "testing")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-pytest-only")
@@ -13,7 +18,10 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "")
     monkeypatch.setenv("JWT_SECRET", "test-jwt-secret-for-pytest-only")
     monkeypatch.setenv("FLASK_ENV", "testing")
-    monkeypatch.setattr("db.DB_PATH", str(db_path), raising=False)
+
+    import db
+
+    monkeypatch.setattr(db, "DB_PATH", str(db_path))
 
     from server import create_app
 
