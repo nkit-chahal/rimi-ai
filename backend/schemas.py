@@ -1,7 +1,7 @@
 """Pydantic request validation schemas for API routes."""
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CreditsCheckRequest(BaseModel):
@@ -23,6 +23,8 @@ class ProjectPayload(BaseModel):
 
 
 class ExtractDesignRequest(ProjectPayload):
+    model_config = ConfigDict(protected_namespaces=())
+
     filename: Optional[str] = None
     model_id: str = Field(default="google/nano-banana", alias="modelId")
 
