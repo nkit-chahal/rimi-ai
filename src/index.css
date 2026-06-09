@@ -13361,3 +13361,65 @@ input[type=range]::-moz-range-track {
   border-color: rgba(139, 92, 246, 0.25);
   color: rgba(255, 255, 255, 0.75);
 }
+
+.share-page {
+  min-height: 100vh;
+  background: radial-gradient(circle at top, rgba(139, 92, 246, 0.18), transparent 42%), #0b0b10;
+  color: #f8fafc;
+  padding: 2rem 1rem 3rem;
+}
+.share-shell { max-width: 1100px; margin: 0 auto; }
+.share-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+.share-brand { font-weight: 800; letter-spacing: 0.08em; }
+.share-card {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) 1fr;
+  gap: 2rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 2rem;
+}
+.share-eyebrow { text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.72rem; color: #a78bfa; }
+.share-subtitle { color: #94a3b8; line-height: 1.6; }
+.share-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.5rem; }
+.share-cta {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0.8rem 1.2rem; border-radius: 999px;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: white; text-decoration: none; font-weight: 700;
+}
+.share-cta.ghost, .share-cta.subtle {
+  background: transparent; border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.share-preview-wrap {
+  background: #111827; border-radius: 18px; overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 320px; display: flex; align-items: center; justify-content: center;
+}
+.share-preview { width: 100%; height: 100%; object-fit: contain; display: block; }
+.share-footer-note { margin-top: 1.5rem; font-size: 0.85rem; color: #64748b; }
+.share-loading { padding: 3rem; text-align: center; color: #94a3b8; }
+
+.st-versions-panel {
+  margin-bottom: 1rem; padding: 1rem; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.st-versions-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.75rem; margin-top: 0.75rem;
+}
+.st-version-card {
+  border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; overflow: hidden; background: #111827;
+}
+.st-version-card.selected { border-color: #8b5cf6; box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.4); }
+.st-version-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.st-version-meta { padding: 0.5rem; font-size: 0.72rem; color: #94a3b8; }
+.st-watermark-badge {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.25rem 0.55rem; border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12); color: #fbbf24; font-size: 0.72rem; font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .share-card { grid-template-columns: 1fr; }
+}

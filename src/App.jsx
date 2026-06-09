@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './index.css';
 import Studio from './pages/Studio';
 import Login from './pages/Login';
+import SharePage from './pages/SharePage';
 import { normalizeToken } from './components/studio/shared/helpers';
 
 function readSavedUser() {
@@ -106,6 +107,7 @@ function App() {
             )
           }
         />
+        <Route path="/share/:token" element={<SharePage />} />
         <Route
           path="/login"
           element={currentUser ? <Navigate to="/studio" replace /> : <Login onLogin={handleLogin} />}

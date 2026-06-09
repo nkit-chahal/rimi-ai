@@ -120,3 +120,82 @@ def delete_project(project_id):
     conn.commit()
     conn.close()
     return jsonify({'success': True})
+
+
+@bp.route('/api/projects/<int:project_id>/versions', methods=['GET'])
+@login_required
+def list_versions(project_id):
+    user_id = g.current_user['id']
+    conn = db()
+    try:
+        project = conn.execute(
+            "SELECT id FROM projects WHERE id = ? AND user_id = ?",
+            (project_id, user_id),
+        ).fetchone()
+        if not project:
+            return jsonify({'success': False, 'error': 'Project not found'}), 404
+        rows = conn.execute(
+            """
+            SELECT id, project_id, name, image_url, is_selected, created_at, export_filename
+            FROM pattern_variations
+            WHERE project_id = ?
+            ORDER BY created_at DESC
+            """,
+            (project_id,),
+        ).fetchall()
+        versions = []
+        for row in rows:
+            item = dict(row)
+            versions.append({
+                'id': item['id'],
+                'name': item['name'],
+                'imageUrl': item['image_url'],
+                'exportFilename': item.get('export_filename'),
+                'isSelected': bool(item.get('is_selected')),
+                'createdAt': item['created_at'],
+            })
+        return jsonify({'success': True, 'versions': versions})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/projects/<int:project_id>/versions/<int:version_id>/restore', methods=['POST'])
+@login_required
+def restore_version(project_id, version_id):
+    user_id = g.current_user['id']
+    conn = db()
+    try:
+        project = conn.execute(
+            "SELECT id FROM projects WHERE id = ? AND user_id = ?",
+            (project_id, user_id),
+        ).fetchone()
+        if not project:
+            return jsonify({'success': False, 'error': 'Project not found'}), 404
+        version = conn.execute(
+            "SELECT * FROM pattern_variations WHERE id = ? AND project_id = ?",
+            (version_id, project_id),
+        ).fetchone()
+        if not version:
+            return jsonify({'success': False, 'error': 'Version not found'}), 404
+        version = dict(version)
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        conn.execute(
+            "UPDATE pattern_variations SET is_selected = 0 WHERE project_id = ?",
+            (project_id,),
+        )
+        conn.execute(
+            "UPDATE pattern_variations SET is_selected = 1 WHERE id = ?",
+            (version_id,),
+        )
+        conn.execute(
+            "UPDATE projects SET hero_image_url = ?, thumbnail_url = ?, updated_at = ? WHERE id = ?",
+            (version['image_url'], version['image_url'], now, project_id),
+        )
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'heroImageUrl': version['image_url'],
+            'versionId': version_id,
+        })
+    finally:
+        conn.close()

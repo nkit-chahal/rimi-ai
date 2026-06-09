@@ -39,7 +39,9 @@ def log_export(project_id, filename, input_filename, tool_type, settings_dict=No
     settings_json = json.dumps(settings_dict) if settings_dict is not None else '{}'
     pipeline_steps_json = json.dumps(pipeline_steps_list) if pipeline_steps_list is not None else None
     created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-    
+    image_url = f"/results/{filename}" if filename and not str(filename).startswith("/") else filename
+    variation_name = f"{tool_type} · {created_at[:16].replace('T', ' ')}"
+
     with db_lock:
         conn = db()
         try:
@@ -50,6 +52,21 @@ def log_export(project_id, filename, input_filename, tool_type, settings_dict=No
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (user_id, project_id, filename, input_filename, tool_type, settings_json, pipeline_run_id, pipeline_steps_json, created_at)
+            )
+            conn.execute(
+                "UPDATE pattern_variations SET is_selected = 0 WHERE project_id = ?",
+                (project_id,),
+            )
+            conn.execute(
+                """
+                INSERT INTO pattern_variations (project_id, name, image_url, is_selected, created_at, export_filename)
+                VALUES (?, ?, ?, 1, ?, ?)
+                """,
+                (project_id, variation_name, image_url, created_at, filename),
+            )
+            conn.execute(
+                "UPDATE project_metrics SET versions = versions + 1 WHERE project_id = ?",
+                (project_id,),
             )
             conn.commit()
         except Exception as e:

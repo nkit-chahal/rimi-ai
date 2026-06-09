@@ -93,7 +93,13 @@ def create_share_link():
             (token, g.current_user["id"], payload.project_id, payload.export_filename, expires_at, now),
         )
         conn.commit()
-        return jsonify({"success": True, "shareUrl": f"/share/{token}", "expiresAt": expires_at})
+        frontend_url = os.getenv("FRONTEND_URL", "https://rimiai.pro").rstrip("/")
+        return jsonify({
+            "success": True,
+            "token": token,
+            "shareUrl": f"{frontend_url}/#/share/{token}",
+            "expiresAt": expires_at,
+        })
     finally:
         conn.close()
 
@@ -103,7 +109,13 @@ def resolve_share_link(token):
     conn = db()
     try:
         row = conn.execute(
-            "SELECT * FROM share_links WHERE token = ?",
+            """
+            SELECT s.*, p.name AS project_name, u.plan AS owner_plan
+            FROM share_links s
+            LEFT JOIN projects p ON p.id = s.project_id
+            LEFT JOIN users u ON u.id = s.user_id
+            WHERE s.token = ?
+            """,
             (token,),
         ).fetchone()
         if not row:
@@ -111,12 +123,70 @@ def resolve_share_link(token):
         link = dict(row)
         if link["expires_at"] < datetime.now(timezone.utc).replace(tzinfo=None).isoformat():
             return jsonify({"success": False, "error": "Share link expired"}), 410
+        from watermark import is_free_plan
+        watermarked = is_free_plan(link.get("owner_plan"))
         return jsonify({
             "success": True,
             "exportFilename": link["export_filename"],
             "projectId": link["project_id"],
-            "downloadUrl": f"/results/{link['export_filename']}",
+            "projectName": link.get("project_name") or "RIMI AI Design",
+            "previewUrl": f"/api/share/{token}/preview",
+            "downloadUrl": f"/api/share/{token}/download",
+            "watermarked": watermarked,
+            "expiresAt": link["expires_at"],
         })
+    finally:
+        conn.close()
+
+
+@bp.route("/api/share/<token>/preview", methods=["GET"])
+def share_preview(token):
+    return _serve_share_asset(token, attachment=False)
+
+
+@bp.route("/api/share/<token>/download", methods=["GET"])
+def share_download(token):
+    return _serve_share_asset(token, attachment=True)
+
+
+def _serve_share_asset(token, attachment=False):
+    from flask import Response
+    from watermark import apply_watermark, is_free_plan
+    import storage as storage_mod
+    from config import RESULTS_DIR
+
+    conn = db()
+    try:
+        row = conn.execute(
+            """
+            SELECT s.export_filename, u.plan AS owner_plan
+            FROM share_links s
+            LEFT JOIN users u ON u.id = s.user_id
+            WHERE s.token = ?
+            """,
+            (token,),
+        ).fetchone()
+        if not row:
+            return jsonify({"success": False, "error": "Share link not found"}), 404
+        link = dict(row)
+        filename = link["export_filename"]
+        local_path = os.path.join(RESULTS_DIR, filename)
+        file_bytes = None
+        content_type = "image/png"
+        if os.path.exists(local_path):
+            with open(local_path, "rb") as handle:
+                file_bytes = handle.read()
+        else:
+            file_bytes, content_type = storage_mod.get_file("results", filename)
+        if not file_bytes:
+            return jsonify({"success": False, "error": "File not found"}), 404
+        if is_free_plan(link.get("owner_plan")) and not filename.endswith(".svg"):
+            file_bytes = apply_watermark(file_bytes)
+            content_type = "image/png"
+        headers = {}
+        if attachment:
+            headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return Response(file_bytes, mimetype=content_type, headers=headers)
     finally:
         conn.close()
 

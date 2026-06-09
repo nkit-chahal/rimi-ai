@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, forceDownload, runAsyncJob } from '../shared/helpers';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
@@ -18,6 +18,7 @@ export default function SeamlessTool({
     handlePreUpload,
     onUploadInvalid,
     onUploadPaste,
+    currentToken,
 }) {
     // Local state
     const [seamlessMode, setSeamlessMode] = useState('generate');
@@ -42,38 +43,19 @@ export default function SeamlessTool({
     const seamlessCreditCost = creditPricing?.seamless || 58;
     const hasEnoughSeamlessCredits = userRemainingCredits >= seamlessCreditCost;
 
-    // Progress simulation
     useEffect(() => {
-        if (isSeamless) {
-            hasActiveSeamlessRun.current = true;
-            setSeamlessProgress(0);
-            setSeamlessStatus('Assessing seams...');
-            const startTime = Date.now();
-            const interval = setInterval(() => {
-                const elapsed = (Date.now() - startTime) / 1000;
-                let progress = 0, status = '';
-                if (elapsed < 2) { progress = (elapsed / 2) * 5; status = 'Assessing seams...'; }
-                else if (elapsed < 5) { progress = 5 + ((elapsed - 2) / 3) * 10; status = 'Applying geometric fixes...'; }
-                else if (elapsed < 35) { progress = 15 + ((elapsed - 5) / 30) * 40; status = 'Generating AI patches (Tier 1)...'; }
-                else if (elapsed < 65) { progress = 55 + ((elapsed - 35) / 30) * 35; status = 'Refining seams (Tier 2)...'; }
-                else { progress = 90 + Math.min(9, (elapsed - 65) / 10); status = 'Finalizing guarantee step...'; }
-                setSeamlessProgress(Math.min(99, progress));
-                setSeamlessStatus(status);
-            }, 200);
-            return () => clearInterval(interval);
+        if (!isSeamless && hasActiveSeamlessRun.current) {
+            hasActiveSeamlessRun.current = false;
+            setSeamlessProgress(100);
+            setSeamlessStatus('Complete!');
+            const t = window.setTimeout(() => { setSeamlessProgress(0); setSeamlessStatus(''); }, 2000);
+            return () => window.clearTimeout(t);
         }
-
-        if (!hasActiveSeamlessRun.current) {
+        if (!isSeamless) {
             setSeamlessProgress(0);
             setSeamlessStatus('');
-            return undefined;
         }
-
-        hasActiveSeamlessRun.current = false;
-        setSeamlessProgress(100);
-        setSeamlessStatus('Complete!');
-        const t = setTimeout(() => { setSeamlessProgress(0); setSeamlessStatus(''); }, 2000);
-        return () => clearTimeout(t);
+        return undefined;
     }, [isSeamless]);
 
     // Fix existing tile (offset + inpaint)
@@ -84,25 +66,23 @@ export default function SeamlessTool({
         setSeamlessUrl(null);
         setError('');
         const trigger = async () => {
-            const res = await fetch(`${API}/api/make-seamless`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    filename: filename || activeProject.heroImageUrl,
-                    projectId: activeProject.id,
-                    userId: user.id,
-                }),
+            hasActiveSeamlessRun.current = true;
+            const payload = {
+                filename: filename || activeProject.heroImageUrl,
+                projectId: activeProject.id,
+                userId: user.id,
+            };
+            const result = await runAsyncJob('/api/make-seamless', payload, currentToken, {
+                onProgress: (job) => {
+                    setSeamlessProgress(job.progressPct || 0);
+                    setSeamlessStatus(job.stage || 'Working…');
+                },
             });
-            const d = await res.json();
-            if (d.success) {
-                setSeamlessUrl(d.resultUrl.startsWith('http') ? d.resultUrl : `${API}${d.resultUrl}`);
-                updateCreditsFromResponse(d);
-                setIsSeamless(false);
-                return { url: d.resultUrl };
-            } else {
-                setIsSeamless(false);
-                throw new Error(d.error || 'Seamless fix failed');
-            }
+            const resultUrl = result.resultUrl?.startsWith('http') ? result.resultUrl : `${API}${result.resultUrl}`;
+            setSeamlessUrl(resultUrl);
+            updateCreditsFromResponse(result);
+            setIsSeamless(false);
+            return { url: resultUrl };
         };
         addBgTask('seamless', 'Make Seamless', filename || 'hero_image', trigger);
     };

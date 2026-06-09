@@ -617,6 +617,9 @@ def _pg_run_migrations(conn):
     _pg_ensure_column(conn, "exports", "user_id", "INTEGER")
     _pg_ensure_column(conn, "project_controls", "print_height", "INTEGER NOT NULL DEFAULT 12")
     _pg_ensure_column(conn, "project_controls", "fabric_width", "INTEGER NOT NULL DEFAULT 54")
+    _pg_ensure_column(conn, "background_jobs", "progress_pct", "INTEGER NOT NULL DEFAULT 0")
+    _pg_ensure_column(conn, "background_jobs", "stage", "TEXT NOT NULL DEFAULT ''")
+    _pg_ensure_column(conn, "pattern_variations", "export_filename", "TEXT")
 
     # Assign orphaned projects to the first user so studio-state queries work.
     conn.execute(
@@ -943,6 +946,9 @@ def init_db():
         ensure_column("exports", "user_id", "INTEGER REFERENCES users(id)")
         ensure_column("project_controls", "print_height", "INTEGER NOT NULL DEFAULT 12")
         ensure_column("project_controls", "fabric_width", "INTEGER NOT NULL DEFAULT 54")
+        ensure_column("background_jobs", "progress_pct", "INTEGER NOT NULL DEFAULT 0")
+        ensure_column("background_jobs", "stage", "TEXT NOT NULL DEFAULT ''")
+        ensure_column("pattern_variations", "export_filename", "TEXT")
 
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
         conn.commit()

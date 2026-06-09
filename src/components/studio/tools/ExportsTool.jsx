@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, apiFetch, forceDownload } from '../shared/helpers';
 import { createPortal } from 'react-dom';
 
 export default function ExportsTool(props) {
@@ -13,6 +13,10 @@ export default function ExportsTool(props) {
     const [exportsFilter, setExportsFilter] = useState('all');
     const [exportsPage, setExportsPage] = useState(1);
     const [pipelineRuns, setPipelineRuns] = useState([]);
+    const [versions, setVersions] = useState([]);
+    const [shareLoading, setShareLoading] = useState(null);
+    const [restoreLoading, setRestoreLoading] = useState(null);
+    const isFreePlan = (user?.plan || 'Free Trial').toLowerCase().includes('free');
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
     const techPackCreditCost = creditPricing?.techPack || 2;
@@ -56,9 +60,60 @@ export default function ExportsTool(props) {
             .finally(() => setIsLoadingExports(false));
     }, [activeProject?.id, currentToken]);
 
+    const loadVersions = useCallback(() => {
+        if (!activeProject?.id || !currentToken) return;
+        apiFetch(`/api/projects/${activeProject.id}/versions`, {}, currentToken)
+            .then((data) => {
+                if (data.success) setVersions(data.versions || []);
+            })
+            .catch(() => {});
+    }, [activeProject?.id, currentToken]);
+
     useEffect(() => {
-        if (tool === 'exports') loadExports();
-    }, [tool, loadExports]);
+        if (tool === 'exports') {
+            loadExports();
+            loadVersions();
+        }
+    }, [tool, loadExports, loadVersions]);
+
+    const shareExport = async (filename) => {
+        setShareLoading(filename);
+        try {
+            const data = await apiFetch('/api/share-links', {
+                method: 'POST',
+                body: JSON.stringify({
+                    projectId: activeProject.id,
+                    exportFilename: filename,
+                    expiresDays: 14,
+                }),
+            }, currentToken);
+            if (!data.success) throw new Error(data.error || 'Failed to create share link');
+            await navigator.clipboard.writeText(data.shareUrl);
+            setError('');
+            window.alert('Share link copied to clipboard.');
+        } catch (err) {
+            setError(err.message || 'Could not create share link');
+        } finally {
+            setShareLoading(null);
+        }
+    };
+
+    const restoreVersion = async (versionId) => {
+        setRestoreLoading(versionId);
+        try {
+            const data = await apiFetch(`/api/projects/${activeProject.id}/versions/${versionId}/restore`, {
+                method: 'POST',
+                body: JSON.stringify({}),
+            }, currentToken);
+            if (!data.success) throw new Error(data.error || 'Failed to restore version');
+            loadVersions();
+            loadExports();
+        } catch (err) {
+            setError(err.message || 'Could not restore version');
+        } finally {
+            setRestoreLoading(null);
+        }
+    };
 
     const toggleExportSelect = (id) => {
         setSelectedExports(prev => {
@@ -327,6 +382,35 @@ export default function ExportsTool(props) {
 
         return (
             <div className="st-inspire-canvas full-width">
+                {versions.length > 0 && (
+                    <div className="st-versions-panel">
+                        <div className="st-stepper-title">Version history</div>
+                        <div className="st-versions-grid">
+                            {versions.slice(0, 12).map((version) => {
+                                const thumb = version.imageUrl?.startsWith('http') ? version.imageUrl : `${API}${version.imageUrl}`;
+                                return (
+                                    <button
+                                        key={version.id}
+                                        type="button"
+                                        className={`st-version-card ${version.isSelected ? 'selected' : ''}`}
+                                        onClick={() => restoreVersion(version.id)}
+                                        disabled={restoreLoading === version.id}
+                                    >
+                                        <img src={thumb} alt={version.name} loading="lazy" />
+                                        <div className="st-version-meta">
+                                            {restoreLoading === version.id ? 'Restoring…' : version.name}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+                {isFreePlan && (
+                    <div className="st-watermark-badge" style={{ marginBottom: '1rem' }}>
+                        Free plan downloads include a RIMI AI watermark. Upgrade for clean exports.
+                    </div>
+                )}
                 {isLoadingExports ? (
                     <div className="st-loading"><div className="st-spinner" /><span>Loading history...</span></div>
                 ) : exportsList.length > 0 ? (
@@ -416,7 +500,7 @@ export default function ExportsTool(props) {
                                                     <div className="st-panel-image-container">
                                                         <img src={previewSrc} alt="Final Output" className="st-export-log-image" loading="lazy" />
                                                         <div className="st-export-image-hover">
-                                                            <a href={fullUrl} onClick={(e) => forceDownload(e, fullUrl)} className="st-export-hover-btn dl" title="Download">
+                                                            <a href={fullUrl} onClick={(e) => forceDownload(e, fullUrl, file.id, currentToken)} className="st-export-hover-btn dl" title="Download">
                                                                 <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
                                                                 <span>Download</span>
                                                             </a>
@@ -425,6 +509,16 @@ export default function ExportsTool(props) {
                                                     <div className="st-export-meta-row">
                                                         <span className={`st-export-badge ${file.format.toLowerCase()}`}>{file.format}</span>
                                                         <span className="st-export-size">{file.size}</span>
+                                                        <button
+                                                            className="st-export-techpack-btn"
+                                                            title="Copy public share link"
+                                                            onClick={() => shareExport(file.id)}
+                                                            disabled={shareLoading === file.id}
+                                                            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', transition: 'all 0.2s' }}
+                                                        >
+                                                            <I d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" s={13} />
+                                                            {shareLoading === file.id ? 'Sharing…' : 'Share'}
+                                                        </button>
                                                         {file.type === 'image' && (
                                                             <button
                                                                 className="st-export-techpack-btn"

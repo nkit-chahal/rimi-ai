@@ -403,13 +403,19 @@ def extract_design_single():
         if access_error:
             return access_error
         user_id = g.current_user['id']
+        worker_payload = {
+            **data,
+            "userId": user_id,
+            "projectId": project_id,
+            "toolKey": "extract-design-single",
+        }
         job = enqueue_or_run(
             "extract-design-single",
             user_id,
             project_id,
-            data,
+            worker_payload,
             run_generation_job,
-            json.dumps({"toolKey": "extract", "filename": data.get("filename"), "modelId": data.get("modelId")}),
+            json.dumps(worker_payload),
         )
         return jsonify({"success": True, **job})
 

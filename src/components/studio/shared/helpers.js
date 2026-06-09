@@ -119,7 +119,7 @@ function toDownloadTarget(url) {
  * Force-download a file. Cross-origin assets (Vercel UI + Railway API) cannot use
  * <a download> directly — we fetch via /api/download and save as a blob instead.
  */
-export async function forceDownload(e, url, filename) {
+export async function forceDownload(e, url, filename, token = null) {
     if (e?.preventDefault) e.preventDefault();
     if (!url) return;
 
@@ -132,9 +132,11 @@ export async function forceDownload(e, url, filename) {
 
     const target = toDownloadTarget(url);
     const proxyUrl = `${API}/api/download?url=${encodeURIComponent(target)}`;
+    const authToken = normalizeToken(token) || normalizeToken(localStorage.getItem('rim_token'));
+    const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 
     try {
-        const res = await fetch(proxyUrl);
+        const res = await fetch(proxyUrl, { headers });
         if (!res.ok) throw new Error(`Download failed (${res.status})`);
         const blob = await res.blob();
         const objectUrl = URL.createObjectURL(blob);
@@ -209,4 +211,40 @@ export async function apiFetch(url, options = {}, token = null) {
     }
     
     return res.json();
+}
+
+/** Poll a background job until it completes. */
+export async function waitForJob(jobId, token, { onProgress, intervalMs = 600, signal } = {}) {
+    const authToken = normalizeToken(token);
+    while (true) {
+        if (signal?.aborted) {
+            throw new Error('Job cancelled');
+        }
+        const data = await apiFetch(`/api/jobs/${jobId}`, {}, authToken);
+        const job = data.job;
+        onProgress?.(job);
+        if (job.status === 'completed') {
+            return job.result;
+        }
+        if (job.status === 'failed') {
+            throw new Error(job.error || 'Job failed');
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+    }
+}
+
+/** Submit an async API job and wait for the result with live progress. */
+export async function runAsyncJob(endpoint, body, token, { onProgress, signal } = {}) {
+    const data = await apiFetch(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ ...body, async: true }),
+    }, token);
+    if (data.sync && data.result) {
+        onProgress?.({ status: 'completed', progressPct: 100, stage: 'Complete', result: data.result });
+        return data.result;
+    }
+    if (!data.jobId) {
+        throw new Error('Async job did not return a job id');
+    }
+    return waitForJob(data.jobId, token, { onProgress, signal });
 }

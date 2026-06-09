@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify, send_from_directory, Response, ab
 from config import UPLOAD_DIR, RESULTS_DIR, USE_S3
 from db import db, db_lock, iso_to_epoch
 from middleware import login_required
+from watermark import apply_watermark, is_free_plan
 import storage
 
 bp = Blueprint('exports', __name__)
@@ -102,12 +103,24 @@ def download():
             dir_type = 'results' if path.startswith('/results/') else 'uploads'
             directory = RESULTS_DIR if dir_type == 'results' else UPLOAD_DIR
             local_path = os.path.join(directory, filename)
+            file_bytes = None
+            content_type = None
             if os.path.exists(local_path):
-                return send_from_directory(directory, filename, as_attachment=True)
-            if USE_S3:
-                data, ct = storage.get_file(dir_type, filename)
-                if data:
-                    return Response(data, mimetype=ct, headers={'Content-Disposition': f'attachment; filename={filename}'})
+                with open(local_path, 'rb') as handle:
+                    file_bytes = handle.read()
+                content_type = 'image/svg+xml' if filename.endswith('.svg') else 'application/octet-stream'
+            elif USE_S3:
+                file_bytes, content_type = storage.get_file(dir_type, filename)
+            if file_bytes:
+                if is_free_plan(g.current_user.get('plan')) and not filename.endswith('.svg'):
+                    file_bytes = apply_watermark(file_bytes)
+                    content_type = 'image/png'
+                    filename = filename.rsplit('.', 1)[0] + '_watermarked.png'
+                return Response(
+                    file_bytes,
+                    mimetype=content_type or 'application/octet-stream',
+                    headers={'Content-Disposition': f'attachment; filename={filename}'},
+                )
 
     # For remote URLs — SSRF protection: only allow known domains
     import requests as http_requests
