@@ -121,7 +121,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [isLoadingState, setIsLoadingState] = useState(true);
-    const [showBootSplash, setShowBootSplash] = useState(isBootEntry);
+    const [showBootSplash, setShowBootSplash] = useState(() => isBootEntry || Boolean(currentToken));
     const bootStartedAtRef = useRef(Date.now());
     const bootCompletedRef = useRef(false);
     const [paymentStatus, setPaymentStatus] = useState({ loadingPackId: null, message: '', error: '' });
@@ -606,14 +606,22 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         return () => { workspaceLoadIdRef.current += 1; };
     }, [applyStudioState, currentToken, isAdmin]);
 
+    const workspaceReady = workspaceHydrated && !isLoadingState;
+
     useEffect(() => {
-        if (!showBootSplash || isLoadingState) return undefined;
+        if (!showBootSplash || !workspaceReady) return undefined;
 
         const elapsed = Date.now() - bootStartedAtRef.current;
         const remaining = Math.max(0, BOOT_SPLASH_MIN_MS - elapsed);
         const timer = window.setTimeout(() => setShowBootSplash(false), remaining);
         return () => window.clearTimeout(timer);
-    }, [showBootSplash, isLoadingState]);
+    }, [showBootSplash, workspaceReady]);
+
+    useEffect(() => {
+        if (!showBootSplash) return undefined;
+        const maxTimer = window.setTimeout(() => setShowBootSplash(false), 15000);
+        return () => window.clearTimeout(maxTimer);
+    }, [showBootSplash]);
 
     useEffect(() => {
         const onKeyDown = (e) => {
@@ -1291,7 +1299,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         <div className={`studio ${isSidebarHidden ? 'sidebar-hidden' : ''}`}>
             <StudioBootSplash
                 visible={showBootSplash}
-                dataReady={!isLoadingState}
+                dataReady={workspaceReady}
                 minDurationMs={BOOT_SPLASH_MIN_MS}
                 onHidden={() => {
                     if (!bootCompletedRef.current) {
@@ -1795,14 +1803,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             />
                         )}
 
-                        {isLoadingState && !showBootSplash && !workspaceHydrated ? (
-                            <div className="st-loading-layout" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '320px', gap: '1rem' }}>
-                                <div className="st-spinner" style={{ width: '36px', height: '36px', borderWidth: '3px' }} />
-                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>Loading workspace…</span>
-                            </div>
-                        ) : (
-                            renderCanvas()
-                        )}
+                        {renderCanvas()}
                     </main>
                     {['dashboard', 'repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers'].includes(tool) && (
                         <aside className="st-right-panel" ref={setRightPanelEl} />
