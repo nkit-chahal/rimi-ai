@@ -17,18 +17,46 @@ logger = logging.getLogger(__name__)
 
 
 def _rate_limit_storage_uri():
-    """Use Redis when configured and the redis package is installed; otherwise memory."""
+    """Pick a rate-limit backend; never return Redis unless the client library works."""
     uri = os.getenv("RATELIMIT_STORAGE_URI") or os.getenv("REDIS_URL") or "memory://"
-    if uri.startswith(("redis://", "rediss://")):
-        try:
-            import redis  # noqa: F401
-        except ImportError:
-            logger.warning(
-                "REDIS_URL is set but the redis package is not installed; "
-                "falling back to in-memory rate limiting"
-            )
-            return "memory://"
-    return uri
+    if not uri.startswith(("redis://", "rediss://")):
+        return uri
+    try:
+        import redis  # noqa: F401
+        from limits.storage import storage_from_string
+
+        storage_from_string(uri)
+        return uri
+    except Exception as exc:
+        logger.warning(
+            "Redis rate-limit storage unavailable (%s); using in-memory rate limiting",
+            exc,
+        )
+        return "memory://"
+
+
+def _init_rate_limiter(app):
+    """Create Flask-Limiter; always fall back to memory if Redis storage cannot init."""
+    storage_uri = _rate_limit_storage_uri()
+    try:
+        return Limiter(
+            get_remote_address,
+            app=app,
+            default_limits=["200 per minute"],
+            storage_uri=storage_uri,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Rate limiter init failed for %s (%s); using memory://",
+            storage_uri,
+            exc,
+        )
+        return Limiter(
+            get_remote_address,
+            app=app,
+            default_limits=["200 per minute"],
+            storage_uri="memory://",
+        )
 
 
 def create_app():
@@ -70,15 +98,8 @@ def create_app():
     # Security: enforce max upload size (25 MB)
     app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
-    # Rate limiting
-    limiter = Limiter(
-        get_remote_address,
-        app=app,
-        default_limits=["200 per minute"],
-        storage_uri=_rate_limit_storage_uri(),
-    )
-    # Store limiter on app so route modules can use it
-    app.limiter = limiter
+    # Rate limiting (Redis when available; memory fallback so deploy never crashes)
+    app.limiter = _init_rate_limiter(app)
 
     # Initialize the database (create tables, seed data)
     init_db()
