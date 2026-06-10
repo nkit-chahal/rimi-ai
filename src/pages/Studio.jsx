@@ -93,8 +93,14 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'removebg', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace'];
     const isAdmin = currentUser?.role === 'admin';
 
+    const readToolFromHash = useCallback(() => {
+        const hash = window.location.hash.replace(/^#\/?/, '');
+        const parts = hash.split(/[/?#]/).filter(Boolean);
+        return parts[0] === 'studio' ? parts[1] : parts[0];
+    }, []);
+
     const [tool, _setTool] = useState(() => {
-        const hash = window.location.hash.replace('#', '');
+        const hash = readToolFromHash();
         const allowed = isAdmin ? adminTools : userTools;
         if (allowed.includes(hash)) return hash;
         return isAdmin ? 'admin-dashboard' : 'pattern';
@@ -104,7 +110,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         const allowed = isAdmin ? adminTools : userTools;
         if (!allowed.includes(t)) t = isAdmin ? 'admin-dashboard' : 'pattern';
         _setTool(t);
-        window.location.hash = t;
+        window.history.replaceState(null, '', `#/studio/${t}`);
     }, [isAdmin]);
 
     const [state, setState] = useState(emptyState);
@@ -121,7 +127,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [isLoadingState, setIsLoadingState] = useState(true);
-    const [showBootSplash, setShowBootSplash] = useState(() => isBootEntry || Boolean(currentToken));
+    const [showBootSplash, setShowBootSplash] = useState(() => Boolean(isBootEntry));
     const bootStartedAtRef = useRef(Date.now());
     const bootCompletedRef = useRef(false);
     const [paymentStatus, setPaymentStatus] = useState({ loadingPackId: null, message: '', error: '' });
