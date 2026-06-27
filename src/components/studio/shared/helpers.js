@@ -16,6 +16,22 @@ export function normalizeToken(token) {
     return cleaned.length > 0 ? cleaned : null;
 }
 
+/** JSON fetch headers with optional Bearer auth. */
+export function jsonAuthHeaders(token, extra = {}) {
+    const headers = { 'Content-Type': 'application/json', ...extra };
+    const authToken = normalizeToken(token);
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    return headers;
+}
+
+/** Headers with Bearer auth only (e.g. FormData uploads). */
+export function bearerAuthHeaders(token, extra = {}) {
+    const headers = { ...extra };
+    const authToken = normalizeToken(token);
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    return headers;
+}
+
 const STUDIO_PREFETCH_KEY = 'rim_studio_prefetch';
 
 /** Warm studio-state while login UI is still visible. */

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
@@ -17,7 +17,7 @@ const EXTRACT_MODEL_DEFS = [
 
 export default function PatternTool({
     uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, tool, creditPricing, setEnhUrl, setTool,
-    handlePreUpload, onUploadInvalid, onUploadPaste,
+    handlePreUpload, onUploadInvalid, onUploadPaste, currentToken,
 }) {
     // ===== LOCAL STATE =====
     const [extractResults, setExtractResults] = useState(EXTRACT_MODEL_DEFS.map(m => ({ ...m, loading: false, url: null, error: null, duration: 0 })));
@@ -76,7 +76,7 @@ export default function PatternTool({
             try {
                 const r = await fetch(`${API}/api/extract-design-single`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: jsonAuthHeaders(currentToken),
                     body: JSON.stringify({
                         filename: safeFilename,
                         imageUrl: safeUrl,
@@ -128,7 +128,7 @@ export default function PatternTool({
         try {
             const r = await fetch(`${API}/api/extract-edit`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     imageUrl: model.url,
                     prompt: userMsg,

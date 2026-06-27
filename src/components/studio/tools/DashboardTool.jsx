@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload } from '../shared/helpers';
+import { API, apiFetch, forceDownload, jsonAuthHeaders, bearerAuthHeaders } from '../shared/helpers';
 import { createPortal } from 'react-dom';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
@@ -73,7 +73,7 @@ export default function DashboardTool(props) {
                     .then((d) => { if (d.success) setPipelineRuns(d.runs); })
                     .catch(() => { });
             }
-            fetch(`${API}/api/workflows`).then(r => r.json()).then(d => {
+            fetch(`${API}/api/workflows`, { headers: bearerAuthHeaders(currentToken) }).then(r => r.json()).then(d => {
                 if (d.success) setSavedProfiles(d.workflows);
             }).catch(() => { });
         }
@@ -97,7 +97,7 @@ export default function DashboardTool(props) {
     const deleteProfile = async (id) => {
         if (!window.confirm('Are you sure you want to delete this profile?')) return;
         try {
-            const r = await fetch(`${API}/api/workflows/${id}`, { method: 'DELETE' });
+            const r = await fetch(`${API}/api/workflows/${id}`, { method: 'DELETE', headers: bearerAuthHeaders(currentToken) });
             const d = await r.json();
             if (d.success) {
                 setSavedProfiles(prev => prev.filter(p => p.id !== id));
@@ -179,7 +179,7 @@ export default function DashboardTool(props) {
         setPipelinePreview(URL.createObjectURL(file));
         const fd = new FormData();
         fd.append('image', file);
-        fetch(`${API}/api/upload`, { method: 'POST', body: fd })
+        fetch(`${API}/api/upload`, { method: 'POST', body: fd, headers: bearerAuthHeaders(currentToken) })
             .then(r => r.json())
             .then(d => { if (d.success) setPipelineFile(d); })
             .catch(() => setError('Upload failed'));
@@ -230,7 +230,7 @@ export default function DashboardTool(props) {
         try {
             const rr = await fetch(`${API}/api/pipeline-runs`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     projectId: activeProject.id,
                     name: PIPELINE_TEMPLATES.find(t => t.id === selectedTemplate)?.name || 'Custom Pipeline',
@@ -257,7 +257,7 @@ export default function DashboardTool(props) {
                     resultUrl = pipelineFile ? `${API}/uploads/${pipelineFile.filename}` : null;
                 } else if (step.type === 'extract') {
                     const r = await fetch(`${API}/api/extract-design`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        method: 'POST', headers: jsonAuthHeaders(currentToken),
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, userId: user?.id }),
                     });
                     const d = await r.json();
@@ -265,7 +265,7 @@ export default function DashboardTool(props) {
                     else throw new Error(d.error || 'Extraction failed');
                 } else if (step.type === 'seamless') {
                     const r = await fetch(`${API}/api/make-seamless`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        method: 'POST', headers: jsonAuthHeaders(currentToken),
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, userId: user?.id }),
                     });
                     const d = await r.json();
@@ -273,7 +273,7 @@ export default function DashboardTool(props) {
                     else throw new Error(d.error || 'Seamless failed');
                 } else if (step.type === 'repeat') {
                     const r = await fetch(`${API}/api/create-repeat-set`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        method: 'POST', headers: jsonAuthHeaders(currentToken),
                         body: JSON.stringify({
                             projectId: activeProject.id, filename: currentInput, userId: user?.id,
                             gridSize: step.settings?.gridSize || 3, scale: 100,
@@ -286,7 +286,7 @@ export default function DashboardTool(props) {
                     else throw new Error(d.error || 'Repeat failed');
                 } else if (step.type === 'upscale') {
                     const r = await fetch(`${API}/api/upscale`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        method: 'POST', headers: jsonAuthHeaders(currentToken),
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, factor: step.settings?.upscaleFactor || 'x4', userId: user?.id }),
                     });
                     const d = await r.json();
@@ -294,7 +294,7 @@ export default function DashboardTool(props) {
                     else throw new Error(d.error || 'Upscale failed');
                 } else if (step.type === 'vectorize') {
                     const r = await fetch(`${API}/api/vectorize`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        method: 'POST', headers: jsonAuthHeaders(currentToken),
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, userId: user?.id }),
                     });
                     const d = await r.json();
@@ -327,12 +327,12 @@ export default function DashboardTool(props) {
         const finalStatus = results.every(r => r.status === 'done') ? 'completed' : 'failed';
         if (runId) {
             fetch(`${API}/api/pipeline-runs/${runId}`, {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                method: 'PATCH', headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({ status: finalStatus, results }),
             }).catch(() => { });
         }
         // Refresh runs list
-        fetch(`${API}/api/pipeline-runs`).then(r => r.json()).then(d => {
+        fetch(`${API}/api/pipeline-runs`, { headers: bearerAuthHeaders(currentToken) }).then(r => r.json()).then(d => {
             if (d.success) setPipelineRuns(d.runs);
         }).catch(() => { });
 
@@ -368,7 +368,7 @@ export default function DashboardTool(props) {
         try {
             const rr = await fetch(`${API}/api/workflows`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     name: pipelineName.trim(),
                     steps: pipelineSteps.map(s => s.type),

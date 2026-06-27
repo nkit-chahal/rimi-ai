@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload } from '../shared/helpers';
+import { API, apiFetch, forceDownload, jsonAuthHeaders } from '../shared/helpers';
 import { createPortal } from 'react-dom';
 
 export default function ExportsTool(props) {
@@ -164,7 +164,7 @@ export default function ExportsTool(props) {
         try {
             const res = await fetch(`${API}/api/tech-pack`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename,
                     projectId: activeProject.id,

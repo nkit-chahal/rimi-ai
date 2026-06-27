@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
 import { createPortal } from 'react-dom';
 import * as fabric from 'fabric';
 import { useImageDropzone } from '../shared/useImageDropzone';
@@ -104,7 +104,7 @@ export default function ImageLayersTool(props) {
         const trigger = async () => {
             const r = await fetch(`${API}/api/image-layers`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: uploaded.filename,
                     numLayers: imageLayersNumLayers,
@@ -149,7 +149,7 @@ export default function ImageLayersTool(props) {
                     try {
                         const capRes = await fetch(`${API}/api/caption-layer`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: jsonAuthHeaders(currentToken),
                             body: JSON.stringify({ filename: layer.filename })
                         });
                         const capData = await capRes.json();
@@ -364,7 +364,7 @@ export default function ImageLayersTool(props) {
         try {
             const res = await fetch(`${API}/api/edit-layer`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: layerData.filename,
                     prompt: layerEditPrompt,
@@ -441,7 +441,7 @@ export default function ImageLayersTool(props) {
         try {
             const res = await fetch(`${API}/api/image-layers`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: layerData.filename,
                     numLayers: recursiveLayerCount,
@@ -512,7 +512,7 @@ export default function ImageLayersTool(props) {
                 }).catch(err => console.error('Error loading recursive layer', err));
                 fetch(`${API}/api/caption-layer`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: jsonAuthHeaders(currentToken),
                     body: JSON.stringify({ filename: child.filename })
                 })
                     .then(r => r.json())
@@ -765,7 +765,7 @@ export default function ImageLayersTool(props) {
         try {
             const res = await fetch(`${API}/api/inpaint-layer`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: layerData.filename,
                     prompt: layerEditPrompt,
@@ -866,7 +866,7 @@ export default function ImageLayersTool(props) {
         try {
             const res = await fetch(`${API}/api/compose-layers`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     layers: payloadLayers,
                     width: Math.round(canvas.getWidth()),

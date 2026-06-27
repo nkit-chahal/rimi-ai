@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function InspireTool({
@@ -78,7 +78,7 @@ export default function InspireTool({
         try {
             const r = await fetch(`${API}/api/describe-image`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: uploaded.filename,
                     projectId: activeProject.id,
@@ -139,7 +139,7 @@ export default function InspireTool({
                 try {
                     const r = await fetch(`${API}/api/generate-inspirations`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: jsonAuthHeaders(currentToken),
                         body: JSON.stringify({
                             prompt: finalPrompt,
                             creativity,
