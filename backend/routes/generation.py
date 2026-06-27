@@ -22,6 +22,36 @@ from workers import run_generation_job
 bp = Blueprint('generation', __name__)
 
 
+def _resolve_extract_filepath(filename='', image_url=''):
+    """Resolve a local uploads path from filename and/or imageUrl."""
+    if not filename and image_url:
+        filename = os.path.basename(image_url.split('?', 1)[0])
+    filename = os.path.basename(filename) if filename else ''
+    if not filename:
+        raise ValueError('Filename is required')
+
+    filepath = storage.get_file_path('uploads', filename)
+    if filepath and os.path.exists(filepath):
+        return filename, filepath
+
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    if os.path.exists(filepath):
+        return filename, filepath
+
+    if image_url and image_url.startswith('http'):
+        ext = '.png' if '.png' in image_url.lower() else '.jpg'
+        dl_name = f"tmp_extract_{uuid.uuid4().hex[:8]}{ext}"
+        filepath = os.path.join(UPLOAD_DIR, dl_name)
+        resp = http_requests.get(image_url, timeout=30)
+        resp.raise_for_status()
+        with open(filepath, 'wb') as handle:
+            handle.write(resp.content)
+        storage.sync_to_s3(filepath)
+        return dl_name, filepath
+
+    raise FileNotFoundError(f'File not found: {filename}')
+
+
 @bp.route('/api/describe-image', methods=['POST'])
 @login_required
 def describe_image():
@@ -419,18 +449,19 @@ def extract_design_single():
         )
         return jsonify({"success": True, **job})
 
-    filename = data.get('filename', '')
-    filename = os.path.basename(filename) if filename else ''
     model_id = data.get('modelId', '')
-    
-    if not filename:
-        return jsonify({'error': 'Filename is required'}), 400
     if not model_id:
         return jsonify({'error': 'Model ID is required'}), 400
-        
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
-        return jsonify({'error': 'File not found'}), 404
+
+    try:
+        filename, filepath = _resolve_extract_filepath(
+            data.get('filename', ''),
+            data.get('imageUrl', ''),
+        )
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except FileNotFoundError as exc:
+        return jsonify({'error': str(exc)}), 404
 
     project_id, access_error = project_access_from_payload(data)
     if access_error:

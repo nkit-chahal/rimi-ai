@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders, resolveImagePayload } from '../shared/helpers';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
@@ -42,14 +42,16 @@ export default function PatternTool({
     });
 
     const extractDesignMulti = async () => {
-        const activeUrl = preview || activeProject.heroImageUrl;
-        if (!uploaded && !activeUrl) { setError('Upload an image first'); return; }
-
-        let safeFilename = uploaded?.filename;
-        let safeUrl = !uploaded ? activeUrl : null;
-        if (!safeFilename && safeUrl && !safeUrl.startsWith('http')) {
-            safeFilename = safeUrl.split('/').pop();
-            safeUrl = null;
+        const imagePayload = resolveImagePayload({
+            uploaded,
+            preview,
+            heroImageUrl: activeProject?.heroImageUrl,
+        });
+        if (!imagePayload || imagePayload.pending) {
+            setError(imagePayload?.pending
+                ? 'Image is still uploading — wait a moment and try again.'
+                : 'Upload an image first');
+            return;
         }
 
         const modelsToRun = EXTRACT_MODEL_DEFS.filter(m => enabledModels[m.id]);
@@ -78,8 +80,8 @@ export default function PatternTool({
                     method: 'POST',
                     headers: jsonAuthHeaders(currentToken),
                     body: JSON.stringify({
-                        filename: safeFilename,
-                        imageUrl: safeUrl,
+                        filename: imagePayload.filename,
+                        imageUrl: imagePayload.imageUrl,
                         projectId: activeProject.id,
                         userId: user?.id,
                         modelId: modelDef.id

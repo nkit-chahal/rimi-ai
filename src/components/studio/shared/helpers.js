@@ -32,6 +32,40 @@ export function bearerAuthHeaders(token, extra = {}) {
     return headers;
 }
 
+/**
+ * Resolve filename/imageUrl for API calls that process an uploaded or hero image.
+ * Returns null if no image source, { pending: true } if upload has not finished.
+ */
+export function resolveImagePayload({ uploaded, preview, heroImageUrl } = {}) {
+    const serverFilename = uploaded?.filename;
+    if (serverFilename) {
+        return { filename: serverFilename, imageUrl: null };
+    }
+
+    const activeUrl = preview || heroImageUrl || null;
+    if (uploaded && !serverFilename) {
+        if (!activeUrl || activeUrl.startsWith('blob:')) {
+            return { pending: true };
+        }
+    }
+    if (!activeUrl) return null;
+
+    if (activeUrl.startsWith('blob:')) {
+        return uploaded ? { pending: true } : null;
+    }
+
+    if (activeUrl.startsWith('http')) {
+        const basename = activeUrl.split('/').pop()?.split('?')[0];
+        return {
+            filename: basename && basename.includes('.') ? basename : '',
+            imageUrl: activeUrl,
+        };
+    }
+
+    const name = activeUrl.split('/').pop()?.split('?')[0];
+    return name ? { filename: name, imageUrl: null } : null;
+}
+
 const STUDIO_PREFETCH_KEY = 'rim_studio_prefetch';
 
 /** Warm studio-state while login UI is still visible. */
