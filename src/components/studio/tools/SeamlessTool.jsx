@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, runAsyncJob } from '../shared/helpers';
+import { API, forceDownload, runAsyncJob, jsonAuthHeaders } from '../shared/helpers';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
@@ -97,7 +97,7 @@ export default function SeamlessTool({
         const trigger = async () => {
             const res = await fetch(`${API}/api/generate-seamless`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     prompt: seamlessPrompt,
                     referenceFilename: uploaded?.filename || null,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import { createPortal } from 'react-dom';
@@ -9,7 +9,7 @@ export default function VectorizeTool(props) {
     const {
         uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse,
         creditPricing, vecUrl, setVecUrl, upscaleUrl, setUpscaleUrl, tool, rightPanelEl,
-        handlePreUpload, onUploadInvalid, onUploadPaste,
+        handlePreUpload, onUploadInvalid, onUploadPaste, currentToken,
     } = props;
 
     const [vecEngine, setVecEngine] = useState('api');
@@ -57,7 +57,7 @@ export default function VectorizeTool(props) {
         const trigger = async () => {
             const r = await fetch(`${API}/api/vectorize`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, engine: vecEngine, numColors: vecColors, projectId: activeProject.id, userId: user?.id })
             });
             const d = await r.json();
@@ -93,7 +93,7 @@ export default function VectorizeTool(props) {
         const trigger = async () => {
             const r = await fetch(`${API}/api/upscale`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({ filename: uploaded.filename, upscaleFactor, projectId: activeProject.id, userId: user?.id })
             });
             const d = await r.json();

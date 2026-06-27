@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
 import { createPortal } from 'react-dom';
 
 export default function VectorProTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, brandPalettes } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, brandPalettes, currentToken } = props;
 
     const [layerExportLoading, setLayerExportLoading] = useState(null);
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
@@ -36,7 +36,7 @@ export default function VectorProTool(props) {
         try {
             const res = await fetch(`${API}/api/color-reduce`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: uploaded.filename,
                     numColors: vpNumColors,
@@ -65,7 +65,7 @@ export default function VectorProTool(props) {
         try {
             const res = await fetch(`${API}/api/pantone-match`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({ hex: hexVal }),
             });
             const d = await res.json();
@@ -90,7 +90,7 @@ export default function VectorProTool(props) {
         try {
             const res = await fetch(`${API}/api/layer-export`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: uploaded.filename,
                     numColors: vpNumColors,

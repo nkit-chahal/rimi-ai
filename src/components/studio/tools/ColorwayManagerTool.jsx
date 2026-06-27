@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { apiFetch, forceDownload } from '../shared/helpers';
+import { apiFetch, forceDownload, API, jsonAuthHeaders } from '../shared/helpers';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
@@ -89,7 +89,7 @@ export default function ColorwayManagerTool(props) {
         try {
             const res = await fetch(`${API}/api/colorways/export-linecard`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: uploaded?.filename,
                     colorways: cwmColorways,
