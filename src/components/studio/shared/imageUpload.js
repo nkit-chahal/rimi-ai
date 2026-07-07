@@ -1,5 +1,5 @@
 export const ACCEPTED_IMAGE_EXTENSIONS = '.jpg,.jpeg,.png,.webp';
-export const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+export const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/pjpeg'];
 
 const EXTENSION_MIME = {
     jpg: 'image/jpeg',
@@ -10,9 +10,14 @@ const EXTENSION_MIME = {
 
 export function isImageFile(file) {
     if (!file) return false;
-    if (file.type && ACCEPTED_MIME_TYPES.includes(file.type)) return true;
     const ext = file.name?.split('.').pop()?.toLowerCase();
-    return Boolean(ext && EXTENSION_MIME[ext]);
+    const extOk = Boolean(ext && EXTENSION_MIME[ext]);
+    if (file.type) {
+        if (ACCEPTED_MIME_TYPES.includes(file.type)) return true;
+        if (file.type === 'application/octet-stream' && extOk) return true;
+        if (file.type.startsWith('image/') && extOk) return true;
+    }
+    return extOk;
 }
 
 export function getImageFromDataTransfer(dataTransfer) {

@@ -868,7 +868,7 @@ input[type=range]::-moz-range-track {
   gap: 0;
   width: 100%;
   position: relative;
-  min-height: 500px;
+  min-height: 360px;
 }
 .st-comparison-card {
   flex: 1;
@@ -907,7 +907,7 @@ input[type=range]::-moz-range-track {
   justify-content: center;
   background: #fafafa;
   position: relative;
-  min-height: 350px;
+  min-height: 240px;
 }
 .st-comparison-card-body img {
   max-width: 100%;

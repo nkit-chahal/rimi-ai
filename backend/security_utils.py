@@ -91,7 +91,7 @@ def validate_image_bytes(data):
             raise ValueError(f"Unsupported image format: {fmt}")
         return True
     except Exception as exc:
-        raise ValueError("File is not a valid image") from exc
+        raise ValueError('File is not a valid JPG, PNG, or WEBP image') from exc
 
 
 def validate_upload_file(file_storage):

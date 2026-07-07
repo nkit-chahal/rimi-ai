@@ -26,6 +26,13 @@ const BillingPanel = lazy(() => import('../components/studio/billing/BillingPane
 
 const navLabel = (id) => t(`nav.${id}`) || id;
 
+/** Tools that render their own upload/preview UI — hide the global compact dropzone. */
+const COMPACT_UPLOAD_EXCLUDED_TOOLS = new Set([
+    'dashboard', 'exports', 'billing', 'workspace',
+    'pattern', 'inspire', 'seamless', 'mappings', 'vectorize', 'upscale', 'removebg', 'imagelayers',
+    'colorways', 'colorway-manager', 'vectorpro', 'repeat',
+]);
+
 const NAV = [
     { section: '', items: [{ id: 'dashboard', label: 'Pipeline Studio', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' }] },
     {
@@ -1354,7 +1361,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             </div>
                         )}
 
-                        {(tool !== 'dashboard' && tool !== 'exports' && tool !== 'billing' && tool !== 'workspace' && tool !== 'pattern' && tool !== 'inspire' && tool !== 'seamless' && tool !== 'mappings' && tool !== 'vectorize' && tool !== 'upscale' && tool !== 'removebg' && tool !== 'imagelayers' && !comingSoonToolIds.has(tool) && !tool.startsWith('admin')) && (
+                        {!COMPACT_UPLOAD_EXCLUDED_TOOLS.has(tool) && !comingSoonToolIds.has(tool) && !tool.startsWith('admin') && (
                             <ImageDropzone
                                 variant="compact"
                                 preview={preview}

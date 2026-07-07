@@ -30,8 +30,15 @@ export default function ColorwaysTool(props) {
     const [isCwRecoloring, setIsCwRecoloring] = useState(false);
     const [cwVariations, setCwVariations] = useState([]);
 
+    const uploadReady = Boolean(uploaded?.filename) && uploadStatus === 'ready';
+
     const extractColors = async () => {
-        if (!uploaded) return;
+        if (!uploadReady) {
+            if (isUploading) setError('Please wait — image is still uploading.');
+            else if (uploadStatus === 'error') setError('Upload failed. Replace the image and try again.');
+            else setError('Upload an image first (JPG, PNG, or WEBP).');
+            return;
+        }
         setIsCwExtracting(true);
         try {
             const d = await apiFetch('/api/extract-palette', {
@@ -52,7 +59,7 @@ export default function ColorwaysTool(props) {
     };
 
     const generateColorway = async () => {
-        if (!uploaded || cwTargetPalette.length === 0) return;
+        if (!uploadReady || cwTargetPalette.length === 0) return;
         if (!hasEnoughColorwayCredits) {
             setError(`Insufficient credits. Recolor needs ${colorwayCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
             return;
@@ -190,7 +197,7 @@ export default function ColorwaysTool(props) {
                         <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text)', fontSize: '1.2rem' }}>Color Mapping Editor</h3>
                         <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>Extract palette from original artwork and map to new target colors.</p>
                     </div>
-                    <button className="st-extract-btn-creative" onClick={extractColors} disabled={!uploaded || isCwExtracting} style={{ width: 'auto', padding: '0.5rem 1rem' }}>
+                    <button className="st-extract-btn-creative" onClick={extractColors} disabled={!uploadReady || isCwExtracting} style={{ width: 'auto', padding: '0.5rem 1rem' }}>
                         <div className={isCwExtracting ? 'spin-icon' : ''}>
                             <I d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" s={16} />
                         </div>
