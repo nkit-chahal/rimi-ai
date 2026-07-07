@@ -14,9 +14,12 @@ from PIL import Image, ImageDraw, ImageChops, ImageFilter
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client
 from db import db
 from auth import (
-    check_credits, credit_error_payload, credit_requirement,
-    record_activity, get_updated_credits, log_export, log_replicate_call,
+    credit_error_payload, credit_requirement,
+    get_updated_credits, log_export, log_replicate_call,
+    refund_credits, reserve_credits_or_error,
 )
+from security_utils import safe_fetch_url
+from rate_limits import expensive_generation_rate_limit
 from jobs import enqueue_or_run
 from services.make_seamless import execute_make_seamless
 from workers import run_generation_job
@@ -28,6 +31,7 @@ bp = Blueprint('seamless', __name__)
 
 @bp.route('/api/generate-seamless', methods=['POST'])
 @login_required
+@expensive_generation_rate_limit
 def generate_seamless():
     data = request.get_json()
     user_prompt = data.get('prompt', '')
@@ -41,9 +45,9 @@ def generate_seamless():
         return access_error
     user_id = g.current_user['id']
     required_credits = credit_requirement('seamless_texture', 84)
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', count)
     if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+        return jsonify(err), 403
     if not user_prompt:
         return jsonify({'error': 'Prompt is required'}), 400
     try:
@@ -67,8 +71,8 @@ def generate_seamless():
                     mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"
                     data_uri = f"data:{mime_type};base64,{encoded_string}"
         elif image_url and image_url.startswith('http'):
-            resp = http_requests.get(image_url, timeout=30)
-            encoded_string = base64.b64encode(resp.content).decode('utf-8')
+            content = safe_fetch_url(image_url, timeout=30)
+            encoded_string = base64.b64encode(content).decode('utf-8')
             data_uri = f"data:image/png;base64,{encoded_string}"
         messages = []
         if data_uri:
@@ -153,11 +157,13 @@ def generate_seamless():
             input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
             log_export(project_id, best_filename, input_fn, "Seamless Fix",
                        {"prompt": designer_prompt, "creativity": creativity, "input_image": input_fn or image_url})
-        record_activity(project_id, 'generation', count, credits_used, user_id=user_id)
+        if not results:
+            refund_credits(user_id, project_id, required_credits, note='Generate seamless produced no tiles')
         updated_credits = get_updated_credits(user_id)
         return jsonify({'success': True, 'tiles': results, 'bestUrl': best_url,
                         'bestScore': round(best_score, 3), 'designerPrompt': designer_prompt, **updated_credits})
     except Exception as e:
+        refund_credits(user_id, project_id, required_credits, note='Generate seamless failed')
         print(f"  [Generate Seamless] Error: {e}")
         import traceback; traceback.print_exc()
         return jsonify({'error': f'Failed to generate seamless pattern: {str(e)}'}), 500
@@ -165,6 +171,7 @@ def generate_seamless():
 
 @bp.route('/api/make-seamless', methods=['POST'])
 @login_required
+@expensive_generation_rate_limit
 def make_seamless():
     data = request.get_json() or {}
     project_id, access_error = project_access_from_payload(data)

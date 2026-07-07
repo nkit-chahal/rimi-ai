@@ -1,35 +1,30 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense as ReactSuspense } from 'react';
-import ReactCrop from 'react-image-crop';
-import 'react-image-crop/dist/ReactCrop.css';
-
 
 import ToolComingSoon from '../components/studio/shared/ToolComingSoon';
 import { COMING_SOON_TOOLS } from '../components/studio/shared/comingSoonTools';
 import { resolveToolComponent } from '../router/toolRegistry';
 import OnboardingBanner from '../components/OnboardingBanner';
+import { CreditsProvider } from '../contexts/CreditsContext';
+import { ProjectProvider } from '../contexts/ProjectContext';
+import { t } from '../i18n/en-IN';
+import { trackEvent } from '../observability';
+import '../styles/studio-shell.css';
 
 // Shared icons & helpers
 import { I } from '../components/studio/shared/StudioIcons';
-import { API, apiFetch, consumeStudioPrefetch, forceDownload } from '../components/studio/shared/helpers';
-import { loadRazorpay } from '../components/studio/shared/loadRazorpay';
+import { API, apiFetch, consumeStudioPrefetch, forceDownload, cacheFileAccessToken, mediaUrl } from '../components/studio/shared/helpers';
 import ImageDropzone from '../components/studio/shared/ImageDropzone';
 import { isImageFile } from '../components/studio/shared/imageUpload';
-import StudioCommandPalette from '../components/studio/shared/StudioCommandPalette';
-import StudioBootSplash from '../components/StudioBootSplash';
+import BgTaskManager from '../components/studio/BgTaskManager';
+import { useResultUrls } from '../stores/resultUrls';
 
-const GarmentPreview3D = lazy(() => import('../components/GarmentPreview3D'));
+const StudioCommandPalette = lazy(() => import('../components/studio/shared/StudioCommandPalette'));
+const StudioBootSplash = lazy(() => import('../components/StudioBootSplash'));
 
-// Pre-API fallback plans. Must mirror BILLING_PLANS in backend/routes/billing.py.
-// Pricing: 4 credits per INR 1  ->  ~57% gross margin / ~54% after Razorpay.
-// Live plan list arrives via /api/billing/overview and overrides this.
-const BILLING_PLAN_FALLBACK = [
-    { id: 'free', label: 'Free Trial', description: 'Trial credits for testing the studio.', credits: 50, amount: 0, priceLabel: 'Free', badge: '', features: ['50 starting credits', 'Try cheap models (Flux Schnell, Vectorize Local)', 'Razorpay recharge anytime'], checkoutEnabled: false },
-    { id: 'starter', label: 'Starter', description: 'Small production runs and evaluation.', credits: 1996, amount: 49900, priceLabel: '₹499', badge: '', features: ['1,996 AI credits', '~13 Pattern Extractions (GPT Image 2)', '~34 Make-Seamless / Mockup runs'], checkoutEnabled: true },
-    { id: 'creator', label: 'Creator', description: 'Best value for active textile workflows.', credits: 3996, amount: 99900, priceLabel: '₹999', badge: 'Popular', features: ['3,996 AI credits', '~27 Pattern Extractions, ~68 Seamless runs', 'Recommended for active studios'], checkoutEnabled: true },
-    { id: 'pro', label: 'Pro', description: 'For frequent studio use and client work.', credits: 11996, amount: 299900, priceLabel: '₹2,999', badge: '', features: ['11,996 AI credits', 'High-volume generation buffer', 'All AI tools unlocked'], checkoutEnabled: true },
-    { id: 'scale', label: 'Scale', description: 'Large credit top-up for production teams.', credits: 27996, amount: 699900, priceLabel: '₹6,999', badge: '', features: ['27,996 AI credits', 'Best per-credit rate', 'Designed for team production usage'], checkoutEnabled: true },
-    { id: 'enterprise', label: 'Enterprise', description: 'For agencies and high-volume teams.', credits: 59996, amount: 1499900, priceLabel: '₹14,999', badge: '', features: ['59,996 AI credits', 'Priority support', 'Bulk seat licensing on request'], checkoutEnabled: true },
-];
+const AdminShell = lazy(() => import('../components/studio/admin/AdminShell'));
+const BillingPanel = lazy(() => import('../components/studio/billing/BillingPanel'));
+
+const navLabel = (id) => t(`nav.${id}`) || id;
 
 const NAV = [
     { section: '', items: [{ id: 'dashboard', label: 'Pipeline Studio', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' }] },
@@ -44,7 +39,7 @@ const NAV = [
             { id: 'vectorize', label: 'Vectorize', icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z' },
             { id: 'upscale', label: 'Super Resolution', icon: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7' },
             { id: 'removebg', label: 'Remove Background', icon: 'M3 7h18M3 12h18M8 7v10M16 7v10M5 7V5a2 2 0 012-2h10a2 2 0 012 2v2' },
-            { id: 'imagelayers', label: 'Image Layers', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' },
+            { id: 'imagelayers', label: 'Qwen Studio', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' },
             { id: 'colorways', label: 'Colorways', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z' },
             { id: 'colorway-manager', label: 'Colorway Manager', icon: 'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83' },
             { id: 'vectorpro', label: 'Vector Pro', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485' },
@@ -86,12 +81,16 @@ const emptyState = {
     suggestion: '',
 };
 
-const BOOT_SPLASH_MIN_MS = 2200;
+const BOOT_SPLASH_MIN_MS = 400;
 
 export default function Studio({ onBack, currentUser, currentToken, onLogout, isBootEntry = false, onBootComplete }) {
     const adminTools = ['admin-dashboard', 'admin-users', 'admin-projects', 'admin-logs', 'admin-credits'];
     const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'removebg', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace'];
     const isAdmin = currentUser?.role === 'admin';
+
+    useEffect(() => {
+        if (isAdmin) import('../styles/admin.css');
+    }, [isAdmin]);
 
     const readToolFromHash = useCallback(() => {
         const hash = window.location.hash.replace(/^#\/?/, '');
@@ -122,7 +121,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const [editingProjectName, setEditingProjectName] = useState('');
     const [workspaceBusyId, setWorkspaceBusyId] = useState(null);
     const projectDropdownRef = useRef(null);
-    const [controlTab, setControlTab] = useState('controls');
     const [uploads, setUploads] = useState({});
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
@@ -130,16 +128,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const [showBootSplash, setShowBootSplash] = useState(() => Boolean(isBootEntry));
     const bootStartedAtRef = useRef(Date.now());
     const bootCompletedRef = useRef(false);
-    const [paymentStatus, setPaymentStatus] = useState({ loadingPackId: null, message: '', error: '' });
-    const [razorpayKeyId, setRazorpayKeyId] = useState(import.meta.env.VITE_RAZORPAY_KEY_ID || '');
-
-    const [billingOverview, setBillingOverview] = useState({
-        loading: false,
-        plans: BILLING_PLAN_FALLBACK,
-        usage: null,
-        payments: [],
-        razorpayConfigured: false,
-    });
 
     const hasLoadedControls = useRef(false);
     const lastSyncedControlsRef = useRef(null);
@@ -147,6 +135,19 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
     const [bgTasks, setBgTasks] = useState([]);
     const [showBgTasksDropdown, setShowBgTasksDropdown] = useState(false);
+
+    // Prune completed/failed bg tasks older than 5 minutes (Phase 4a)
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setBgTasks(prev => {
+                const now = Date.now();
+                const pruned = prev.filter(t => t.status === 'running' || (t._ts && now - t._ts < 300000));
+                return pruned.length !== prev.length ? pruned : prev;
+            });
+        }, 60000);
+        return () => clearInterval(interval);
+    }, []);
+
     const [isSidebarHidden, setIsSidebarHidden] = useState(false);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
     const accountDropdownRef = useRef(null);
@@ -159,14 +160,25 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         window.setTimeout(() => setNotice(''), 4000);
     }, []);
 
-    // Synchronized state urls for task manager view trigger
-    const [enhUrl, setEnhUrl] = useState(null);
-    const [seamlessUrl, setSeamlessUrl] = useState(null);
-    const [vecUrl, setVecUrl] = useState(null);
-    const [upscaleUrl, setUpscaleUrl] = useState(null);
-    const [removeBgUrl, setRemoveBgUrl] = useState(null);
-    const [cwUrl, setCwUrl] = useState(null);
-    const [repeatUrl, setRepeatUrl] = useState(null);
+    // Result URLs moved to zustand store (Phase 4b) — components subscribe only to what they need
+    const resultUrls = useResultUrls();
+    const enhUrl = resultUrls.enh;
+    const seamlessUrl = resultUrls.seamless;
+    const vecUrl = resultUrls.vec;
+    const upscaleUrl = resultUrls.upscale;
+    const removeBgUrl = resultUrls.removeBg;
+    const cwUrl = resultUrls.cw;
+    const repeatUrl = resultUrls.repeat;
+    const setEnhUrl = useCallback((v) => resultUrls.setRaw('enh', v), [resultUrls]);
+    const setSeamlessUrl = useCallback((v) => resultUrls.setRaw('seamless', v), [resultUrls]);
+    const setVecUrl = useCallback((v) => resultUrls.setRaw('vec', v), [resultUrls]);
+    const setUpscaleUrl = useCallback((v) => resultUrls.setRaw('upscale', v), [resultUrls]);
+    const setRemoveBgUrl = useCallback((v) => resultUrls.setRaw('removeBg', v), [resultUrls]);
+    const setCwUrl = useCallback((v) => resultUrls.setRaw('cw', v), [resultUrls]);
+    const setRepeatUrl = useCallback((v) => resultUrls.setRaw('repeat', v), [resultUrls]);
+    const qwenLaunch = resultUrls.qwenLaunch;
+    const clearQwenLaunch = useCallback(() => resultUrls.clearQwenLaunch(), [resultUrls]);
+    const setQwenLaunch = useCallback((v) => resultUrls.setQwenLaunch(v), [resultUrls]);
     const [isRepeat, setIsRepeat] = useState(false);
     const [rightPanelEl, setRightPanelEl] = useState(null);
 
@@ -177,7 +189,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             type,
             label,
             status: 'running',
-            progress: 5,
+            progress: 0,
+            stage: '',
             filename: filename || 'design_input.png',
             resultUrl: null,
             resultUrls: null,
@@ -185,33 +198,37 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             createdAt: new Date().toLocaleTimeString(),
         };
 
-        setBgTasks(prev => [newTask, ...prev]);
+        setBgTasks(prev => [newTask, ...prev].slice(0, 20));
 
-        let progressVal = 5;
-        const interval = setInterval(() => {
-            progressVal = Math.min(95, progressVal + Math.floor(Math.random() * 6) + 2);
-            setBgTasks(prev => prev.map(t => t.id === taskId ? { ...t, progress: progressVal } : t));
-        }, 1200);
+        const reportProgress = (progressPct, stage) => {
+            setBgTasks(prev => prev.map(t => t.id === taskId ? {
+                ...t,
+                progress: Math.min(99, progressPct ?? t.progress),
+                stage: stage ?? t.stage,
+            } : t));
+        };
 
-        triggerFn()
+        triggerFn(reportProgress)
             .then((result) => {
-                clearInterval(interval);
+                trackEvent('generation_complete', { tool: type, label, filename });
                 setBgTasks(prev => prev.map(t => t.id === taskId ? {
                     ...t,
                     status: 'completed',
                     progress: 100,
                     resultUrl: result.url,
-                    resultUrls: result.urls || null
-                } : t));
+                    resultUrls: result.urls || null,
+                    sessionId: result.sessionId || null,
+                    _ts: Date.now(),
+                } : t).slice(0, 20));
             })
             .catch((err) => {
-                clearInterval(interval);
                 setBgTasks(prev => prev.map(t => t.id === taskId ? {
                     ...t,
                     status: 'failed',
                     progress: 0,
-                    error: err.message || 'Generation failed'
-                } : t));
+                    error: err.message || 'Generation failed',
+                    _ts: Date.now(),
+                } : t).slice(0, 20));
             });
     };
 
@@ -232,17 +249,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         ? Math.min(100, Math.round((userRemainingCredits / user.creditsLimit) * 100))
         : 0;
 
-    // Dynamic Credit Pricing  (fallback values mirror DEFAULT_CREDIT_PRICING in
-    // backend/db.py at the 4 credits/INR pricing tier, ~57% gross margin).
-    // The live values come from /api/credit-pricing on mount.
-    const [creditPricing, setCreditPricing] = useState({
-        upload: 0, extract: 148, seamless: 58, repeat: 5, upscale: 23,
-        vectorize: 12, vectorizeLocal: 3, export: 0, inspire: 148,
-        mappings: 148, imageLayers: 69, imageLayerEdit: 35,
-        colorways: 3, recolor: 3, colorReduction: 3,
-        layerExport: 2, techPack: 2,
-        removeBg: 2, styleTransfer: 23, seamless_texture: 84,
-    });
+    const [creditPricing, setCreditPricing] = useState({});
 
     const repeatCreditCost = creditPricing.repeat || 5;
     const hasEnoughRepeatCredits = userRemainingCredits >= repeatCreditCost;
@@ -291,177 +298,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         if (activeProject?.id && !isLoadingState) fetchBrandPalettes();
     }, [fetchBrandPalettes, activeProject?.id, isLoadingState]);
 
-    // Admin state
-    const [adminUsers, setAdminUsers] = useState([]);
-    const [adminUsersLoading, setAdminUsersLoading] = useState(false);
-    const [adminSelectedUserId, setAdminSelectedUserId] = useState(null);
-    const [replicateLogs, setReplicateLogs] = useState([]);
-    const [loginEvents, setLoginEvents] = useState([]);
-    const [adminAuditEvents, setAdminAuditEvents] = useState([]);
-    const [replicateLogsLoading, setReplicateLogsLoading] = useState(false);
-    const [adminBilling, setAdminBilling] = useState({
-        summary: { totalUsers: 0, totalApiCalls: 0, totalCreditsSpent: 0, totalRechargeCredits: 0, totalOrders: 0, paidOrders: 0, paidAmount: 0, paidCredits: 0 },
-        users: [], payments: [], transactions: [],
-    });
-    const [adminBillingLoading, setAdminBillingLoading] = useState(false);
-    const [adminPricing, setAdminPricing] = useState([]);
-    const [adminPricingLoading, setAdminPricingLoading] = useState(false);
-    const [adminProjects, setAdminProjects] = useState([]);
-    const [adminProjectsLoading, setAdminProjectsLoading] = useState(false);
-    const [adminStats, setAdminStats] = useState({ totalUsers: 0, totalProjects: 0, recentLogs: [] });
-
-    const fetchAdminUsers = useCallback(() => {
-        setAdminUsersLoading(true);
-        fetch(`${API}/api/admin/users`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
-            .then(r => r.json())
-            .then(d => {
-                if (d.success && d.users) {
-                    setAdminUsers(d.users);
-                    if (!adminSelectedUserId && d.users.length > 0) {
-                        setAdminSelectedUserId(d.users[0].id);
-                    }
-                }
-            })
-            .catch(err => console.error('Failed to fetch admin users:', err))
-            .finally(() => setAdminUsersLoading(false));
-    }, [adminSelectedUserId, currentToken]);
-
-    const fetchAdminBilling = useCallback(() => {
-        setAdminBillingLoading(true);
-        fetch(`${API}/api/admin/billing-overview`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
-            .then(r => r.json())
-            .then(d => {
-                if (d.success) {
-                    setAdminBilling({
-                        summary: d.summary || { totalUsers: 0, totalApiCalls: 0, totalCreditsSpent: 0, totalRechargeCredits: 0, totalOrders: 0, paidOrders: 0, paidAmount: 0, paidCredits: 0 },
-                        users: d.users || [],
-                        payments: d.payments || [],
-                        transactions: d.transactions || [],
-                    });
-                    if (!adminSelectedUserId && d.users?.length > 0) setAdminSelectedUserId(d.users[0].id);
-                }
-            })
-            .catch(err => console.error('Failed to fetch admin billing:', err))
-            .finally(() => setAdminBillingLoading(false));
-    }, [adminSelectedUserId, currentToken]);
-
-    const fetchAdminPricing = useCallback(() => {
-        setAdminPricingLoading(true);
-        fetch(`${API}/api/admin/credit-pricing`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
-            .then(r => r.json())
-            .then(d => {
-                if (d.success && d.pricing) setAdminPricing(d.pricing);
-            })
-            .catch(err => console.error('Failed to fetch credit pricing:', err))
-            .finally(() => setAdminPricingLoading(false));
-    }, [currentToken]);
-
-    useEffect(() => {
-        if (isAdmin && (tool === 'admin-users' || tool === 'admin-credits')) fetchAdminUsers();
-    }, [tool, fetchAdminUsers, isAdmin]);
-
-    useEffect(() => {
-        if (isAdmin && (tool === 'admin-credits' || tool === 'admin-dashboard')) fetchAdminBilling();
-    }, [tool, fetchAdminBilling, isAdmin]);
-
-    useEffect(() => {
-        if (isAdmin && tool === 'admin-dashboard') {
-            Promise.all([
-                fetch(`${API}/api/admin/users`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
-                fetch(`${API}/api/admin/projects`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
-                fetch(`${API}/api/admin/logs`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
-            ]).then(([usersData, projectsData, logsData]) => {
-                setAdminStats({
-                    totalUsers: usersData.success ? usersData.users.length : 0,
-                    totalProjects: projectsData.success ? projectsData.projects.length : 0,
-                    recentLogs: logsData.success ? logsData.replicateLogs.slice(0, 8) : [],
-                });
-                if (usersData.success) setAdminUsers(usersData.users);
-            }).catch(() => { });
-        }
-    }, [tool, currentToken, isAdmin]);
-
-    useEffect(() => {
-        if (isAdmin && tool === 'admin-projects') {
-            setAdminProjectsLoading(true);
-            fetch(`${API}/api/admin/projects`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
-                .then(r => r.json())
-                .then(d => { if (d.success) setAdminProjects(d.projects); })
-                .catch(() => { })
-                .finally(() => setAdminProjectsLoading(false));
-        }
-    }, [tool, currentToken, isAdmin]);
-
-    const fetchBillingOverview = useCallback(() => {
-        if (!currentToken) return;
-        setBillingOverview(prev => ({ ...prev, loading: true }));
-        fetch(`${API}/api/billing/overview`, {
-            headers: { 'Authorization': `Bearer ${currentToken}` },
-        })
-            .then(r => r.json())
-            .then(d => {
-                if (d.success) {
-                    setBillingOverview({
-                        loading: false,
-                        plans: d.plans?.length ? d.plans : BILLING_PLAN_FALLBACK,
-                        usage: d.usage || null,
-                        payments: d.payments || [],
-                        razorpayConfigured: Boolean(d.razorpayConfigured),
-                    });
-                    if (d.usage) {
-                        updateCreditsFromResponse({
-                            creditsUsed: d.usage.creditsUsed,
-                            creditsLimit: d.usage.creditsLimit,
-                        });
-                    }
-                } else {
-                    throw new Error(d.error || 'Unable to load billing overview.');
-                }
-            })
-            .catch((err) => {
-                setBillingOverview(prev => ({ ...prev, loading: false }));
-                setPaymentStatus({ loadingPackId: null, message: '', error: err.message || 'Unable to load billing overview.' });
-            });
-    }, [currentToken]);
-
-    useEffect(() => {
-        if (tool !== 'billing' || !currentToken) return;
-        fetchBillingOverview();
-        loadRazorpay().catch(() => {});
-        fetch(`${API}/api/billing/razorpay-config`, {
-            headers: { 'Authorization': `Bearer ${currentToken}` },
-        })
-            .then(r => r.json())
-            .then(d => {
-                if (d.success && d.keyId) {
-                    setRazorpayKeyId(d.keyId);
-                } else if (d.success && !d.configured) {
-                    setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay is not configured on the backend.' });
-                }
-            })
-            .catch(() => setPaymentStatus({ loadingPackId: null, message: '', error: 'Unable to load Razorpay configuration.' }));
-    }, [tool, currentToken, fetchBillingOverview]);
-
-    useEffect(() => {
-        if (isAdmin && tool === 'admin-credits') fetchAdminPricing();
-    }, [tool, fetchAdminPricing, isAdmin]);
-
-    useEffect(() => {
-        if (tool === 'admin-logs') {
-            setReplicateLogsLoading(true);
-            fetch(`${API}/api/admin/logs`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
-                .then(r => r.json())
-                .then(d => {
-                    if (d.success && d.replicateLogs) {
-                        setReplicateLogs(d.replicateLogs);
-                        setLoginEvents(d.loginEvents || []);
-                        setAdminAuditEvents(d.adminAuditEvents || []);
-                    }
-                })
-                .catch(err => console.error('Failed to fetch admin logs:', err))
-                .finally(() => setReplicateLogsLoading(false));
-        }
-    }, [tool, currentToken]);
+    // Admin state extracted to AdminShell.jsx (lazy-loaded only when an admin tool is active)
+    // Billing state extracted to BillingPanel.jsx (lazy-loaded only when billing tool is active)
 
     const [budgetData, setBudgetData] = useState({ budget: 8.61, totalSpent: 0, remaining: 8.61 });
     const [budgetEditing, setBudgetEditing] = useState(false);
@@ -497,6 +335,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
     const uploaded = useMemo(() => uploads[tool]?.file || null, [uploads, tool]);
     const preview = useMemo(() => uploads[tool]?.url || null, [uploads, tool]);
+    const uploadStatus = useMemo(() => uploads[tool]?.status || null, [uploads, tool]);
+    const isUploading = uploadStatus === 'uploading';
     const controls = state.controls;
 
     // Dropdown listeners
@@ -523,6 +363,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const applyStudioState = useCallback((studioState) => {
         hasLoadedControls.current = false;
         lastSyncedControlsRef.current = JSON.stringify(studioState.controls || {});
+        (studioState.variations || []).forEach((v) => {
+            if (v.fileAccessToken && v.imageUrl) {
+                cacheFileAccessToken(v.imageUrl, v.fileAccessToken);
+            }
+        });
         setState(studioState);
         setActiveProjectId(studioState.activeProject.id);
         window.setTimeout(() => { hasLoadedControls.current = true; }, 0);
@@ -660,7 +505,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         const items = sections.flatMap((section) =>
             section.items.map((it) => ({
                 id: it.id,
-                label: it.label,
+                label: navLabel(it.id),
                 icon: it.icon,
                 section: section.section || 'Studio',
                 comingSoon: Boolean(it.comingSoon),
@@ -669,7 +514,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         if (!isAdmin) {
             items.push({
                 id: 'workspace',
-                label: 'Workspace',
+                label: navLabel('workspace'),
                 icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
                 section: 'Account',
             });
@@ -780,7 +625,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             return;
         }
         const url = URL.createObjectURL(file);
-        setUploads(prev => ({ ...prev, [tool]: { file, url } }));
+        setUploads(prev => ({ ...prev, [tool]: { file, url, status: 'uploading' } }));
         handleUpload(file);
     };
 
@@ -800,117 +645,41 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             });
             const d = await r.json();
             if (d.success) {
+                if (d.fileAccessToken && d.filename) {
+                    cacheFileAccessToken(d.filename, d.fileAccessToken);
+                }
                 setUploads(prev => ({
                     ...prev,
                     [tool]: {
                         file: {
                             ...file,
                             filename: d.filename,
-                            originalName: file.name
+                            originalName: file.name,
                         },
-                        url: prev[tool]?.url
-                    }
+                        url: prev[tool]?.url,
+                        status: 'ready',
+                    },
                 }));
                 updateCreditsFromResponse(d);
-            } else setError(d.error);
+                showNotice('Image uploaded');
+            } else {
+                setUploads(prev => ({
+                    ...prev,
+                    [tool]: prev[tool] ? { ...prev[tool], status: 'error' } : prev[tool],
+                }));
+                setError(d.error);
+            }
         } catch {
+            setUploads(prev => ({
+                ...prev,
+                [tool]: prev[tool] ? { ...prev[tool], status: 'error' } : prev[tool],
+            }));
             setError('Backend upload failed.');
         }
     };
 
     // createRepeat handler moved to RepeatTool component
-
-    const startRazorpayCheckout = async (pack) => {
-        setPaymentStatus({ loadingPackId: pack.id, message: '', error: '' });
-
-        if (!razorpayKeyId) {
-            setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay key id is not configured.' });
-            return;
-        }
-
-        try {
-            const Razorpay = await loadRazorpay();
-            const orderRes = await fetch(`${API}/api/create-order`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
-                body: JSON.stringify({
-                    receipt: `rimi_${user?.id || 'guest'}_${pack.id}_${Date.now()}`,
-                    packId: pack.id,
-                }),
-            });
-            const orderData = await orderRes.json().catch(() => ({}));
-            if (!orderRes.ok || !orderData.success) {
-                throw new Error(orderData.error || 'Unable to create payment order.');
-            }
-
-            const checkout = new Razorpay({
-                key: orderData.key_id || razorpayKeyId,
-                amount: orderData.amount,
-                currency: orderData.currency,
-                name: 'RIMI AI',
-                description: `${pack.credits.toLocaleString()} AI credits`,
-                order_id: orderData.order_id,
-                prefill: {
-                    name: user?.name || '',
-                    email: user?.email || '',
-                },
-                theme: { color: '#6366f1' },
-                modal: {
-                    ondismiss: () => {
-                        setPaymentStatus({ loadingPackId: null, message: '', error: 'Payment cancelled.' });
-                    },
-                },
-                handler: async (response) => {
-                    try {
-                        setPaymentStatus({ loadingPackId: pack.id, message: 'Verifying payment...', error: '' });
-                        const verifyRes = await fetch(`${API}/api/verify-payment`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
-                            body: JSON.stringify({
-                                razorpay_order_id: response.razorpay_order_id,
-                                razorpay_payment_id: response.razorpay_payment_id,
-                                razorpay_signature: response.razorpay_signature,
-                            }),
-                        });
-                        const verifyData = await verifyRes.json().catch(() => ({}));
-                        if (!verifyRes.ok || !verifyData.success) {
-                            throw new Error(verifyData.error || 'Payment verification failed.');
-                        }
-                        setPaymentStatus({
-                            loadingPackId: null,
-                            message: `Payment verified for ${pack.credits.toLocaleString()} credits.`,
-                            error: '',
-                        });
-                        updateCreditsFromResponse(verifyData);
-                        fetchBillingOverview();
-                        await loadStudioState(activeProject.id);
-                    } catch (err) {
-                        setPaymentStatus({
-                            loadingPackId: null,
-                            message: '',
-                            error: err.message || 'Payment verification failed.',
-                        });
-                    }
-                },
-            });
-
-            checkout.on('payment.failed', (response) => {
-                setPaymentStatus({
-                    loadingPackId: null,
-                    message: '',
-                    error: response?.error?.description || 'Payment failed. Please try again.',
-                });
-            });
-
-            checkout.open();
-        } catch (err) {
-            setPaymentStatus({
-                loadingPackId: null,
-                message: '',
-                error: err.message || 'Unable to start payment.',
-            });
-        }
-    };
+    // startRazorpayCheckout moved to BillingPanel.jsx
 
     const renderBudgetBanner = () => {
         if (!isAdmin) return null;
@@ -944,7 +713,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
     const renderWorkspaceManager = () => {
         const projects = state.projects || [];
-        const thumbUrl = (url) => (url && url.startsWith('/') ? `${API}${url}` : (url || '/demo_geometric.png'));
+        const thumbUrl = (url) => (url && url.startsWith('/') ? mediaUrl(url) : (url || '/demo_geometric.png'));
 
         return (
             <div className="st-workspace-manager">
@@ -1065,162 +834,13 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         );
     };
 
-    const renderBilling = () => {
-        const usage = billingOverview.usage || {
-            plan: user.plan || 'Free Trial',
-            creditsUsed: user.creditsUsed || 0,
-            creditsLimit: user.creditsLimit || 0,
-            creditsRemaining: userRemainingCredits,
-            usagePct: user.creditsLimit ? Math.min(100, Math.round(((user.creditsUsed || 0) / user.creditsLimit) * 100)) : 0,
-        };
-        const plans = billingOverview.plans?.length ? billingOverview.plans : BILLING_PLAN_FALLBACK;
-        const currentPlanName = (usage.plan || user.plan || 'Free').toLowerCase();
-        const formatDate = (value) => {
-            if (!value) return 'Pending';
-            const date = new Date(value);
-            return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-        };
-
-        return (
-            <div className="st-billing-page">
-                <div className="st-billing-header">
-                    <div>
-                        <div className="st-billing-kicker">Subscription</div>
-                        <h2>Credits and Billing</h2>
-                        <p>Recharge AI credits through Razorpay Standard Checkout. Credits are added to your available limit after payment verification.</p>
-                    </div>
-                    <button className="st-billing-refresh" onClick={fetchBillingOverview} disabled={billingOverview.loading}>
-                        <I d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" s={16} />
-                        {billingOverview.loading ? 'Refreshing' : 'Refresh'}
-                    </button>
-                </div>
-
-                <div className="st-billing-tabs" aria-label="Billing sections">
-                    <button className="active">RIMI Studio</button>
-                    <button disabled>API</button>
-                    <button disabled>Enterprise</button>
-                </div>
-
-                <div className="st-billing-summary-grid">
-                    <section className="st-billing-usage-card">
-                        <div className="st-billing-usage-row">
-                            <span>Credits used</span>
-                            <strong>{Number(usage.creditsUsed || 0).toLocaleString()} / {Number(usage.creditsLimit || 0).toLocaleString()} credits</strong>
-                        </div>
-                        <div className="st-billing-progress" aria-label={`${usage.usagePct || 0}% credits used`}>
-                            <span style={{ width: `${Math.min(100, usage.usagePct || 0)}%` }} />
-                        </div>
-                        <div className="st-billing-usage-foot">
-                            <span>{Number(usage.creditsRemaining || 0).toLocaleString()} credits remaining</span>
-                            <span>{usage.usagePct || 0}% used</span>
-                        </div>
-                    </section>
-
-                    <section className="st-billing-current-card">
-                        <div>
-                            <span>Current plan</span>
-                            <strong>{usage.plan || 'Free Trial'}</strong>
-                        </div>
-                        <div className={`st-billing-status ${billingOverview.razorpayConfigured ? 'ready' : 'missing'}`}>
-                            <I d={billingOverview.razorpayConfigured ? 'M20 6L9 17l-5-5' : 'M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z'} s={14} />
-                            {billingOverview.razorpayConfigured ? 'Razorpay ready' : 'Razorpay not configured'}
-                        </div>
-                    </section>
-                </div>
-
-                {(paymentStatus.message || paymentStatus.error) && (
-                    <div className={`st-billing-alert ${paymentStatus.error ? 'error' : 'success'}`}>
-                        {paymentStatus.error || paymentStatus.message}
-                    </div>
-                )}
-
-                <div className="st-billing-controls">
-                    <div className="st-billing-currency">
-                        <span>INR</span>
-                        <strong>India billing</strong>
-                    </div>
-                    <div className="st-billing-cycle">
-                        <button className="active">Credit packs</button>
-                        <button disabled>Monthly</button>
-                    </div>
-                </div>
-
-                <div className="st-billing-plans">
-                    {plans.map((pack) => {
-                        const isLoading = paymentStatus.loadingPackId === pack.id;
-                        const amount = Number(pack.amount || 0);
-                        const isCurrent = currentPlanName.includes((pack.label || '').toLowerCase());
-                        const priceLabel = pack.priceLabel || (amount ? `₹${(amount / 100).toLocaleString('en-IN')}` : '₹0');
-                        return (
-                            <article key={pack.id} className={`st-billing-plan ${pack.badge ? 'highlighted' : ''}`}>
-                                <div className="st-billing-plan-top">
-                                    <div>
-                                        <h3>{pack.label}</h3>
-                                        <p>{pack.description}</p>
-                                    </div>
-                                    {pack.badge && <span className="st-billing-badge">{pack.badge}</span>}
-                                </div>
-                                <div className="st-billing-price">
-                                    <strong>{priceLabel}</strong>
-                                    <span>{amount ? 'one-time' : 'trial'}</span>
-                                </div>
-                                <button
-                                    className={`st-billing-pay ${pack.badge ? 'primary' : ''}`}
-                                    type="button"
-                                    onClick={() => startRazorpayCheckout(pack)}
-                                    disabled={isLoading || !pack.checkoutEnabled || !billingOverview.razorpayConfigured}
-                                >
-                                    {isLoading ? 'Processing...' : isCurrent && !pack.checkoutEnabled ? 'Current plan' : pack.checkoutEnabled ? 'Pay with Razorpay' : 'Included'}
-                                </button>
-                                <div className="st-billing-credit-line">
-                                    <strong>{Number(pack.credits || 0).toLocaleString()}</strong>
-                                    <span>AI credits</span>
-                                </div>
-                                <ul>
-                                    {(pack.features || []).map((feature) => (
-                                        <li key={feature}><I d="M20 6L9 17l-5-5" s={14} /> {feature}</li>
-                                    ))}
-                                </ul>
-                            </article>
-                        );
-                    })}
-                </div>
-
-                <section className="st-billing-history">
-                    <div className="st-billing-section-head">
-                        <div>
-                            <h3>Payment history</h3>
-                            <p>Recent Razorpay orders and credit recharges.</p>
-                        </div>
-                    </div>
-                    {billingOverview.payments?.length ? (
-                        <div className="st-billing-table">
-                            {billingOverview.payments.map((payment) => (
-                                <div className="st-billing-row" key={payment.id}>
-                                    <div>
-                                        <strong>{payment.packLabel}</strong>
-                                        <span>{payment.orderId}</span>
-                                    </div>
-                                    <div>{Number(payment.credits || 0).toLocaleString()} credits</div>
-                                    <div>₹{(Number(payment.amount || 0) / 100).toLocaleString('en-IN')}</div>
-                                    <div><span className={`st-billing-pill ${payment.status}`}>{payment.status}</span></div>
-                                    <div>{formatDate(payment.paidAt || payment.createdAt)}</div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="st-billing-empty">No Razorpay payments yet.</div>
-                    )}
-                </section>
-            </div>
-        );
-    };
-
     const renderCanvas = () => {
         // Shared props structure passed down to tool components
         const commonProps = {
             uploaded,
             preview,
+            uploadStatus,
+            isUploading,
             activeProject,
             user,
             controls,
@@ -1241,27 +861,50 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             handlePreUpload,
             onUploadInvalid: setError,
             onUploadPaste: () => showNotice('Image pasted'),
+            onExportComplete: (details) => trackEvent('export_complete', details),
+            setEnhUrl,
+            setSeamlessUrl,
+            setRepeatUrl,
+            setVecUrl,
+            setUpscaleUrl,
+            setRemoveBgUrl,
+            setCwUrl,
+            qwenLaunch,
+            clearQwenLaunch,
+            setQwenLaunch,
         };
 
         // Routing canvas rendering
         const LazyTool = resolveToolComponent(tool);
         if (LazyTool && tool.startsWith('admin-')) {
-            const adminProps = {
-                'admin-dashboard': { adminStats, budgetData, adminUsers, setTool, renderBudgetBanner },
-                'admin-users': { renderBudgetBanner, adminUsersLoading, adminUsers, currentToken, fetchAdminUsers },
-                'admin-projects': { renderBudgetBanner, adminProjectsLoading, adminProjects },
-                'admin-logs': { renderBudgetBanner, replicateLogsLoading, replicateLogs, loginEvents, adminAuditEvents },
-                'admin-credits': { renderBudgetBanner, adminUsers, adminSelectedUserId, setAdminSelectedUserId, adminUsersLoading, currentToken, fetchAdminUsers },
-            }[tool];
             return (
                 <ReactSuspense fallback={<div className="tool-loading">Loading…</div>}>
-                    <LazyTool {...adminProps} />
+                    <AdminShell
+                        tool={tool}
+                        setTool={setTool}
+                        currentToken={currentToken}
+                        renderBudgetBanner={renderBudgetBanner}
+                        budgetData={budgetData}
+                    />
                 </ReactSuspense>
             );
         }
 
         if (tool === 'workspace') return renderWorkspaceManager();
-        if (tool === 'billing') return renderBilling();
+        if (tool === 'billing') {
+            return (
+                <ReactSuspense fallback={<div className="tool-loading">Loading…</div>}>
+                    <BillingPanel
+                        user={user}
+                        userRemainingCredits={userRemainingCredits}
+                        currentToken={currentToken}
+                        updateCreditsFromResponse={updateCreditsFromResponse}
+                        loadStudioState={loadStudioState}
+                        activeProject={activeProject}
+                    />
+                </ReactSuspense>
+            );
+        }
 
         if (COMING_SOON_TOOLS[tool]) return <ToolComingSoon {...COMING_SOON_TOOLS[tool]} />;
 
@@ -1274,6 +917,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             colorways: { cwUrl, setCwUrl },
             vectorpro: { brandPalettes },
             repeat: { repeatUrl, setRepeatUrl, isRepeat, setIsRepeat },
+            imagelayers: { setUploads },
         };
         const LazyUserTool = resolveToolComponent(tool);
         if (LazyUserTool) {
@@ -1288,9 +932,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     };
 
     const toolLabel = useMemo(() => {
-        if (tool === 'workspace') return 'Workspace';
+        if (tool === 'workspace') return navLabel('workspace');
         const items = [...NAV[0].items, ...NAV[1].items, ...NAV[2].items, ...ADMIN_NAV[0].items];
-        return items.find(it => it.id === tool)?.label || 'Studio';
+        return navLabel(items.find(it => it.id === tool)?.id || tool) || 'Studio';
     }, [tool]);
 
     const shouldShowPageHead = useMemo(() => (
@@ -1302,7 +946,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     ), [tool, comingSoonToolIds]);
 
     return (
+        <ProjectProvider activeProject={activeProject} projects={state.projects} setActiveProjectId={setActiveProjectId}>
+            <CreditsProvider creditPricing={creditPricing} refreshPricing={fetchCreditPricing}>
         <div className={`studio ${isSidebarHidden ? 'sidebar-hidden' : ''}`}>
+            <ReactSuspense fallback={null}>
             <StudioBootSplash
                 visible={showBootSplash}
                 dataReady={workspaceReady}
@@ -1314,6 +961,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                     }
                 }}
             />
+            </ReactSuspense>
             {!isAdmin && (
                 <OnboardingBanner
                     token={currentToken}
@@ -1347,15 +995,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             <>
                                 {ADMIN_NAV.map((section, idx) => (
                                     <div key={idx}>
-                                        {section.section && <div className="st-nav-section">{section.section}</div>}
+                                        {section.section && <div className="st-nav-section">{t('navSections.admin')}</div>}
                                         {section.items.map(it => (
                                             <button
                                                 key={it.id}
+                                                type="button"
+                                                aria-current={tool === it.id ? 'page' : undefined}
                                                 className={`st-nav-item ${tool === it.id ? 'active' : ''}${it.comingSoon ? ' coming-soon' : ''}`}
                                                 onClick={() => { setTool(it.id); setError(''); }}
                                             >
                                                 <I d={it.icon} s={18} />
-                                                <span>{it.label}</span>
+                                                <span>{navLabel(it.id)}</span>
                                                 {it.comingSoon && <span className="st-nav-soon-badge">Soon</span>}
                                             </button>
                                         ))}
@@ -1366,15 +1016,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             <>
                                 {NAV.map((section, idx) => (
                                     <div key={idx}>
-                                        {section.section && <div className="st-nav-section">{section.section}</div>}
+                                        {section.section && <div className="st-nav-section">{section.section === 'AI DESIGN TOOLS' ? t('navSections.aiTools') : section.section === 'ASSETS & LIBRARY' ? t('navSections.assets') : section.section}</div>}
                                         {section.items.map(it => (
                                             <button
                                                 key={it.id}
+                                                type="button"
+                                                aria-current={tool === it.id ? 'page' : undefined}
                                                 className={`st-nav-item ${tool === it.id ? 'active' : ''}${it.comingSoon ? ' coming-soon' : ''}`}
                                                 onClick={() => { setTool(it.id); setError(''); }}
                                             >
                                                 <I d={it.icon} s={18} />
-                                                <span>{it.label}</span>
+                                                <span>{navLabel(it.id)}</span>
                                                 {it.comingSoon && <span className="st-nav-soon-badge">Soon</span>}
                                             </button>
                                         ))}
@@ -1463,6 +1115,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                     <div className="st-project-dropdown-wrap" ref={projectDropdownRef} style={{ position: 'relative' }}>
                         <button
                             className="st-project-select"
+                            type="button"
+                            aria-expanded={showProjectDropdown}
+                            aria-haspopup="listbox"
                             onClick={() => setShowProjectDropdown(!showProjectDropdown)}
                             style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
                         >
@@ -1488,7 +1143,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                             onClick={() => { loadStudioState(p.id); setShowProjectDropdown(false); }}
                                         >
                                             <img
-                                                src={p.thumbnailUrl && p.thumbnailUrl.startsWith('/') ? `${API}${p.thumbnailUrl}` : (p.thumbnailUrl || '/demo_geometric.png')}
+                                                src={p.thumbnailUrl && p.thumbnailUrl.startsWith('/') ? mediaUrl(p.thumbnailUrl) : (p.thumbnailUrl || '/demo_geometric.png')}
                                                 alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover', border: '1px solid #e2e8f0' }}
                                             />
                                             <span style={{ flex: 1, textAlign: 'left' }}>{p.name}</span>
@@ -1571,114 +1226,15 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
                     <div className="st-user-actions">
                         {/* Background Tasks Tray Widget */}
-                        <div className="st-bg-tasks-container" style={{ position: 'relative' }}>
-                            <button
-                                className={`st-icon-btn ${bgTasks.some(t => t.status === 'running') ? 'active-pulse' : ''}`}
-                                onClick={() => setShowBgTasksDropdown(!showBgTasksDropdown)}
-                                title="AI Background Queue Manager"
-                                style={{
-                                    position: 'relative',
-                                    background: showBgTasksDropdown ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
-                                    color: bgTasks.some(t => t.status === 'running') ? '#6366f1' : '#64748b'
-                                }}
-                            >
-                                <I d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" s={18} />
-                                {bgTasks.filter(t => t.status === 'running').length > 0 && (
-                                    <span className="st-bg-tasks-badge" style={{
-                                        position: 'absolute',
-                                        top: '-2px',
-                                        right: '-2px',
-                                        background: '#6366f1',
-                                        color: '#fff',
-                                        borderRadius: '50%',
-                                        width: '14px',
-                                        height: '14px',
-                                        fontSize: '8px',
-                                        fontWeight: 800,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        boxShadow: '0 2px 6px rgba(99, 102, 241, 0.4)'
-                                    }}>
-                                        {bgTasks.filter(t => t.status === 'running').length}
-                                    </span>
-                                )}
-                            </button>
-
-                            {showBgTasksDropdown && (
-                                <div className="st-bg-tasks-dropdown st-glassmorphic-dropdown" style={{
-                                    position: 'absolute',
-                                    top: '100%',
-                                    right: 0,
-                                    marginTop: '6px',
-                                    width: '320px',
-                                    background: '#fff',
-                                    border: '1px solid #e2e8f0',
-                                    borderRadius: '10px',
-                                    boxShadow: '0 18px 42px rgba(15, 23, 42, 0.16)',
-                                    zIndex: 9999,
-                                    padding: '12px'
-                                }}>
-                                    <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span>Background Tasks</span>
-                                        <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500 }}>{bgTasks.length} total</span>
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
-                                        {bgTasks.length === 0 ? (
-                                            <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem' }}>No background tasks active</div>
-                                        ) : (
-                                            bgTasks.map(t => (
-                                                <div key={t.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b' }}>{t.label}</span>
-                                                        <span style={{
-                                                            fontSize: '0.65rem',
-                                                            fontWeight: 800,
-                                                            padding: '2px 6px',
-                                                            borderRadius: '4px',
-                                                            textTransform: 'uppercase',
-                                                            background: t.status === 'completed' ? '#dcfce7' : t.status === 'failed' ? '#fee2e2' : '#e0e7ff',
-                                                            color: t.status === 'completed' ? '#15803d' : t.status === 'failed' ? '#b91c1c' : '#4338ca',
-                                                        }}>{t.status}</span>
-                                                    </div>
-                                                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Input: {t.filename}</div>
-                                                    {t.status === 'running' && (
-                                                        <div style={{ width: '100%' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#6366f1', fontWeight: 700, marginBottom: '2px' }}>
-                                                                <span>Processing...</span>
-                                                                <span>{t.progress}%</span>
-                                                            </div>
-                                                            <div style={{ width: '100%', height: '4px', background: '#e2e8f0', borderRadius: '99px', overflow: 'hidden' }}>
-                                                                <div style={{ width: `${t.progress}%`, height: '100%', background: 'linear-gradient(90deg, #6366f1, #ec4899)' }} />
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {t.status === 'completed' && t.resultUrl && (
-                                                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px', alignItems: 'center' }}>
-                                                            <div style={{ width: '32px', height: '32px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                <img src={t.resultUrl.startsWith('http') ? t.resultUrl : `${API}${t.resultUrl}`} alt="Result" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                            </div>
-                                                            <div style={{ display: 'flex', gap: '6px', flex: 1, justifyContent: 'flex-end' }}>
-                                                                <button onClick={() => {
-                                                                    setTool(t.type);
-                                                                    if (t.type === 'pattern') setEnhUrl(t.resultUrls || t.resultUrl);
-                                                                    if (t.type === 'seamless') setSeamlessUrl(t.resultUrl);
-                                                                    if (t.type === 'vectorize') setVecUrl(t.resultUrl);
-                                                                    if (t.type === 'upscale') setUpscaleUrl(t.resultUrl);
-                                                                    if (t.type === 'removebg') setRemoveBgUrl(t.resultUrl);
-                                                                    setShowBgTasksDropdown(false);
-                                                                }} style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'rgba(99, 102, 241, 0.08)', color: '#6366f1', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>View</button>
-                                                                <button type="button" onClick={(e) => forceDownload(e, t.resultUrl.startsWith('http') ? t.resultUrl : `${API}${t.resultUrl}`)} style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff', borderRadius: '6px', fontWeight: 700, border: 'none', cursor: 'pointer' }}>Download</button>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <BgTaskManager
+                            bgTasks={bgTasks}
+                            show={showBgTasksDropdown}
+                            onToggle={setShowBgTasksDropdown}
+                            setTool={setTool}
+                            setResultUrl={resultUrls.set}
+                            setQwenLaunch={setQwenLaunch}
+                            currentToken={currentToken}
+                        />
 
                         {/* Account dropdown */}
                         <div className="st-account-wrap" ref={accountDropdownRef}>
@@ -1803,6 +1359,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                 variant="compact"
                                 preview={preview}
                                 previewLabel={uploaded?.originalName || 'Image'}
+                                uploadStatus={uploadStatus}
                                 onFile={handlePreUpload}
                                 onInvalidFile={setError}
                                 onPasteSuccess={() => showNotice('Image pasted')}
@@ -1839,11 +1396,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                     <button
                                         key={it.id}
                                         type="button"
+                                        aria-current={tool === it.id ? 'page' : undefined}
                                         className={`st-mobile-nav-item ${tool === it.id ? 'active' : ''}${it.comingSoon ? ' coming-soon' : ''}`}
                                         onClick={() => { setTool(it.id); setError(''); setMobileNavOpen(false); }}
                                     >
                                         <I d={it.icon} s={18} />
-                                        <span>{it.label}</span>
+                                        <span>{navLabel(it.id)}</span>
                                         {it.comingSoon && <span className="st-nav-soon-badge">Soon</span>}
                                     </button>
                                 ))}
@@ -1853,16 +1411,18 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             <button
                                 type="button"
                                 className={`st-mobile-nav-item ${tool === 'workspace' ? 'active' : ''}`}
+                                aria-current={tool === 'workspace' ? 'page' : undefined}
                                 onClick={() => { setTool('workspace'); setError(''); setMobileNavOpen(false); }}
                             >
                                 <I d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" s={18} />
-                                <span>Workspace</span>
+                                <span>{navLabel('workspace')}</span>
                             </button>
                         )}
                     </nav>
                 </>
             )}
 
+            <ReactSuspense fallback={null}>
             <StudioCommandPalette
                 open={paletteOpen}
                 query={paletteQuery}
@@ -1871,6 +1431,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                 items={commandPaletteItems}
                 onSelect={(id) => { setTool(id); setError(''); }}
             />
+            </ReactSuspense>
         </div>
+            </CreditsProvider>
+        </ProjectProvider>
     );
 }

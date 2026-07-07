@@ -1,12 +1,31 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders, cacheMediaFromResponse, resolveMediaUrl, mediaUrl, runAsyncJob, apiFetch } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
 import { createPortal } from 'react-dom';
 import * as fabric from 'fabric';
+import '../../../styles/tools/imagelayers.css';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import { useQwenSession } from '../hooks/useQwenSession';
+import { useLayerHistory } from '../hooks/useLayerHistory';
+import QwenSendToMenu from '../shared/QwenSendToMenu';
+import BeforeAfterSlider from '../shared/BeforeAfterSlider';
+
+function bustUrl(url) {
+    if (!url) return url;
+    return url.includes('?') ? `${url}&t=${Date.now()}` : `${url}?t=${Date.now()}`;
+}
+
+async function loadFabricFromPath(path, token) {
+    const url = await resolveMediaUrl(path, token);
+    return fabric.Image.fromURL(bustUrl(url), { crossOrigin: 'anonymous' });
+}
 
 export default function ImageLayersTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, rightPanelEl, handlePreUpload, onUploadInvalid, onUploadPaste, tool } = props;
+    const {
+        uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, rightPanelEl, handlePreUpload, onUploadInvalid, onUploadPaste, tool,
+        setTool, setEnhUrl, setSeamlessUrl, setRepeatUrl, setVecUrl, setRemoveBgUrl, setCwUrl, setUploads, setState, qwenLaunch, clearQwenLaunch,
+    } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
     const imageLayersCreditCost = creditPricing.imageLayers || 69;
@@ -38,6 +57,62 @@ export default function ImageLayersTool(props) {
     const [layerMaskBrushSize, setLayerMaskBrushSize] = useState(32);
     const [isInpaintingLayer, setIsInpaintingLayer] = useState(false);
     const [isImageLayersFullscreen, setIsImageLayersFullscreen] = useState(false);
+    const [jobProgress, setJobProgress] = useState(0);
+    const [jobStage, setJobStage] = useState('');
+    const [multiSelectedIds, setMultiSelectedIds] = useState([]);
+    const [semanticQuery, setSemanticQuery] = useState('');
+    const [pantoneCode, setPantoneCode] = useState('');
+    const [preserveSilhouette, setPreserveSilhouette] = useState(false);
+    const [pendingEditPreview, setPendingEditPreview] = useState(null);
+    const [layerVersionsOpen, setLayerVersionsOpen] = useState(null);
+    const [lastComposedUrl, setLastComposedUrl] = useState(null);
+    const [referenceFilename, setReferenceFilename] = useState('');
+    const [referencePreview, setReferencePreview] = useState(null);
+    const [layerOcrText, setLayerOcrText] = useState('');
+    const [pantoneSwatches, setPantoneSwatches] = useState([]);
+    const [selectedPantone, setSelectedPantone] = useState(null);
+    const [pantonePickerOpen, setPantonePickerOpen] = useState(false);
+    const initFabricCanvasRef = useRef(null);
+
+    const toolSetters = useMemo(() => ({
+        setTool, setEnhUrl, setSeamlessUrl, setRepeatUrl, setVecUrl, setRemoveBgUrl, setCwUrl, setUploads, tool,
+    }), [setTool, setEnhUrl, setSeamlessUrl, setRepeatUrl, setVecUrl, setRemoveBgUrl, setCwUrl, setUploads, tool]);
+
+    const onSessionLoaded = useCallback((session) => {
+        const doc = session.document || {};
+        const loaded = (doc.layers || []).map((layer) => ({
+            id: layer.local_id ?? layer.id,
+            name: layer.name || `Layer ${(layer.local_id ?? layer.id) + 1}`,
+            url: layer.url || `/results/${layer.filename}`,
+            filename: layer.filename,
+            x: layer.x || 0,
+            y: layer.y || 0,
+            width: layer.width,
+            height: layer.height,
+            visible: layer.visible !== false,
+            locked: layer.locked ?? false,
+            fabricId: null,
+            loadingName: false,
+            parentId: layer.parent_local_id,
+        }));
+        if (loaded.length) {
+            setLayersList(loaded);
+            setImageLayersResults(loaded.map((l, i) => ({ ...l, index: i, url: l.url })));
+            setTimeout(() => initFabricCanvasRef.current?.(loaded.map((l) => ({ ...l, index: l.id }))), 100);
+        }
+    }, []);
+
+    const {
+        sessionId, sessions, sessionsOpen, setSessionsOpen,
+        refreshSessions, loadSession, createSession, revertLayerVersion, semanticSelect, versions, exportSession,
+    } = useQwenSession({
+        activeProject, user, currentToken, layersList,
+        canvasWidth: canvasInstanceRef.current?.getWidth?.() || 1024,
+        canvasHeight: canvasInstanceRef.current?.getHeight?.() || 1024,
+        uploaded, qwenLaunch, clearQwenLaunch, onSessionLoaded,
+    });
+
+    const { pushHistory, undo, redo, canUndo, canRedo } = useLayerHistory();
 
     // AI Edit states
     const [layerEditPrompt, setLayerEditPrompt] = useState('');
@@ -87,6 +162,211 @@ export default function ImageLayersTool(props) {
         },
     ];
 
+    const applyLayersFromDecompose = (d) => {
+        setImageLayersResults(d.layers);
+        updateCreditsFromResponse(d);
+        const initialLayersList = d.layers.map((l) => ({
+            id: l.index,
+            name: `Layer ${l.index + 1}`,
+            url: l.url,
+            filename: l.filename,
+            x: l.x || 0,
+            y: l.y || 0,
+            width: l.width,
+            height: l.height,
+            sourceWidth: l.sourceWidth,
+            sourceHeight: l.sourceHeight,
+            visible: true,
+            locked: false,
+            fabricId: null,
+            loadingName: true,
+        }));
+        setLayersList(initialLayersList);
+        pushHistory(initialLayersList, initialLayersList[0]?.id ?? null);
+        setTimeout(() => initFabricCanvas(d.layers), 100);
+        d.layers.forEach(async (layer) => {
+            try {
+                const capRes = await fetch(`${API}/api/caption-layer`, {
+                    method: 'POST',
+                    headers: jsonAuthHeaders(currentToken),
+                    body: JSON.stringify({ filename: layer.filename }),
+                });
+                const capData = await capRes.json();
+                if (capData.success) {
+                    setLayersList((prev) => prev.map((pl) =>
+                        pl.id === layer.index ? { ...pl, name: capData.name, loadingName: false } : pl
+                    ));
+                }
+            } catch (e) {
+                console.error('Caption error', e);
+                setLayersList((prev) => prev.map((pl) =>
+                    pl.id === layer.index ? { ...pl, loadingName: false } : pl
+                ));
+            }
+        });
+    };
+
+    const applyEditResultToCanvas = (d, layerId) => {
+        const canvas = canvasInstanceRef.current;
+        const objToReplace = canvas?.getObjects().find((o) => o.customId === layerId);
+        if (!canvas || !objToReplace) return;
+        const oldZIndex = canvas.getObjects().indexOf(objToReplace);
+        loadFabricFromPath(d.resultUrl, currentToken).then((newImg) => {
+            newImg.set({
+                customId: layerId,
+                left: objToReplace.left,
+                top: objToReplace.top,
+                scaleX: objToReplace.scaleX,
+                scaleY: objToReplace.scaleY,
+                angle: objToReplace.angle,
+                flipX: objToReplace.flipX,
+                flipY: objToReplace.flipY,
+                initialLeft: objToReplace.initialLeft,
+                initialTop: objToReplace.initialTop,
+                initialScaleX: objToReplace.initialScaleX,
+                initialScaleY: objToReplace.initialScaleY,
+                initialAngle: objToReplace.initialAngle || 0,
+                transparentCorners: false,
+                cornerColor: 'rgba(139, 92, 246, 0.8)',
+                borderColor: 'rgba(139, 92, 246, 0.8)',
+                cornerSize: 8,
+            });
+            canvas.remove(objToReplace);
+            canvas.insertAt(oldZIndex, newImg);
+            canvas.setActiveObject(newImg);
+            canvas.renderAll();
+            setLayersList((prev) => {
+                const next = prev.map((pl) =>
+                    pl.id === layerId ? { ...pl, url: d.resultUrl, filename: d.filename || d.resultUrl.split('/').pop() } : pl
+                );
+                pushHistory(next, layerId);
+                return next;
+            });
+        }).catch((err) => console.error('Error editing fabric layer', err));
+    };
+
+    const buildEditPrompt = () => {
+        if (editType === 'recolor' && selectedPantone) {
+            const rgb = selectedPantone.rgb?.length === 3 ? selectedPantone.rgb.join(', ') : '';
+            return `Recolor only the foreground element to Pantone ${selectedPantone.code || selectedPantone.name} (RGB ${rgb}). Keep the exact same shape, pose, and composition.`;
+        }
+        if (editType === 'recolor' && pantoneCode.trim()) {
+            return `Recolor only the foreground element to Pantone ${pantoneCode.trim()}. Keep the exact same shape, pose, and composition.`;
+        }
+        if (editType === 'revise' && layerOcrText.trim()) {
+            return `Revise the text to read: "${layerEditPrompt.trim()}". Original text was: "${layerOcrText.trim()}". Keep layout and style.`;
+        }
+        return layerEditPrompt;
+    };
+
+    useEffect(() => {
+        if (!currentToken || pantoneSwatches.length) return;
+        apiFetch('/api/pantone-colors', {}, currentToken)
+            .then((d) => { if (d.success) setPantoneSwatches(d.colors || []); })
+            .catch(() => {});
+    }, [currentToken, pantoneSwatches.length]);
+
+    const fetchLayerOcr = async () => {
+        const layer = layersList.find((l) => l.id === selectedLayerId);
+        if (!layer?.filename) return;
+        try {
+            const d = await apiFetch('/api/layer-ocr', {
+                method: 'POST',
+                body: JSON.stringify({ filename: layer.filename }),
+            }, currentToken);
+            if (d.success && d.text) {
+                setLayerOcrText(d.text);
+                setLayerEditPrompt(d.text);
+            }
+        } catch (e) {
+            console.error('Layer OCR failed', e);
+        }
+    };
+
+    useEffect(() => {
+        if (editType === 'revise' && selectedLayerId !== null) fetchLayerOcr();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editType, selectedLayerId]);
+
+    const handleReferenceFile = async (file) => {
+        if (!file || !activeProject?.id) return;
+        const form = new FormData();
+        form.append('file', file);
+        form.append('projectId', String(activeProject.id));
+        form.append('userId', String(user?.id || ''));
+        const r = await fetch(`${API}/api/upload`, {
+            method: 'POST',
+            headers: currentToken ? { Authorization: `Bearer ${currentToken}` } : {},
+            body: form,
+        });
+        const d = await r.json();
+        if (d.success && d.filename) {
+            setReferenceFilename(d.filename);
+            setReferencePreview(d.url || `/uploads/${d.filename}`);
+        }
+    };
+
+    const handleExportSession = async (format) => {
+        if (!sessionId) {
+            setError('Save a session first by decomposing an image.');
+            return;
+        }
+        setIsExportingLayers(true);
+        try {
+            const d = await exportSession(format);
+            if (d?.success && d.url) {
+                updateCreditsFromResponse(d);
+                await forceDownload(null, mediaUrl(d.url), d.filename || `qwen_export.${format}`, currentToken);
+            } else {
+                setError(d?.error || 'Export failed');
+            }
+        } catch (e) {
+            setError(e.message || 'Export failed');
+        } finally {
+            setIsExportingLayers(false);
+        }
+    };
+
+    const handleSmartMask = async () => {
+        const layer = layersList.find((l) => l.id === selectedLayerId);
+        const canvas = canvasInstanceRef.current;
+        const obj = canvas?.getObjects().find((o) => o.customId === selectedLayerId);
+        if (!layer || !obj || !layerEditPrompt.trim()) return;
+        const cx = Math.round(obj.left + (obj.width * obj.scaleX) / 2);
+        const cy = Math.round(obj.top + (obj.height * obj.scaleY) / 2);
+        try {
+            const d = await apiFetch('/api/smart-mask', {
+                method: 'POST',
+                body: JSON.stringify({
+                    filename: layer.filename,
+                    prompt: layerEditPrompt,
+                    x: cx,
+                    y: cy,
+                    projectId: activeProject.id,
+                }),
+            }, currentToken);
+            if (d.success && d.maskUrl) {
+                setIsLayerMaskMode(true);
+                cacheMediaFromResponse(d);
+                // Load mask into brush state via existing mask pipeline
+                const maskImg = await loadFabricFromPath(d.maskUrl, currentToken);
+                if (maskImg && canvas) {
+                    canvas.add(maskImg);
+                    canvas.renderAll();
+                }
+            }
+        } catch (e) {
+            setError(e.message || 'Smart mask failed');
+        }
+    };
+
+    const layerVersionsFor = (layerId) => (versions || []).filter((v) => v.layerLocalId === layerId);
+
+    const handleRevertVersion = async (versionId, layerLocalId) => {
+        const data = await revertLayerVersion(versionId, layerLocalId);
+        if (data?.success) setLayerVersionsOpen(null);
+    };
+
     const generateImageLayers = async () => {
         if (!uploaded) return;
         if (!hasEnoughImageLayersCredits) {
@@ -96,83 +376,41 @@ export default function ImageLayersTool(props) {
         setIsImageLayering(true);
         setImageLayersResults([]);
         setLayersList([]);
-        if (canvasInstanceRef.current) {
-            canvasInstanceRef.current.clear();
-        }
+        if (canvasInstanceRef.current) canvasInstanceRef.current.clear();
         setError('');
 
-        const trigger = async () => {
-            const r = await fetch(`${API}/api/image-layers`, {
-                method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
-                body: JSON.stringify({
-                    filename: uploaded.filename,
-                    numLayers: imageLayersNumLayers,
-                    description: imageLayersDescription || 'auto',
-                    outputFormat: 'png',
-                    projectId: activeProject.id,
-                    userId: user.id
-                }),
-            });
-            const d = await r.json();
-            if (d.success) {
-                setImageLayersResults(d.layers);
-                updateCreditsFromResponse(d);
-
-                // Auto-caption layers in background
-                const initialLayersList = d.layers.map((l, i) => ({
-                    id: l.index,
-                    name: `Layer ${l.index + 1}`,
-                    url: l.url,
-                    filename: l.filename,
-                    x: l.x || 0,
-                    y: l.y || 0,
-                    width: l.width,
-                    height: l.height,
-                    sourceWidth: l.sourceWidth,
-                    sourceHeight: l.sourceHeight,
-                    visible: true,
-                    locked: false,
-                    fabricId: null,
-                    loadingName: true
-                }));
-                setLayersList(initialLayersList);
-
-                // Load into Fabric canvas
-                setTimeout(() => {
-                    initFabricCanvas(d.layers);
-                }, 100);
-                setIsImageLayering(false);
-
-                // Fetch captions async
-                d.layers.forEach(async (layer) => {
-                    try {
-                        const capRes = await fetch(`${API}/api/caption-layer`, {
-                            method: 'POST',
-                            headers: jsonAuthHeaders(currentToken),
-                            body: JSON.stringify({ filename: layer.filename })
-                        });
-                        const capData = await capRes.json();
-                        if (capData.success) {
-                            setLayersList(prev => prev.map(pl =>
-                                pl.id === layer.index ? { ...pl, name: capData.name, loadingName: false } : pl
-                            ));
-                        }
-                    } catch (e) {
-                        console.error("Caption error", e);
-                        setLayersList(prev => prev.map(pl =>
-                            pl.id === layer.index ? { ...pl, loadingName: false } : pl
-                        ));
-                    }
-                });
-
-                return { url: d.layers[0]?.url, urls: d.layers.map(l => l.url) };
-            } else {
-                setIsImageLayering(false);
-                throw new Error(d.error || 'Image layer decomposition failed');
+        const trigger = async (reportProgress) => {
+            let sid = sessionId;
+            if (!sid) {
+                const created = await createSession(uploaded.filename);
+                sid = created?.id;
             }
+            const payload = {
+                filename: uploaded.filename,
+                numLayers: imageLayersNumLayers,
+                description: imageLayersDescription || 'auto',
+                outputFormat: 'png',
+                projectId: activeProject.id,
+                userId: user.id,
+                sessionId: sid,
+            };
+            const d = await runAsyncJob('/api/image-layers', payload, currentToken, {
+                onProgress: (job) => {
+                    setJobProgress(job.progressPct || 0);
+                    setJobStage(job.stage || '');
+                    reportProgress?.(job.progressPct || 0, job.stage);
+                },
+            });
+            cacheMediaFromResponse(d);
+            if (d.success) {
+                applyLayersFromDecompose(d);
+                setIsImageLayering(false);
+                return { url: d.layers[0]?.url, urls: d.layers.map((l) => l.url), sessionId: sid };
+            }
+            setIsImageLayering(false);
+            throw new Error(d.error || 'Image layer decomposition failed');
         };
-        addBgTask('imagelayers', `Image Layers: ${imageLayersNumLayers} layers`, uploaded.filename, trigger);
+        addBgTask('imagelayers', `Qwen Decompose: ${imageLayersNumLayers} layers`, uploaded.filename, trigger);
     };
 
     const initFabricCanvas = (layers) => {
@@ -294,7 +532,7 @@ export default function ImageLayersTool(props) {
         // Load images
         let loadedCount = 0;
         layers.forEach((layer) => {
-            fabric.Image.fromURL(`${API}${layer.url}`, { crossOrigin: 'anonymous' }).then((img) => {
+            loadFabricFromPath(layer.url, currentToken).then((img) => {
                 if (!canvasInstanceRef.current) return;
                 const layerLeft = baseLeft + (layer.x || 0) * baseScale;
                 const layerTop = baseTop + (layer.y || 0) * baseScale;
@@ -335,6 +573,7 @@ export default function ImageLayersTool(props) {
             }).catch(err => console.error("Error loading fabric image", err));
         });
     };
+    initFabricCanvasRef.current = initFabricCanvas;
 
     const handleEditLayer = async () => {
         if (!selectedLayerId && selectedLayerId !== 0) return;
@@ -358,70 +597,77 @@ export default function ImageLayersTool(props) {
         }
 
         const layerData = layersList.find(l => l.id === selectedLayerId);
-        if (!layerData) return;
+        const batchIds = multiSelectedIds.length ? multiSelectedIds : (layerData ? [selectedLayerId] : []);
+        const batchLayers = layersList.filter((l) => batchIds.includes(l.id));
+        if (!batchLayers.length) return;
 
         setIsEditingLayer(true);
+        setIsProcessingAI(true);
+        setAiProcessingText('Qwen is editing the selected layer…');
         try {
-            const res = await fetch(`${API}/api/edit-layer`, {
-                method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
-                body: JSON.stringify({
-                    filename: layerData.filename,
-                    prompt: layerEditPrompt,
-                    editType: editType,
-                    projectId: activeProject.id,
-                    userId: user.id
-                })
-            });
-            const d = await res.json();
-            if (d.success) {
-                updateCreditsFromResponse(d);
-                // Replace image on canvas
-                const canvas = canvasInstanceRef.current;
-                const objToReplace = canvas.getObjects().find(o => o.customId === selectedLayerId);
-                if (objToReplace) {
-                    const oldZIndex = canvas.getObjects().indexOf(objToReplace);
-                    fabric.Image.fromURL(`${API}${d.resultUrl}?t=${Date.now()}`, { crossOrigin: 'anonymous' }).then((newImg) => {
-                        newImg.set({
-                            customId: selectedLayerId,
-                            left: objToReplace.left,
-                            top: objToReplace.top,
-                            scaleX: objToReplace.scaleX,
-                            scaleY: objToReplace.scaleY,
-                            angle: objToReplace.angle,
-                            flipX: objToReplace.flipX,
-                            flipY: objToReplace.flipY,
-                            initialLeft: objToReplace.initialLeft,
-                            initialTop: objToReplace.initialTop,
-                            initialScaleX: objToReplace.initialScaleX,
-                            initialScaleY: objToReplace.initialScaleY,
-                            initialAngle: objToReplace.initialAngle || 0,
-                            transparentCorners: false,
-                            cornerColor: 'rgba(139, 92, 246, 0.8)',
-                            borderColor: 'rgba(139, 92, 246, 0.8)',
-                            cornerSize: 8,
-                        });
-                        canvas.remove(objToReplace);
-                        canvas.insertAt(oldZIndex, newImg);
-                        canvas.setActiveObject(newImg);
-                        canvas.renderAll();
-
-                        // Update layers list url
-                        setLayersList(prev => prev.map(pl =>
-                            pl.id === selectedLayerId ? { ...pl, url: d.resultUrl, filename: d.resultUrl.split('/').pop() } : pl
-                        ));
-                    }).catch(err => console.error("Error editing fabric layer", err));
+            const prompt = buildEditPrompt();
+            const payload = {
+                prompt,
+                editType,
+                preserveSilhouette: preserveSilhouette || editType === 'replace',
+                projectId: activeProject.id,
+                userId: user.id,
+                sessionId,
+                layerLocalId: selectedLayerId,
+                referenceFilename: referenceFilename || undefined,
+            };
+            let d;
+            if (batchLayers.length > 1) {
+                d = await runAsyncJob('/api/edit-layer', {
+                    ...payload,
+                    filenames: batchLayers.map((l) => l.filename),
+                }, currentToken, {
+                    onProgress: (job) => {
+                        setJobProgress(job.progressPct || 0);
+                        setJobStage(job.stage || '');
+                    },
+                });
+                if (d.success && d.results) {
+                    updateCreditsFromResponse(d.results[0]);
+                    d.results.forEach((result) => {
+                        const layer = batchLayers.find((l) => l.filename === result.parentFilename);
+                        if (layer) setPendingEditPreview({ layerId: layer.id, resultUrl: result.resultUrl, result: result });
+                    });
                 }
             } else {
-                setError(d.error || 'Layer edit failed');
+                d = await runAsyncJob('/api/edit-layer', {
+                    ...payload,
+                    filename: batchLayers[0].filename,
+                }, currentToken, {
+                    onProgress: (job) => {
+                        setJobProgress(job.progressPct || 0);
+                        setJobStage(job.stage || '');
+                    },
+                });
+                cacheMediaFromResponse(d);
+                if (d.success) {
+                    updateCreditsFromResponse(d);
+                    setPendingEditPreview({ layerId: selectedLayerId, resultUrl: d.resultUrl, result: d });
+                }
             }
+            if (!d?.success) setError(d?.error || 'Layer edit failed');
         } catch (e) {
             console.error(e);
-            setError('Error editing layer');
+            setError(e.message || 'Error editing layer');
         } finally {
             setIsEditingLayer(false);
+            setIsProcessingAI(false);
+            setAiProcessingText('');
         }
     };
+
+    const commitPendingEdit = () => {
+        if (!pendingEditPreview) return;
+        applyEditResultToCanvas(pendingEditPreview.result, pendingEditPreview.layerId);
+        setPendingEditPreview(null);
+    };
+
+    const discardPendingEdit = () => setPendingEditPreview(null);
 
     const handleRecursiveDecompose = async () => {
         if (!selectedLayerId && selectedLayerId !== 0) {
@@ -439,19 +685,21 @@ export default function ImageLayersTool(props) {
         setIsProcessingAI(true);
         setAiProcessingText(`Qwen is decomposing "${layerData.name}" into ${recursiveLayerCount} layers...`);
         try {
-            const res = await fetch(`${API}/api/image-layers`, {
-                method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
-                body: JSON.stringify({
-                    filename: layerData.filename,
-                    numLayers: recursiveLayerCount,
-                    description: imageLayersDescription || layerData.name || 'auto',
-                    outputFormat: 'png',
-                    projectId: activeProject.id,
-                    userId: user.id
-                })
+            const d = await runAsyncJob('/api/image-layers', {
+                filename: layerData.filename,
+                numLayers: recursiveLayerCount,
+                description: imageLayersDescription || layerData.name || 'auto',
+                outputFormat: 'png',
+                projectId: activeProject.id,
+                userId: user.id,
+                sessionId,
+            }, currentToken, {
+                onProgress: (job) => {
+                    setJobProgress(job.progressPct || 0);
+                    setJobStage(job.stage || '');
+                },
             });
-            const d = await res.json();
+            cacheMediaFromResponse(d);
             if (!d.success) throw new Error(d.error || 'Recursive decomposition failed');
             updateCreditsFromResponse(d);
             const oldZIndex = canvas.getObjects().indexOf(sourceObj);
@@ -478,7 +726,7 @@ export default function ImageLayersTool(props) {
             setSelectedLayerId(childLayers[0]?.id ?? null);
             let loaded = 0;
             childLayers.forEach((child, i) => {
-                fabric.Image.fromURL(`${API}${child.url}?t=${Date.now()}`, { crossOrigin: 'anonymous' }).then((img) => {
+                loadFabricFromPath(child.url, currentToken).then((img) => {
                     const childLeft = sourceObj.left + (child.x || 0) * sourceObj.scaleX;
                     const childTop = sourceObj.top + (child.y || 0) * sourceObj.scaleY;
                     img.set({
@@ -763,36 +1011,39 @@ export default function ImageLayersTool(props) {
         setAiProcessingText('Qwen is inpainting the painted mask...');
 
         try {
-            const res = await fetch(`${API}/api/inpaint-layer`, {
-                method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
-                body: JSON.stringify({
-                    filename: layerData.filename,
-                    prompt: layerEditPrompt,
-                    mask: maskDataUrl,
-                    canvasWidth: Math.round(canvas.getWidth()),
-                    canvasHeight: Math.round(canvas.getHeight()),
-                    transform: {
-                        x: objToReplace.left || 0,
-                        y: objToReplace.top || 0,
-                        scaleX: objToReplace.scaleX || 1,
-                        scaleY: objToReplace.scaleY || 1,
-                        angle: objToReplace.angle || 0,
-                        flipX: !!objToReplace.flipX,
-                        flipY: !!objToReplace.flipY,
-                        opacity: objToReplace.opacity ?? 1,
-                    },
-                    projectId: activeProject.id,
-                    userId: user.id
-                })
+            const d = await runAsyncJob('/api/inpaint-layer', {
+                filename: layerData.filename,
+                prompt: layerEditPrompt,
+                mask: maskDataUrl,
+                canvasWidth: Math.round(canvas.getWidth()),
+                canvasHeight: Math.round(canvas.getHeight()),
+                transform: {
+                    x: objToReplace.left || 0,
+                    y: objToReplace.top || 0,
+                    scaleX: objToReplace.scaleX || 1,
+                    scaleY: objToReplace.scaleY || 1,
+                    angle: objToReplace.angle || 0,
+                    flipX: !!objToReplace.flipX,
+                    flipY: !!objToReplace.flipY,
+                    opacity: objToReplace.opacity ?? 1,
+                },
+                projectId: activeProject.id,
+                userId: user.id,
+                sessionId,
+                layerLocalId: selectedLayerId,
+            }, currentToken, {
+                onProgress: (job) => {
+                    setJobProgress(job.progressPct || 0);
+                    setJobStage(job.stage || '');
+                },
             });
-            const d = await res.json();
+            cacheMediaFromResponse(d);
             if (!d.success) throw new Error(d.error || 'Layer inpaint failed');
             updateCreditsFromResponse(d);
 
             const oldZIndex = canvas.getObjects().indexOf(objToReplace);
 
-            fabric.Image.fromURL(`${API}${d.resultUrl}?t=${Date.now()}`, { crossOrigin: 'anonymous' }).then((newImg) => {
+            loadFabricFromPath(d.resultUrl, currentToken).then((newImg) => {
                 newImg.set({
                     customId: selectedLayerId,
                     left: 0,
@@ -873,13 +1124,14 @@ export default function ImageLayersTool(props) {
                     height: Math.round(canvas.getHeight()),
                     projectId: activeProject.id,
                     userId: user.id,
+                    sessionId,
                 }),
             });
             const data = await res.json();
             if (!data.success) throw new Error(data.error || 'Layer export failed');
             updateCreditsFromResponse(data);
-
-            await forceDownload(null, `${API}${data.resultUrl}`, data.resultUrl.split('/').pop() || 'composed_layers.png');
+            setLastComposedUrl(data.resultUrl);
+            await forceDownload(null, mediaUrl(data.resultUrl), data.resultUrl.split('/').pop() || 'composed_layers.png', currentToken);
         } catch (e) {
             console.error(e);
             setError(e.message || 'Layer export failed');
@@ -887,6 +1139,107 @@ export default function ImageLayersTool(props) {
             setIsExportingLayers(false);
         }
     };
+
+    const handleSaveToProject = async () => {
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return;
+        setIsExportingLayers(true);
+        try {
+            const layerMap = new Map(layersList.map((layer) => [layer.id, layer]));
+            const payloadLayers = canvas.getObjects()
+                .filter((obj) => obj.customId !== undefined && obj.customId !== null)
+                .map((obj) => {
+                    const layer = layerMap.get(obj.customId);
+                    return {
+                        id: obj.customId,
+                        name: layer?.name,
+                        filename: layer?.filename,
+                        x: obj.left || 0,
+                        y: obj.top || 0,
+                        scaleX: obj.scaleX || 1,
+                        scaleY: obj.scaleY || 1,
+                        angle: obj.angle || 0,
+                        flipX: !!obj.flipX,
+                        flipY: !!obj.flipY,
+                        opacity: obj.opacity ?? 1,
+                        visible: obj.visible !== false,
+                    };
+                })
+                .filter((layer) => layer.filename);
+
+            const res = await fetch(`${API}/api/compose-layers`, {
+                method: 'POST',
+                headers: jsonAuthHeaders(currentToken),
+                body: JSON.stringify({
+                    layers: payloadLayers,
+                    width: Math.round(canvas.getWidth()),
+                    height: Math.round(canvas.getHeight()),
+                    projectId: activeProject.id,
+                    userId: user.id,
+                    sessionId,
+                }),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Save failed');
+            updateCreditsFromResponse(data);
+            setLastComposedUrl(data.resultUrl);
+            if (setState) {
+                setState((s) => ({
+                    ...s,
+                    activeProject: { ...s.activeProject, heroImageUrl: data.resultUrl },
+                    variations: [
+                        {
+                            id: Date.now(),
+                            name: 'Qwen Composed',
+                            imageUrl: data.resultUrl,
+                            isSelected: true,
+                        },
+                        ...(s.variations || []).map((v) => ({ ...v, isSelected: false })),
+                    ],
+                }));
+            }
+        } catch (e) {
+            setError(e.message || 'Save to project failed');
+        } finally {
+            setIsExportingLayers(false);
+        }
+    };
+
+    const handleSemanticSelect = async () => {
+        if (!semanticQuery.trim()) return;
+        try {
+            const matches = await semanticSelect(semanticQuery.trim());
+            if (matches.length) {
+                setMultiSelectedIds(matches.map((m) => m.layerLocalId));
+                setSelectedLayerId(matches[0].layerLocalId);
+            } else {
+                setError('No layers matched that query.');
+            }
+        } catch (e) {
+            setError(e.message || 'Semantic select failed');
+        }
+    };
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                undo(layersList, selectedLayerId, (snap) => {
+                    setLayersList(snap.layersList);
+                    setSelectedLayerId(snap.selectedLayerId);
+                });
+            }
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                e.preventDefault();
+                redo(layersList, selectedLayerId, (snap) => {
+                    setLayersList(snap.layersList);
+                    setSelectedLayerId(snap.selectedLayerId);
+                });
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [layersList, selectedLayerId, undo, redo]);
 
     const applyCanvasTransform = (transformType) => {
         const canvas = canvasInstanceRef.current;
@@ -1071,7 +1424,31 @@ export default function ImageLayersTool(props) {
                             <button className="st-layer-toolbar-btn" onClick={handleComposeLayers} disabled={isExportingLayers} title="Flatten ordered visible layers to PNG">
                                 <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} /> {isExportingLayers ? 'Exporting...' : 'Flatten & Export PNG'}
                             </button>
+                            <button className="st-layer-toolbar-btn st-qwen-action-btn" onClick={handleSaveToProject} disabled={isExportingLayers} title="Save composed design to project versions">
+                                Save to Project
+                            </button>
+                            <QwenSendToMenu url={lastComposedUrl} filename={lastComposedUrl?.split('/').pop()} setters={toolSetters} />
+                            <button className="st-layer-toolbar-btn" disabled={!canUndo} onClick={() => undo(layersList, selectedLayerId, (snap) => { setLayersList(snap.layersList); setSelectedLayerId(snap.selectedLayerId); })} title="Undo (Ctrl+Z)">Undo</button>
+                            <button className="st-layer-toolbar-btn" disabled={!canRedo} onClick={() => redo(layersList, selectedLayerId, (snap) => { setLayersList(snap.layersList); setSelectedLayerId(snap.selectedLayerId); })} title="Redo (Ctrl+Shift+Z)">Redo</button>
+                            <button className="st-layer-toolbar-btn" onClick={() => handleExportSession('zip')} disabled={isExportingLayers || !sessionId} title="Export layers ZIP">ZIP</button>
+                            <button className="st-layer-toolbar-btn" onClick={() => handleExportSession('psd')} disabled={isExportingLayers || !sessionId} title="Export PSD">PSD</button>
+                            <button className="st-layer-toolbar-btn" onClick={() => handleExportSession('svg')} disabled={isExportingLayers || !sessionId} title="Export SVG">SVG</button>
+                            <button className="st-layer-toolbar-btn" onClick={() => setSessionsOpen((v) => !v)} title="Qwen sessions">Sessions ({sessions.length})</button>
+                            {(jobProgress > 0 && jobProgress < 100) && (
+                                <div className="st-layer-zoom-readout">{jobStage || 'Working'} {jobProgress}%</div>
+                            )}
                         </div>
+
+                        {sessionsOpen && (
+                            <div className="st-qwen-sessions-drawer" style={{ padding: '0.65rem 1rem', borderBottom: '1px solid rgba(103,232,249,0.16)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                {sessions.map((s) => (
+                                    <button key={s.id} type="button" className="st-qwen-demo-card" onClick={() => loadSession(s.id)}>
+                                        <span>{s.name}</span>
+                                        <small>{s.updatedAt ? new Date(s.updatedAt).toLocaleString() : ''}</small>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
 
 
                         {/* Main Body */}
@@ -1082,8 +1459,18 @@ export default function ImageLayersTool(props) {
                                 {isProcessingAI && (
                                     <div className="st-processing-overlay">
                                         <div className="st-spinner" style={{ width: 40, height: 40, borderWidth: 4, borderColor: 'rgba(59, 130, 246, 0.3)', borderTopColor: '#3b82f6' }} />
-                                        <div className="st-processing-text">{aiProcessingText}</div>
+                                        <div className="st-processing-text">{aiProcessingText || jobStage}</div>
+                                        {jobProgress > 0 && <div className="st-processing-text">{jobProgress}%</div>}
                                     </div>
+                                )}
+                                {pendingEditPreview && (
+                                    <BeforeAfterSlider
+                                        beforeUrl={layersList.find((l) => l.id === pendingEditPreview.layerId)?.url}
+                                        afterUrl={pendingEditPreview.resultUrl}
+                                        token={currentToken}
+                                        onCommit={commitPendingEdit}
+                                        onDiscard={discardPendingEdit}
+                                    />
                                 )}
                             </div>
 
@@ -1095,7 +1482,8 @@ export default function ImageLayersTool(props) {
                                     {[...layersList].reverse().map((layer) => (
                                         <div
                                             key={layer.id}
-                                            className={`st-layer-panel-item ${selectedLayerId === layer.id ? 'selected' : ''} ${layerDragState.draggingId === layer.id ? 'dragging' : ''} ${layerDragState.overId === layer.id ? `drag-over-${layerDragState.position}` : ''}`}
+                                            className={`st-layer-panel-item ${selectedLayerId === layer.id || multiSelectedIds.includes(layer.id) ? 'selected' : ''} ${layerDragState.draggingId === layer.id ? 'dragging' : ''} ${layerDragState.overId === layer.id ? `drag-over-${layerDragState.position}` : ''}`}
+                                            style={{ position: 'relative' }}
                                             draggable
                                             onDragStart={(e) => {
                                                 e.dataTransfer.effectAllowed = 'move';
@@ -1126,10 +1514,16 @@ export default function ImageLayersTool(props) {
                                                 setLayerDragState({ draggingId: null, overId: null, position: null });
                                             }}
                                             onDragEnd={() => setLayerDragState({ draggingId: null, overId: null, position: null })}
-                                            onClick={() => selectLayerFromPanel(layer.id)}
+                                            onClick={(e) => {
+                                                if (e.shiftKey) {
+                                                    setMultiSelectedIds((prev) => prev.includes(layer.id) ? prev.filter((id) => id !== layer.id) : [...prev, layer.id]);
+                                                } else {
+                                                    selectLayerFromPanel(layer.id);
+                                                }
+                                            }}
                                         >
                                             <div className="layer-num">{layer.id + 1}</div>
-                                            <img className="layer-thumb" src={`${API}${layer.url}`} alt={layer.name} draggable={false} />
+                                            <MediaImg className="layer-thumb" src={layer.url} alt={layer.name} token={currentToken} draggable={false} />
                                             <div className="layer-name">
                                                 {layer.loadingName ? '...' : layer.name}
                                             </div>
@@ -1149,6 +1543,27 @@ export default function ImageLayersTool(props) {
                                                     ? <I d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" s={14} />
                                                     : <I d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10z" s={14} />}
                                             </button>
+                                            <button
+                                                className="st-layer-icon-btn"
+                                                onClick={(e) => { e.stopPropagation(); setLayerVersionsOpen(layerVersionsOpen === layer.id ? null : layer.id); }}
+                                                title="Version history"
+                                            >
+                                                <I d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" s={14} />
+                                            </button>
+                                            <QwenSendToMenu url={layer.url} filename={layer.filename} setters={toolSetters} compact label="→" />
+                                            {layerVersionsOpen === layer.id && layerVersionsFor(layer.id).length > 0 && (
+                                                <div className="st-layer-version-popover" onClick={(e) => e.stopPropagation()} style={{
+                                                    position: 'absolute', right: 0, top: '100%', zIndex: 20,
+                                                    background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(103,232,249,0.2)',
+                                                    borderRadius: 8, padding: '0.35rem', minWidth: 160, maxHeight: 180, overflowY: 'auto',
+                                                }}>
+                                                    {layerVersionsFor(layer.id).map((v) => (
+                                                        <button key={v.id} type="button" className="st-layer-version-item" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 6px', fontSize: '0.7rem', background: 'none', border: 'none', color: '#e2e8f0', cursor: 'pointer' }} onClick={() => handleRevertVersion(v.id, layer.id)}>
+                                                            v{v.versionNum} — {v.editType} ({new Date(v.createdAt).toLocaleString()})
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -1162,6 +1577,73 @@ export default function ImageLayersTool(props) {
                                 <button className={`st-layer-prompt-chip ${editType === 'inpaint' ? 'active' : ''}`} onClick={() => setEditType('inpaint')}>Inpaint</button>
                                 <button className={`st-layer-prompt-chip ${editType === 'remove' ? 'active' : ''}`} onClick={() => setEditType('remove')}>Remove</button>
                                 <button className={`st-layer-prompt-chip ${editType === 'decompose' ? 'active' : ''}`} onClick={() => setEditType('decompose')}>Decompose</button>
+                                <button className={`st-layer-prompt-chip ${editType === 'style_transfer' ? 'active' : ''}`} onClick={() => setEditType('style_transfer')}>Style</button>
+                                <button className={`st-layer-prompt-chip ${editType === 'relight' ? 'active' : ''}`} onClick={() => setEditType('relight')}>Relight</button>
+                                <button className={`st-layer-prompt-chip ${editType === 'reference' ? 'active' : ''}`} onClick={() => setEditType('reference')}>Reference</button>
+                            </div>
+                            {editType === 'recolor' && (
+                                <div style={{ marginBottom: '0.35rem' }}>
+                                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', marginBottom: '0.25rem' }}>
+                                        <input
+                                            type="text"
+                                            className="st-layer-prompt-input"
+                                            placeholder="Pantone code (optional), e.g. 19-4052"
+                                            value={pantoneCode}
+                                            onChange={(e) => { setPantoneCode(e.target.value); setSelectedPantone(null); }}
+                                            style={{ flex: 1 }}
+                                        />
+                                        <button type="button" className="st-layer-prompt-chip" onClick={() => setPantonePickerOpen((v) => !v)}>
+                                            Swatches
+                                        </button>
+                                    </div>
+                                    {selectedPantone && (
+                                        <div style={{ fontSize: '0.7rem', color: 'rgba(226,242,255,0.72)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <span style={{ width: 14, height: 14, borderRadius: 3, background: selectedPantone.hex, border: '1px solid rgba(255,255,255,0.2)' }} />
+                                            {selectedPantone.name}
+                                        </div>
+                                    )}
+                                    {pantonePickerOpen && (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 100, overflowY: 'auto', padding: '0.25rem 0' }}>
+                                            {pantoneSwatches.slice(0, 80).map((p) => (
+                                                <button key={p.name} type="button" title={p.name} onClick={() => { setSelectedPantone(p); setPantoneCode(p.code || ''); setPantonePickerOpen(false); }} style={{ width: 22, height: 22, borderRadius: 4, background: p.hex, border: selectedPantone?.name === p.name ? '2px solid #67e8f9' : '1px solid rgba(255,255,255,0.15)', cursor: 'pointer', padding: 0 }} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {(editType === 'reference' || editType === 'style_transfer') && (
+                                <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', marginBottom: '0.35rem', fontSize: '0.75rem' }}>
+                                    <label className="st-layer-prompt-chip" style={{ cursor: 'pointer' }}>
+                                        Reference image
+                                        <input type="file" accept="image/*" hidden onChange={(e) => handleReferenceFile(e.target.files?.[0])} />
+                                    </label>
+                                    {referencePreview && <MediaImg src={referencePreview} alt="" token={currentToken} style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4 }} />}
+                                </div>
+                            )}
+                            {editType === 'revise' && layerOcrText && (
+                                <div style={{ fontSize: '0.72rem', color: 'rgba(226,242,255,0.65)', marginBottom: '0.35rem' }}>
+                                    Detected text: <em>{layerOcrText}</em>
+                                    <button type="button" className="st-layer-prompt-chip" style={{ marginLeft: 6 }} onClick={fetchLayerOcr}>Re-scan</button>
+                                </div>
+                            )}
+                            {editType === 'inpaint' && (
+                                <button type="button" className="st-layer-prompt-chip" style={{ marginBottom: '0.35rem' }} onClick={handleSmartMask}>Smart mask from prompt</button>
+                            )}
+                            {editType === 'replace' && (
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: 'rgba(226,242,255,0.72)', marginBottom: '0.35rem' }}>
+                                    <input type="checkbox" checked={preserveSilhouette} onChange={(e) => setPreserveSilhouette(e.target.checked)} />
+                                    Keep silhouette (preserve alpha)
+                                </label>
+                            )}
+                            <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                                <input
+                                    type="text"
+                                    className="st-layer-prompt-input"
+                                    placeholder='Semantic select, e.g. "all flowers"'
+                                    value={semanticQuery}
+                                    onChange={(e) => setSemanticQuery(e.target.value)}
+                                />
+                                <button type="button" className="st-layer-prompt-apply" onClick={handleSemanticSelect}>Select</button>
                             </div>
                             <div className="st-layer-prompt-input-wrap">
                                 <input
@@ -1247,17 +1729,6 @@ export default function ImageLayersTool(props) {
     const renderToolControls = () => {
         if (tool === 'imagelayers') return (
             <div className="st-ctrl">
-                <div className="st-qwen-side-card">
-                    <div className="st-qwen-eyebrow">Qwen model stack</div>
-                    <strong>Layered decomposition + Qwen layer editing</strong>
-                    <p>Qwen-native layer decomposition and isolated natural-language edits power this workspace.</p>
-                </div>
-                <div className="st-settings-group">
-                    <div className="st-group-title">QWEN DEMO ACTIONS</div>
-                    <div className="st-qwen-demo-grid compact">
-                        {qwenLayerDemoActions.map((demo) => renderShowcaseDemoCard(demo, 14))}
-                    </div>
-                </div>
                 <div className="st-settings-group">
                     <div className="st-group-title">LAYER SETTINGS</div>
                     <label className="st-label">Number of Layers</label>

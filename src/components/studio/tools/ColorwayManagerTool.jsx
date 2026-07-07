@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { apiFetch, forceDownload, API, jsonAuthHeaders } from '../shared/helpers';
+import { apiFetch, forceDownload, API, jsonAuthHeaders, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
 import ImageDropzone from '../shared/ImageDropzone';
+import UploadStatusBadge from '../shared/UploadStatusBadge';
+import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function ColorwayManagerTool(props) {
     const {
         uploaded, preview, activeProject, user, setError, updateCreditsFromResponse,
-        creditPricing, currentToken, handlePreUpload, onUploadInvalid, onUploadPaste,
+        creditPricing, currentToken, handlePreUpload, onUploadInvalid, onUploadPaste, uploadStatus, isUploading,
     } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
@@ -136,6 +139,7 @@ export default function ColorwayManagerTool(props) {
                     onFile={handlePreUpload}
                     onInvalidFile={onUploadInvalid}
                     onPasteSuccess={onUploadPaste}
+                    uploadStatus={uploadStatus}
                 />
             </div>
         );
@@ -152,7 +156,7 @@ export default function ColorwayManagerTool(props) {
                         </div>
                         <h3 style={{ color: 'var(--text)', margin: '0 0 0.5rem 0', fontSize: '1.5rem' }}>Extract Base Palette</h3>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '2rem' }}>AI will analyze your artwork and intelligently extract its core colors to generate production colorways.</p>
-                        <button className="st-extract-btn-creative" onClick={cwmExtractPalette} disabled={isCwmGenerating}>
+                        <button className="st-extract-btn-creative" onClick={cwmExtractPalette} disabled={isCwmGenerating || isUploading}>
                             <div className={isCwmGenerating ? 'spin-icon' : ''}>
                                 <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={20} />
                             </div>
@@ -271,7 +275,7 @@ export default function ColorwayManagerTool(props) {
                                             <div key={i} style={{ backgroundColor: 'var(--bg)', borderRadius: '16px', border: '1px solid var(--border)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                                                 {cw.resultUrl ? (
                                                     <div style={{ aspectRatio: '1', overflow: 'hidden', position: 'relative' }}>
-                                                        <img src={`${API}${cw.resultUrl}`} alt={`Colorway ${i + 1}`}
+                                                        <MediaImg src={cw.resultUrl} alt={`Colorway ${i + 1}`} token={currentToken}
                                                             style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                         <div style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', padding: '4px 8px', borderRadius: '8px', color: '#fff', fontSize: '0.7rem', fontWeight: 600 }}>
                                                             Colorway {i + 1}

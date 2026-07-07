@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { apiFetch, forceDownload } from '../shared/helpers';
+import { apiFetch, forceDownload, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
 import ImageDropzone from '../shared/ImageDropzone';
+import UploadStatusBadge from '../shared/UploadStatusBadge';
+import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import OpenInQwenButton from '../shared/OpenInQwenButton';
 
 export default function ColorwaysTool(props) {
     const {
         uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse,
-        creditPricing, cwUrl, setCwUrl, currentToken, handlePreUpload, onUploadInvalid, onUploadPaste,
+        creditPricing, cwUrl, setCwUrl, currentToken, handlePreUpload, onUploadInvalid, onUploadPaste, uploadStatus, isUploading, setTool, setQwenLaunch,
     } = props;
 
     const colorwayCreditCost = creditPricing.recolor || 3;
@@ -94,6 +98,7 @@ export default function ColorwaysTool(props) {
                     onFile={handlePreUpload}
                     onInvalidFile={onUploadInvalid}
                     onPasteSuccess={onUploadPaste}
+                    uploadStatus={uploadStatus}
                 />
             </div>
         );
@@ -105,12 +110,17 @@ export default function ColorwaysTool(props) {
                 <div className="st-comparison-card">
                     <div className="st-comparison-card-head">
                         <span>Original Artwork</span>
-                        <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <UploadStatusBadge status={uploadStatus} />
+                            <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} /> Replace
                         </button>
+                        </div>
                     </div>
                     <div className="st-comparison-card-body" style={{ position: 'relative' }}>
-                        <img src={preview} alt="Original" />
+                        <UploadImageFrame status={uploadStatus}>
+                            <img src={preview} alt="Original" />
+                        </UploadImageFrame>
                     </div>
                 </div>
 
@@ -136,7 +146,7 @@ export default function ColorwaysTool(props) {
                     <div className="st-comparison-card-head">
                         <span>Latest Colorway</span>
                         {cwUrl && (
-                            <button onClick={(e) => forceDownload(e, `${API}${cwUrl}`)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            <button onClick={(e) => forceDownload(e, mediaUrl(cwUrl), undefined, currentToken)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
                                 <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
                             </button>
                         )}
@@ -144,7 +154,7 @@ export default function ColorwaysTool(props) {
                     <div className="st-comparison-card-body">
                         {cwUrl ? (
                             <div className="st-result-reveal">
-                                <img src={`${API}${cwUrl}`} alt="Result" />
+                                <MediaImg src={cwUrl} alt="Result" token={currentToken} />
                             </div>
                         ) : isCwRecoloring ? (
                             <div className="st-ai-processing">
@@ -226,8 +236,11 @@ export default function ColorwaysTool(props) {
                     <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text)', fontSize: '1.1rem' }}>Recent Variations</h3>
                     <div className="st-variations-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem' }}>
                         {cwVariations.map((v, i) => (
-                            <div key={i} style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'translateY(-2px)' } }} onClick={() => { setCwUrl(v.url); setCwTargetPalette([...v.targetPalette]); }}>
-                                <img src={`${API}${v.url}`} alt={`Variation ${i}`} style={{ width: '100%', display: 'block', aspectRatio: '1/1', objectFit: 'cover' }} />
+                            <div key={i} style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer', transition: 'transform 0.2s' }} onClick={() => { setCwUrl(v.url); setCwTargetPalette([...v.targetPalette]); }}>
+                                <MediaImg src={v.url} alt={`Variation ${i}`} token={currentToken} style={{ width: '100%', display: 'block', aspectRatio: '1/1', objectFit: 'cover' }} />
+                                <div style={{ position: 'absolute', top: 6, right: 6 }} onClick={(e) => e.stopPropagation()}>
+                                    <OpenInQwenButton sourceUrl={v.url} projectId={activeProject?.id} userId={user?.id} currentToken={currentToken} setTool={setTool} setQwenLaunch={setQwenLaunch} className="st-quick-action-btn" label="Qwen" />
+                                </div>
                                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', padding: '0.5rem', display: 'flex', gap: '4px', overflowX: 'auto' }}>
                                     {v.targetPalette.map((p, j) => (
                                         <div key={j} style={{ width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0, backgroundColor: p.new, border: '1px solid rgba(255,255,255,0.2)' }} />

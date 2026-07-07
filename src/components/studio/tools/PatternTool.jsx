@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders, resolveImagePayload } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders, resolveImagePayload, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
+import UploadStatusBadge from '../shared/UploadStatusBadge';
+import UploadImageFrame from '../shared/UploadImageFrame';
+import '../../../styles/tools/pattern.css';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import OpenInQwenButton from '../shared/OpenInQwenButton';
 
 // Per-model credits must mirror EXTRACT_MODELS in backend/routes/generation.py
 // and DEFAULT_CREDIT_PRICING in backend/db.py.  At 4 credits per INR 1, the
@@ -17,7 +22,7 @@ const EXTRACT_MODEL_DEFS = [
 
 export default function PatternTool({
     uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, tool, creditPricing, setEnhUrl, setTool,
-    handlePreUpload, onUploadInvalid, onUploadPaste, currentToken,
+    handlePreUpload, onUploadInvalid, onUploadPaste, currentToken, uploadStatus, isUploading, setQwenLaunch,
 }) {
     // ===== LOCAL STATE =====
     const [extractResults, setExtractResults] = useState(EXTRACT_MODEL_DEFS.map(m => ({ ...m, loading: false, url: null, error: null, duration: 0 })));
@@ -88,6 +93,7 @@ export default function PatternTool({
                     })
                 });
                 const d = await r.json();
+                cacheMediaFromResponse(d);
                 if (d.success) {
                     setExtractResults(prev => prev.map(m =>
                         m.id === modelDef.id
@@ -140,6 +146,7 @@ export default function PatternTool({
                 })
             });
             const d = await r.json();
+            cacheMediaFromResponse(d);
             if (d.success) {
                 // Add AI response with image
                 setExtractChatMessages(prev => ({
@@ -181,6 +188,7 @@ export default function PatternTool({
                     title="Upload artwork to extract"
                     description="Drag & drop, paste, or click — 4 AI models will compete to extract the best pattern"
                     badges={['PNG', 'JPG', 'WEBP', '4 AI Models']}
+                    uploadStatus={uploadStatus}
                     onFile={handlePreUpload}
                     onInvalidFile={onUploadInvalid}
                     onPasteSuccess={onUploadPaste}
@@ -199,17 +207,20 @@ export default function PatternTool({
                 <div className="st-pattern-source-card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1f2937' }}>Source Pattern</span>
-                        <button type="button" onClick={openFilePicker} style={{
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <UploadStatusBadge status={uploadStatus} />
+                            <button type="button" onClick={openFilePicker} style={{
                             background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer',
                             fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px',
                         }}>
                             <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" s={12} />
                             Replace
                         </button>
+                        </div>
                     </div>
-                    <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e5e7eb', aspectRatio: '1' }}>
+                    <UploadImageFrame status={uploadStatus} style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e5e7eb', aspectRatio: '1' }}>
                         <img src={preview} alt="Source" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
+                    </UploadImageFrame>
                     <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
                         {uploaded && <span style={{ fontSize: '0.7rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '3px', background: '#f3f4f6', padding: '3px 8px', borderRadius: '6px' }}>
                             <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16" s={10} />
@@ -290,7 +301,7 @@ export default function PatternTool({
             <button
                 className={`st-extract-btn-creative ${!hasEnoughExtractCredits ? 'insufficient-credits' : ''}`}
                 onClick={extractDesignMulti}
-                disabled={anyLoading || !preview || activeModelCount === 0 || !hasEnoughExtractCredits}
+                disabled={anyLoading || isUploading || !preview || activeModelCount === 0 || !hasEnoughExtractCredits}
                 title={!hasEnoughExtractCredits ? `Need ${extractCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Extract pattern with selected AI models'}
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
@@ -358,7 +369,7 @@ export default function PatternTool({
                                 <div className="st-extract-model-body">
                                     {model.url ? (
                                         <>
-                                            <img src={`${API}${model.url}`} alt={model.name} />
+                                            <MediaImg src={model.url} alt={model.name} token={currentToken} />
                                             <div className="st-extract-overlay">
                                                 <I d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" s={18} />
                                                 <I d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" s={18} />
@@ -408,6 +419,17 @@ export default function PatternTool({
                         <button className="st-quick-action-btn" onClick={() => { if (completedResults[0]) { setEnhUrl(completedResults[0].url); setTool('seamless'); } }}>
                             <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={14} /> Send to Seamless
                         </button>
+                        {completedResults[0] && (
+                            <OpenInQwenButton
+                                sourceUrl={completedResults[0].url}
+                                projectId={activeProject?.id}
+                                userId={user?.id}
+                                currentToken={currentToken}
+                                setTool={setTool}
+                                setQwenLaunch={setQwenLaunch}
+                                className="st-quick-action-btn"
+                            />
+                        )}
                     </div>
                 </div>
             )}
@@ -454,7 +476,7 @@ export default function PatternTool({
                                 <I d="M15 19l-7-7 7-7" s={22} />
                             </button>
                             {galleryModel.url ? (
-                                <img src={`${API}${galleryModel.url}`} alt={galleryModel.name} key={galleryModel.url} />
+                                <MediaImg src={galleryModel.url} alt={galleryModel.name} key={galleryModel.url} token={currentToken} />
                             ) : galleryModel.loading ? (
                                 <div className="st-ai-processing">
                                     <div className="st-ai-sparkle-container">
@@ -504,7 +526,7 @@ export default function PatternTool({
                                         <div key={i} className={`st-extract-chat-bubble ${msg.role}`}>
                                             {msg.content}
                                             {msg.imageUrl && (
-                                                <img src={`${API}${msg.imageUrl}`} alt="Edit result" onClick={() => {
+                                                <MediaImg src={msg.imageUrl} alt="Edit result" token={currentToken} onClick={() => {
                                                     setExtractResults(prev => prev.map((m, idx) =>
                                                         idx === extractGalleryIndex ? { ...m, url: msg.imageUrl } : m
                                                     ));

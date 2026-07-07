@@ -2,6 +2,8 @@ import React from 'react';
 import { I } from './StudioIcons';
 import { useImageDropzone } from './useImageDropzone';
 import { ACCEPTED_IMAGE_EXTENSIONS } from './imageUpload';
+import UploadStatusBadge from './UploadStatusBadge';
+import UploadImageFrame from './UploadImageFrame';
 
 export default function ImageDropzone({
     variant = 'creative',
@@ -19,6 +21,7 @@ export default function ImageDropzone({
     onPasteSuccess,
     className = '',
     children,
+    uploadStatus = null,
 }) {
     const { isDrag, rootProps, inputProps, openFilePicker } = useImageDropzone({
         onFile,
@@ -38,17 +41,21 @@ export default function ImageDropzone({
     }
 
     if (variant === 'compact') {
+        const isUploading = uploadStatus === 'uploading';
         return (
             <div
                 {...rootProps}
-                className={`st-upload ${isDrag ? 'dragging' : ''} ${preview ? 'has-image' : ''} ${className}`.trim()}
+                className={`st-upload ${isDrag ? 'dragging' : ''} ${preview ? 'has-image' : ''} ${isUploading ? 'is-uploading' : ''} ${uploadStatus === 'ready' ? 'is-ready' : ''} ${className}`.trim()}
             >
                 {preview ? (
                     <div className="st-upload-preview">
-                        <img src={preview} alt="Uploaded" />
+                        <UploadImageFrame status={uploadStatus}>
+                            <img src={preview} alt="Uploaded" />
+                        </UploadImageFrame>
                         <div>
                             <span className="st-upload-name">{previewLabel || 'Image'}</span>
-                            <span className="st-upload-hint">{previewHint}</span>
+                            <span className="st-upload-hint">{isUploading ? 'Saving to workspace…' : previewHint}</span>
+                            <UploadStatusBadge status={uploadStatus} />
                         </div>
                     </div>
                 ) : (
@@ -68,25 +75,29 @@ export default function ImageDropzone({
             <div className={className}>
                 <button
                     type="button"
-                    className={`st-inspire-upload-zone ${preview ? 'has-image' : ''} ${isDrag ? 'dragging' : ''}`}
+                    className={`st-inspire-upload-zone ${preview ? 'has-image' : ''} ${isDrag ? 'dragging' : ''} ${uploadStatus === 'uploading' ? 'is-uploading' : ''}`}
                     {...rootProps}
                 >
                     {preview ? (
-                        <img src={preview} alt="Uploaded reference" />
+                        <UploadImageFrame status={uploadStatus}>
+                            <img src={preview} alt="Uploaded reference" />
+                        </UploadImageFrame>
                     ) : (
                         <span>Drag, paste, or click to upload</span>
                     )}
                 </button>
+                {uploadStatus && <UploadStatusBadge status={uploadStatus} className="st-upload-status-inline" />}
                 <input {...inputProps} />
             </div>
         );
     }
 
     // creative (default)
+    const isUploading = uploadStatus === 'uploading';
     return (
         <div
             {...rootProps}
-            className={`st-dropzone-creative ${isDrag ? 'dragging' : ''} ${className}`.trim()}
+            className={`st-dropzone-creative ${isDrag ? 'dragging' : ''} ${isUploading ? 'is-uploading' : ''} ${uploadStatus === 'ready' ? 'is-ready' : ''} ${className}`.trim()}
         >
             <div className="st-particles">
                 <div className="st-particle" />
@@ -99,6 +110,15 @@ export default function ImageDropzone({
             </div>
             {title && <h2 className="st-dropzone-title">{title}</h2>}
             {description && <p className="st-dropzone-desc">{description}</p>}
+            {isUploading && (
+                <div className="st-dropzone-uploading" aria-live="polite">
+                    <span className="st-upload-status-spinner st-upload-status-spinner-lg" />
+                    <span>Uploading your image…</span>
+                </div>
+            )}
+            {uploadStatus === 'ready' && !isUploading && (
+                <UploadStatusBadge status="ready" className="st-dropzone-ready-badge" />
+            )}
             {badges.length > 0 && (
                 <div className="st-dropzone-badges">
                     {badges.map((badge) => (

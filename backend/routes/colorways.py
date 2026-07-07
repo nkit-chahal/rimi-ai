@@ -9,8 +9,9 @@ from datetime import datetime, timezone
 from config import UPLOAD_DIR, RESULTS_DIR
 from db import db
 from auth import (
-    log_export, check_credits, credit_error_payload, credit_requirement,
-    get_updated_credits, record_activity,
+    log_export,
+    adjust_reserved_credits, credit_requirement,
+    get_updated_credits, refund_credits, reserve_credits_or_error,
 )
 from color_utils import recolor_image
 import storage
@@ -118,9 +119,6 @@ def generate_colorways():
 
     credits_per_colorway = credit_requirement('colorways', 3)
     required_credits = credits_per_colorway * count
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
-    if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
     def hex_to_hsl(hex_str):
         hex_str = hex_str.lstrip('#')
@@ -134,66 +132,77 @@ def generate_colorways():
 
     import random
     random.seed()
+
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', count)
+    if not ok:
+        return jsonify(err), 403
+
     colorways = []
     total_credits = 0
 
-    for cw_idx in range(count):
-        new_colors = list(palette)
-        for i in range(len(palette)):
-            if i in locked_indices:
-                continue
-            h, s, l = hex_to_hsl(palette[i])
+    try:
+        for cw_idx in range(count):
+            new_colors = list(palette)
+            for i in range(len(palette)):
+                if i in locked_indices:
+                    continue
+                h, s, l = hex_to_hsl(palette[i])
 
-            if strategy == 'complementary':
-                h = (h + 0.5 + random.uniform(-0.05, 0.05)) % 1.0
-                s = min(1.0, max(0.1, s + random.uniform(-0.15, 0.15)))
-            elif strategy == 'analogous':
-                h = (h + random.uniform(-0.08, 0.08) + (cw_idx * 0.06)) % 1.0
-                s = min(1.0, max(0.1, s + random.uniform(-0.1, 0.1)))
-            elif strategy == 'triadic':
-                shifts = [0.333, 0.666, 0.5]
-                h = (h + shifts[cw_idx % len(shifts)] + random.uniform(-0.03, 0.03)) % 1.0
-            elif strategy == 'monochrome':
-                l = min(0.9, max(0.1, l + (cw_idx - count/2) * 0.12 + random.uniform(-0.05, 0.05)))
-                s = min(1.0, max(0.05, s + random.uniform(-0.1, 0.1)))
-            elif strategy == 'seasonal_warm':
-                warm_hues = [0.0, 0.05, 0.08, 0.12, 0.95]
-                h = warm_hues[random.randint(0, len(warm_hues)-1)] + random.uniform(-0.03, 0.03)
-                h = h % 1.0
-                s = min(1.0, max(0.3, s + random.uniform(-0.1, 0.15)))
-                l = min(0.85, max(0.2, l + random.uniform(-0.1, 0.1)))
-            elif strategy == 'seasonal_cool':
-                cool_hues = [0.55, 0.6, 0.65, 0.7, 0.75]
-                h = cool_hues[random.randint(0, len(cool_hues)-1)] + random.uniform(-0.03, 0.03)
-                h = h % 1.0
-                s = min(1.0, max(0.2, s + random.uniform(-0.1, 0.1)))
-                l = min(0.8, max(0.15, l + random.uniform(-0.1, 0.1)))
+                if strategy == 'complementary':
+                    h = (h + 0.5 + random.uniform(-0.05, 0.05)) % 1.0
+                    s = min(1.0, max(0.1, s + random.uniform(-0.15, 0.15)))
+                elif strategy == 'analogous':
+                    h = (h + random.uniform(-0.08, 0.08) + (cw_idx * 0.06)) % 1.0
+                    s = min(1.0, max(0.1, s + random.uniform(-0.1, 0.1)))
+                elif strategy == 'triadic':
+                    shifts = [0.333, 0.666, 0.5]
+                    h = (h + shifts[cw_idx % len(shifts)] + random.uniform(-0.03, 0.03)) % 1.0
+                elif strategy == 'monochrome':
+                    l = min(0.9, max(0.1, l + (cw_idx - count/2) * 0.12 + random.uniform(-0.05, 0.05)))
+                    s = min(1.0, max(0.05, s + random.uniform(-0.1, 0.1)))
+                elif strategy == 'seasonal_warm':
+                    warm_hues = [0.0, 0.05, 0.08, 0.12, 0.95]
+                    h = warm_hues[random.randint(0, len(warm_hues)-1)] + random.uniform(-0.03, 0.03)
+                    h = h % 1.0
+                    s = min(1.0, max(0.3, s + random.uniform(-0.1, 0.15)))
+                    l = min(0.85, max(0.2, l + random.uniform(-0.1, 0.1)))
+                elif strategy == 'seasonal_cool':
+                    cool_hues = [0.55, 0.6, 0.65, 0.7, 0.75]
+                    h = cool_hues[random.randint(0, len(cool_hues)-1)] + random.uniform(-0.03, 0.03)
+                    h = h % 1.0
+                    s = min(1.0, max(0.2, s + random.uniform(-0.1, 0.1)))
+                    l = min(0.8, max(0.15, l + random.uniform(-0.1, 0.1)))
 
-            new_colors[i] = hsl_to_hex(h, s, l)
+                new_colors[i] = hsl_to_hex(h, s, l)
 
-        # Generate recolored image
-        color_mapping = [{'old': palette[j], 'new': new_colors[j]} for j in range(len(palette))]
-        result_name = f"cw_{uuid.uuid4().hex[:8]}.png"
-        result_path = os.path.join(RESULTS_DIR, result_name)
+            color_mapping = [{'old': palette[j], 'new': new_colors[j]} for j in range(len(palette))]
+            result_name = f"cw_{uuid.uuid4().hex[:8]}.png"
+            result_path = os.path.join(RESULTS_DIR, result_name)
 
-        try:
-            recolor_image(filepath, color_mapping, result_path)
-            storage.sync_to_s3(result_path)
-            colorways.append({
-                'colors': new_colors,
-                'strategy': strategy,
-                'resultUrl': f'/results/{result_name}',
-            })
-            log_export(project_id, result_name, filename, "Colorway", {"strategy": strategy, "colorway_index": cw_idx})
-            total_credits += credits_per_colorway
-        except Exception as e:
-            print(f"  [Colorway] Error generating colorway {cw_idx}: {e}")
+            try:
+                recolor_image(filepath, color_mapping, result_path)
+                storage.sync_to_s3(result_path)
+                colorways.append({
+                    'colors': new_colors,
+                    'strategy': strategy,
+                    'resultUrl': f'/results/{result_name}',
+                })
+                log_export(project_id, result_name, filename, "Colorway", {"strategy": strategy, "colorway_index": cw_idx})
+                total_credits += credits_per_colorway
+            except Exception as e:
+                print(f"  [Colorway] Error generating colorway {cw_idx}: {e}")
 
-    if colorways:
-        record_activity(project_id, 'generation', len(colorways), total_credits, user_id=user_id)
+        if colorways:
+            adjust_reserved_credits(user_id, project_id, required_credits, total_credits, note='Colorways partial refund')
+        else:
+            refund_credits(user_id, project_id, required_credits, note='Colorways produced no results')
 
-    updated_credits = get_updated_credits(user_id)
-    return jsonify({'success': True, 'colorways': colorways, **updated_credits})
+        updated_credits = get_updated_credits(user_id)
+        return jsonify({'success': True, 'colorways': colorways, **updated_credits})
+    except Exception as e:
+        refund_credits(user_id, project_id, required_credits, note='Colorways generation failed')
+        print(f"  [Colorways] Error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @bp.route('/api/colorways/export-linecard', methods=['POST'])

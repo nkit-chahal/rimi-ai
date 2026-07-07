@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload } from '../shared/helpers';
+import { API, apiFetch, forceDownload, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
 import ImageDropzone from '../shared/ImageDropzone';
+import UploadStatusBadge from '../shared/UploadStatusBadge';
+import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function RemoveBgTool(props) {
@@ -22,6 +25,8 @@ export default function RemoveBgTool(props) {
         handlePreUpload,
         onUploadInvalid,
         onUploadPaste,
+        uploadStatus,
+        isUploading: isUploadingProp,
     } = props;
 
     const [isProcessing, setIsProcessing] = useState(false);
@@ -37,7 +42,7 @@ export default function RemoveBgTool(props) {
     const hasEnoughCredits = userRemainingCredits >= creditCost;
 
     const serverFilename = uploaded?.filename;
-    const isUploading = Boolean(uploaded && !serverFilename);
+    const isUploading = isUploadingProp ?? Boolean(uploaded && !serverFilename);
 
     const resolveImagePayload = () => {
         if (serverFilename) {
@@ -90,11 +95,10 @@ export default function RemoveBgTool(props) {
             }, currentToken);
 
             if (data.success) {
-                const fullUrl = `${API}${data.resultUrl}`;
-                setRemoveBgUrl(fullUrl);
+                setRemoveBgUrl(data.resultUrl);
                 setIsProcessing(false);
                 updateCreditsFromResponse(data);
-                return { url: fullUrl };
+                return { url: data.resultUrl };
             }
             setIsProcessing(false);
             throw new Error(data.error || 'Background removal failed');
@@ -142,6 +146,7 @@ export default function RemoveBgTool(props) {
                         onFile={handlePreUpload}
                         onInvalidFile={onUploadInvalid}
                         onPasteSuccess={onUploadPaste}
+                        uploadStatus={uploadStatus}
                     />
                 </div>
                 {rightPanelEl && createPortal(
@@ -161,13 +166,18 @@ export default function RemoveBgTool(props) {
                     <div className="st-comparison-card">
                         <div className="st-comparison-card-head">
                             <span>Original</span>
-                            <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <UploadStatusBadge status={uploadStatus} />
+                                <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} />
                                 Replace
                             </button>
+                            </div>
                         </div>
                         <div className="st-comparison-card-body">
-                            <img src={preview} alt="Original artwork" />
+                            <UploadImageFrame status={uploadStatus}>
+                                <img src={preview} alt="Original artwork" />
+                            </UploadImageFrame>
                         </div>
                     </div>
 
@@ -201,7 +211,7 @@ export default function RemoveBgTool(props) {
                         <div className="st-comparison-card-body checkerboard-bg">
                             {removeBgUrl ? (
                                 <div className="st-result-reveal">
-                                    <img src={removeBgUrl} alt="Background removed" />
+                                    <MediaImg src={removeBgUrl} alt="Background removed" token={currentToken} />
                                 </div>
                             ) : isProcessing ? (
                                 <div className="st-ai-processing">

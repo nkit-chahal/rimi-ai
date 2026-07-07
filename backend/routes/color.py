@@ -10,9 +10,11 @@ from datetime import datetime, timezone
 from config import UPLOAD_DIR, RESULTS_DIR
 from db import db
 from auth import (
-    check_credits, credit_error_payload, credit_requirement,
-    record_activity, get_updated_credits, log_export,
+    credit_requirement,
+    get_updated_credits, log_export,
+    refund_credits, reserve_credits_or_error,
 )
+from security_utils import media_access_token
 from color_utils import extract_palette, recolor_image
 from pantone_utils import match_to_pantone, quantize_and_save
 from layer_utils import export_zip, export_tiff
@@ -22,12 +24,12 @@ import storage
 bp = Blueprint('color', __name__)
 
 
-def require_credits(user_id=None, tool_key='colorReduction', default=3):
+def require_credits(project_id, user_id=None, tool_key='colorReduction', default=3, activity_type='generation'):
     user_id = user_id or g.current_user['id']
     required_credits = credit_requirement(tool_key, default)
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, activity_type, 1)
     if not ok:
-        return user_id, required_credits, jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+        return user_id, required_credits, jsonify(err), 403
     return user_id, required_credits, None, None
 
 
@@ -69,14 +71,14 @@ def recolor_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, required_credits, error_response, status_code = require_credits(None, 'recolor', 3)
-    if error_response:
-        return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         filepath = os.path.join(RESULTS_DIR, filename)
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
+    user_id, required_credits, error_response, status_code = require_credits(project_id, None, 'recolor', 3)
+    if error_response:
+        return error_response, status_code
     try:
         start_time = time.time()
         local_uuid = uuid.uuid4().hex
@@ -85,8 +87,6 @@ def recolor_api():
         local_filepath = os.path.join(RESULTS_DIR, local_filename)
         recolor_image(filepath, color_mapping, local_filepath)
         storage.sync_to_s3(local_filepath)
-        duration = time.time() - start_time
-        credits_used = required_credits
         local_url = f"/results/{local_filename}"
         conn = db()
         created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -96,10 +96,15 @@ def recolor_api():
         )
         conn.commit()
         conn.close()
-        record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
         updated_credits = get_updated_credits(user_id)
-        return jsonify({'success': True, 'resultUrl': local_url, **updated_credits})
+        return jsonify({
+            'success': True,
+            'resultUrl': local_url,
+            'fileAccessToken': media_access_token(local_filename, user_id),
+            **updated_credits,
+        })
     except Exception as e:
+        refund_credits(user_id, project_id, required_credits, note='Recolor failed')
         return jsonify({'error': str(e)}), 500
 
 
@@ -114,9 +119,6 @@ def generate_tech_pack_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, required_credits, error_response, status_code = require_credits(None, 'techPack', 2)
-    if error_response:
-        return error_response, status_code
     filepath = os.path.join(RESULTS_DIR, filename)
     if not os.path.exists(filepath):
         filepath = os.path.join(UPLOAD_DIR, filename)
@@ -128,6 +130,9 @@ def generate_tech_pack_api():
     conn.close()
     if not project_row:
         return jsonify({'error': 'Project not found'}), 404
+    user_id, required_credits, error_response, status_code = require_credits(project_id, None, 'techPack', 2, 'export')
+    if error_response:
+        return error_response, status_code
     project_metadata = dict(project_row)
     project_metadata['controls'] = dict(controls_row) if controls_row else {}
     tech_pack_options = {}
@@ -141,6 +146,7 @@ def generate_tech_pack_api():
         generate_tech_pack(filepath, project_metadata, pdf_filepath, options=tech_pack_options)
         storage.sync_to_s3(pdf_filepath)
     except Exception as e:
+        refund_credits(user_id, project_id, required_credits, note='Tech pack failed')
         print(f"Failed to generate PDF: {e}")
         return jsonify({'error': 'Failed to generate Tech Pack PDF'}), 500
     conn = db()
@@ -151,7 +157,6 @@ def generate_tech_pack_api():
     )
     conn.commit()
     conn.close()
-    record_activity(project_id, 'export', 1, required_credits, user_id=user_id)
     updated_credits = get_updated_credits(user_id)
     return jsonify({'success': True, 'resultUrl': f"/results/{pdf_filename}", **updated_credits})
 
@@ -174,6 +179,24 @@ def pantone_match_api():
     return jsonify({'success': True, 'matches': matches})
 
 
+@bp.route('/api/pantone-colors', methods=['GET'])
+@login_required
+def pantone_colors_api():
+    """Return Pantone swatches for UI pickers (name + hex + rgb)."""
+    from pantone_utils import _load_pantone_db
+    db_entries = _load_pantone_db()
+    colors = [
+        {
+            'name': entry.get('name', ''),
+            'hex': entry.get('hex', ''),
+            'rgb': entry.get('rgb') or [],
+            'code': (entry.get('name') or '').split(' TCX')[0].replace('PANTONE ', '').strip(),
+        }
+        for entry in db_entries[:500]
+    ]
+    return jsonify({'success': True, 'colors': colors, 'total': len(db_entries)})
+
+
 @bp.route('/api/color-reduce', methods=['POST'])
 @login_required
 def color_reduce_api():
@@ -187,14 +210,14 @@ def color_reduce_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    user_id, required_credits, error_response, status_code = require_credits(None, 'colorReduction', 3)
-    if error_response:
-        return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         filepath = os.path.join(RESULTS_DIR, filename)
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
+    user_id, required_credits, error_response, status_code = require_credits(project_id, None, 'colorReduction', 3)
+    if error_response:
+        return error_response, status_code
     try:
         start_time = time.time()
         local_uuid = uuid.uuid4().hex
@@ -205,14 +228,24 @@ def color_reduce_api():
         if brand_palette_id:
             conn = db()
             try:
-                row = conn.execute("SELECT colors_json FROM brand_palettes WHERE id = ?", (brand_palette_id,)).fetchone()
-                if row:
-                    brand_palette = json.loads(row['colors_json'])
+                row = conn.execute(
+                    """
+                    SELECT bp.colors_json, p.user_id AS project_user_id
+                    FROM brand_palettes bp
+                    JOIN projects p ON p.id = bp.project_id
+                    WHERE bp.id = ?
+                    """,
+                    (brand_palette_id,),
+                ).fetchone()
+                if not row:
+                    return jsonify({'error': 'Brand palette not found'}), 404
+                if row['project_user_id'] != user_id and g.current_user.get('role') != 'admin':
+                    return jsonify({'error': 'Forbidden'}), 403
+                brand_palette = json.loads(row['colors_json'])
             finally:
                 conn.close()
         palette = quantize_and_save(filepath, n_colors, local_filepath, brand_palette)
         storage.sync_to_s3(local_filepath)
-        credits_used = required_credits
         local_url = f"/results/{local_filename}"
         conn = db()
         created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -222,10 +255,10 @@ def color_reduce_api():
         )
         conn.commit()
         conn.close()
-        record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
         updated_credits = get_updated_credits(user_id)
         return jsonify({'success': True, 'resultUrl': local_url, 'palette': palette, **updated_credits})
     except Exception as e:
+        refund_credits(user_id, project_id, required_credits, note='Color reduce failed')
         print(f"  [Color Reduce] Error: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -245,14 +278,14 @@ def layer_export_api():
     filename = os.path.basename(filename)
     if export_format not in ('zip', 'tiff'):
         return jsonify({'error': 'Format must be zip or tiff'}), 400
-    user_id, required_credits, error_response, status_code = require_credits(None, 'layerExport', 2)
-    if error_response:
-        return error_response, status_code
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         filepath = os.path.join(RESULTS_DIR, filename)
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
+    user_id, required_credits, error_response, status_code = require_credits(project_id, None, 'layerExport', 2, 'export')
+    if error_response:
+        return error_response, status_code
     try:
         local_uuid = uuid.uuid4().hex
         if export_format == 'zip':
@@ -273,10 +306,9 @@ def layer_export_api():
         )
         conn.commit()
         conn.close()
-        credits_used = required_credits
-        record_activity(project_id, 'export', 1, credits_used, user_id=user_id)
         updated_credits = get_updated_credits(user_id)
         return jsonify({'success': True, 'resultUrl': local_url, 'palette': palette, **updated_credits})
     except Exception as e:
+        refund_credits(user_id, project_id, required_credits, note='Layer export failed')
         print(f"  [Layer Export] Error: {e}")
         return jsonify({'error': str(e)}), 500

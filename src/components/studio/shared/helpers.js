@@ -9,6 +9,131 @@
  */
 export const API = import.meta.env.VITE_API_URL || '';
 
+const MEDIA_TOKEN_CACHE = new Map();
+const MEDIA_TOKEN_TTL_MS = 50 * 60 * 1000;
+
+/** Extract bare filename from a /results/ or /uploads/ path. */
+export function mediaFilenameFromPath(path) {
+    if (!path || typeof path !== 'string') return null;
+    if (path.startsWith('blob:') || path.startsWith('data:')) return null;
+    let normalized = path;
+    if (API && normalized.startsWith(API)) normalized = normalized.slice(API.length);
+    if (normalized.startsWith('http')) {
+        try {
+            normalized = new URL(normalized).pathname;
+        } catch {
+            return null;
+        }
+    }
+    const base = normalized.split('?')[0];
+    const name = base.split('/').pop();
+    return name || null;
+}
+
+/** True when the path is served by authenticated /results or /uploads routes. */
+export function mediaPathNeedsAuth(path) {
+    if (!path || typeof path !== 'string') return false;
+    if (path.startsWith('blob:') || path.startsWith('data:')) return false;
+    let p = path;
+    if (API && p.startsWith(API)) p = p.slice(API.length);
+    if (p.startsWith('http')) {
+        try {
+            p = new URL(p).pathname;
+        } catch {
+            return false;
+        }
+    }
+    return p.startsWith('/results/') || p.startsWith('/uploads/');
+}
+
+export function cacheFileAccessToken(pathOrFilename, token) {
+    const filename = pathOrFilename?.includes('/')
+        ? mediaFilenameFromPath(pathOrFilename)
+        : pathOrFilename;
+    if (!filename || !token) return;
+    MEDIA_TOKEN_CACHE.set(filename, { token, expires: Date.now() + MEDIA_TOKEN_TTL_MS });
+}
+
+export function cacheFileAccessTokens(tokens = {}) {
+    Object.entries(tokens).forEach(([filename, token]) => cacheFileAccessToken(filename, token));
+}
+
+/** Cache tokens bundled with API responses (resultUrl + fileAccessToken). */
+export function cacheMediaFromResponse(data) {
+    if (!data || typeof data !== 'object') return;
+    if (data.fileAccessToken) {
+        const path = data.resultUrl || data.fileUrl || data.url || data.mockupUrl;
+        if (path) cacheFileAccessToken(path, data.fileAccessToken);
+    }
+    if (Array.isArray(data.results)) {
+        data.results.forEach((row) => {
+            if (row?.fileAccessToken && (row.resultUrl || row.url)) {
+                cacheFileAccessToken(row.resultUrl || row.url, row.fileAccessToken);
+            }
+        });
+    }
+}
+
+function cachedTokenForFilename(filename) {
+    if (!filename) return null;
+    const entry = MEDIA_TOKEN_CACHE.get(filename);
+    if (!entry) return null;
+    if (entry.expires <= Date.now()) {
+        MEDIA_TOKEN_CACHE.delete(filename);
+        return null;
+    }
+    return entry.token;
+}
+
+export async function fetchMediaToken(filename, jwt = null) {
+    const name = filename?.includes('/') ? mediaFilenameFromPath(filename) : filename;
+    if (!name) return null;
+    const cached = cachedTokenForFilename(name);
+    if (cached) return cached;
+
+    const authToken = normalizeToken(jwt) || normalizeToken(localStorage.getItem('rim_token'));
+    const res = await fetch(`${API}/api/file-access-token?filename=${encodeURIComponent(name)}`, {
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    });
+    const d = await res.json().catch(() => ({}));
+    if (d.success && d.accessToken) {
+        cacheFileAccessToken(name, d.accessToken);
+        return d.accessToken;
+    }
+    return null;
+}
+
+/**
+ * Build a browser-loadable URL for /results/ and /uploads/ assets.
+ * Appends a cached or provided access_token query param when needed.
+ */
+export function mediaUrl(path, accessToken = null) {
+    if (!path) return '';
+    if (path.startsWith('blob:') || path.startsWith('data:')) return path;
+    if (path.startsWith('http') && (!API || !path.startsWith(API))) return path;
+
+    let relative = path;
+    if (API && relative.startsWith(API)) relative = relative.slice(API.length);
+    if (!relative.startsWith('/')) relative = `/${relative}`;
+
+    const base = `${API}${relative.split('?')[0]}`;
+    if (!mediaPathNeedsAuth(relative)) return base;
+
+    const filename = mediaFilenameFromPath(relative);
+    const token = accessToken || cachedTokenForFilename(filename);
+    if (!token) return base;
+    return `${base}?access_token=${encodeURIComponent(token)}`;
+}
+
+/** Fetch a file access token if needed, then return mediaUrl. */
+export async function resolveMediaUrl(path, jwt = null) {
+    if (!path || !mediaPathNeedsAuth(path)) return mediaUrl(path);
+    const filename = mediaFilenameFromPath(path);
+    if (!filename) return mediaUrl(path);
+    const token = await fetchMediaToken(filename, jwt);
+    return mediaUrl(path, token);
+}
+
 /** Normalize JWT strings from API responses / localStorage. */
 export function normalizeToken(token) {
     if (!token || typeof token !== 'string') return null;
@@ -271,8 +396,10 @@ export async function apiFetch(url, options = {}, token = null) {
         err.status = res.status;
         throw err;
     }
-    
-    return res.json();
+
+    const data = await res.json();
+    cacheMediaFromResponse(data);
+    return data;
 }
 
 /** Poll a background job until it completes. */
@@ -309,4 +436,72 @@ export async function runAsyncJob(endpoint, body, token, { onProgress, signal } 
         throw new Error('Async job did not return a job id');
     }
     return waitForJob(data.jobId, token, { onProgress, signal });
+}
+
+/** Cross-tool handoff: open a file URL in another studio tool. */
+export function openFileInTool({ url, filename }, targetTool, setters = {}) {
+    const {
+        setTool,
+        setEnhUrl,
+        setSeamlessUrl,
+        setRepeatUrl,
+        setVecUrl,
+        setUpscaleUrl,
+        setRemoveBgUrl,
+        setCwUrl,
+        setUploads,
+        tool,
+    } = setters;
+
+    const resolvedUrl = url?.startsWith('http') ? url : (url?.startsWith('/') ? url : `/results/${filename || url}`);
+    const baseName = filename || filenameFromUrl(resolvedUrl);
+
+    const toolSetters = {
+        pattern: setEnhUrl,
+        seamless: setSeamlessUrl,
+        repeat: setRepeatUrl,
+        vectorize: setVecUrl,
+        upscale: setUpscaleUrl,
+        removebg: setRemoveBgUrl,
+        colorways: setCwUrl,
+    };
+
+    const setter = toolSetters[targetTool];
+    if (setter) setter(resolvedUrl);
+    if (setUploads && tool) {
+        setUploads((prev) => ({
+            ...prev,
+            [targetTool]: { file: null, url: resolvedUrl, filename: baseName },
+        }));
+    }
+    if (setTool) setTool(targetTool);
+}
+
+/** Create a Qwen session from a source file and switch to Image Layers. */
+export async function openInQwenStudio({
+    sourceFilename,
+    sourceUrl,
+    projectId,
+    userId,
+    token,
+    setTool,
+    setQwenLaunch,
+    sessionName,
+}) {
+    const fname = sourceFilename || filenameFromUrl(sourceUrl || '');
+    const res = await apiFetch('/api/qwen-sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+            projectId,
+            userId,
+            sourceFilename: fname,
+            name: sessionName || `Qwen Studio — ${fname}`,
+        }),
+    }, token);
+
+    if (setQwenLaunch) {
+        setQwenLaunch({ sessionId: res.session?.id, sourceFilename: fname, sourceUrl });
+    }
+    if (setTool) setTool('imagelayers');
+    return res.session;
 }

@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify, send_from_directory, Response, ab
 from config import UPLOAD_DIR, RESULTS_DIR, USE_S3
 from db import db, db_lock, iso_to_epoch
 from middleware import login_required
+from security_utils import issue_file_access_token
 from watermark import apply_watermark, is_free_plan
 import storage
 
@@ -246,13 +247,31 @@ def list_exports():
                     pass
 
             input_url = resolve_export_input_url(row['input_filename'])
-            
+            owner_id = row['user_id']
+            file_access_token = (
+                issue_file_access_token(filename, int(owner_id))
+                if owner_id is not None
+                else None
+            )
+            preview_access_token = None
+            if owner_id is not None and preview_url:
+                preview_name = os.path.basename(urlparse(preview_url).path)
+                preview_access_token = issue_file_access_token(preview_name, int(owner_id))
+            input_access_token = None
+            if owner_id is not None and input_url and input_url.startswith('/'):
+                input_name = os.path.basename(urlparse(input_url).path)
+                if input_name:
+                    input_access_token = issue_file_access_token(input_name, int(owner_id))
+
             files.append({
                 'id': filename,
                 'projectId': row['project_id'],
                 'filename': filename,
                 'imageUrl': f'/results/{filename}',
                 'previewUrl': preview_url,
+                'fileAccessToken': file_access_token,
+                'previewAccessToken': preview_access_token,
+                'inputAccessToken': input_access_token,
                 'type': 'vector' if is_vector else 'image',
                 'format': ext.upper(),
                 'size': format_file_size(file_size),

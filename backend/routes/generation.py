@@ -11,13 +11,21 @@ from flask import Blueprint, request, jsonify, g
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client, safe_filename
 from middleware import login_required, project_access_from_payload
 from auth import (
-    check_credits, credit_error_payload, credit_requirement,
-    record_activity, get_updated_credits, log_export, log_replicate_call,
+    adjust_reserved_credits,
+    credit_error_payload,
+    credit_requirement,
+    get_updated_credits,
+    log_export,
+    log_replicate_call,
+    refund_credits,
+    reserve_credits_or_error,
 )
+from security_utils import safe_fetch_url, validate_external_url, media_access_token
 import replicate
 import storage
 from jobs import enqueue_or_run
 from workers import run_generation_job
+from rate_limits import expensive_generation_rate_limit, generation_rate_limit
 
 bp = Blueprint('generation', __name__)
 
@@ -39,13 +47,13 @@ def _resolve_extract_filepath(filename='', image_url=''):
         return filename, filepath
 
     if image_url and image_url.startswith('http'):
+        validate_external_url(image_url)
         ext = '.png' if '.png' in image_url.lower() else '.jpg'
         dl_name = f"tmp_extract_{uuid.uuid4().hex[:8]}{ext}"
         filepath = os.path.join(UPLOAD_DIR, dl_name)
-        resp = http_requests.get(image_url, timeout=30)
-        resp.raise_for_status()
+        content = safe_fetch_url(image_url, timeout=30)
         with open(filepath, 'wb') as handle:
-            handle.write(resp.content)
+            handle.write(content)
         storage.sync_to_s3(filepath)
         return dl_name, filepath
 
@@ -103,6 +111,7 @@ def describe_image():
 
 @bp.route('/api/extract-design', methods=['POST'])
 @login_required
+@expensive_generation_rate_limit
 def extract_design():
     data = request.get_json(silent=True) or request.form
     filename = data.get('filename', '')
@@ -131,9 +140,9 @@ def extract_design():
     model_id = data.get('modelId', 'google/nano-banana')
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
     required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 78))
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
     if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+        return jsonify(err), 403
     try:
         print(f"  [Extract Design] Processing {filename} with {model_id}...")
         with open(filepath, "rb") as img_file:
@@ -165,10 +174,12 @@ def extract_design():
             local_url = f"/results/{local_filename}"
             local_result_urls.append(local_url)
             log_export(project_id, local_filename, filename, "Extract Design", {"prompt": "Extract design out of outfit"})
-        record_activity(project_id, 'generation', len(local_result_urls), credits_used, user_id=user_id)
+        if not local_result_urls:
+            refund_credits(user_id, project_id, required_credits, note='Extract design produced no results')
         updated_credits = get_updated_credits(user_id)
         return jsonify({'success': True, 'resultUrls': local_result_urls, **updated_credits})
     except Exception as e:
+        refund_credits(user_id, project_id, required_credits, note='Extract design failed')
         print(f"  [Extract Design] Error: {e}")
         return jsonify({'error': f'Failed to extract design: {str(e)}'}), 500
 
@@ -360,6 +371,7 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
 
 @bp.route('/api/extract-design-multi', methods=['POST'])
 @login_required
+@expensive_generation_rate_limit
 def extract_design_multi():
     data = request.get_json()
     filename = data.get('filename', '')
@@ -376,9 +388,9 @@ def extract_design_multi():
     user_id = g.current_user['id']
 
     required_credits = sum(int(m.get('credits') or credit_requirement('extract', 148)) for m in EXTRACT_MODELS)
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', len(EXTRACT_MODELS))
     if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+        return jsonify(err), 403
 
     # Read and encode image once
     with open(filepath, "rb") as img_file:
@@ -416,8 +428,7 @@ def extract_design_multi():
     successful = sum(1 for r in results if r['resultUrl'])
     print(f"  [Extract Multi] Complete! {successful}/4 models succeeded. Total credits: {total_credits}")
 
-    if total_credits > 0:
-        record_activity(project_id, 'generation', successful, total_credits, user_id=user_id)
+    adjust_reserved_credits(user_id, project_id, required_credits, total_credits, note='Extract multi partial refund')
 
     updated_credits = get_updated_credits(user_id)
     return jsonify({'success': True, 'results': results, 'totalCredits': total_credits, **updated_credits})
@@ -473,9 +484,9 @@ def extract_design_single():
         return jsonify({'error': f'Unknown model: {model_id}'}), 400
 
     required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 148))
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
     if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+        return jsonify(err), 403
 
     # Read and encode image
     with open(filepath, "rb") as img_file:
@@ -490,19 +501,26 @@ def extract_design_single():
         image_description = _describe_image_for_extraction(data_uri)
 
     result = _run_single_extract(model_cfg, data_uri, project_id, filename, image_description)
-    
-    if result['creditsUsed'] > 0:
-        record_activity(project_id, 'generation', 1 if result['resultUrl'] else 0, result['creditsUsed'], user_id=user_id)
+
+    if not result.get('resultUrl'):
+        refund_credits(user_id, project_id, required_credits, note='Extract single produced no result')
+    else:
+        adjust_reserved_credits(user_id, project_id, required_credits, result.get('creditsUsed', required_credits))
 
     updated_credits = get_updated_credits(user_id)
-    return jsonify({
+    payload = {
         'success': True,
         'modelId': result['modelId'],
         'resultUrl': result['resultUrl'],
         'duration': result['duration'],
         'error': result['error'],
-        **updated_credits
-    })
+        **updated_credits,
+    }
+    if result.get('resultUrl'):
+        payload['fileAccessToken'] = media_access_token(
+            os.path.basename(result['resultUrl']), user_id
+        )
+    return jsonify(payload)
 
 
 @bp.route('/api/extract-edit', methods=['POST'])
@@ -525,9 +543,9 @@ def extract_edit():
 
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
     required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 78))
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
     if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+        return jsonify(err), 403
 
     try:
         # Load the existing result image
@@ -536,9 +554,7 @@ def extract_edit():
             with open(local_path, 'rb') as f:
                 image_bytes = f.read()
         else:
-            resp = http_requests.get(image_url, timeout=60)
-            resp.raise_for_status()
-            image_bytes = resp.content
+            image_bytes = safe_fetch_url(image_url, timeout=60)
 
         encoded = base64.b64encode(image_bytes).decode('utf-8')
         data_uri = f"data:image/png;base64,{encoded}"
@@ -572,20 +588,28 @@ def extract_edit():
             f.write(resp.content)
         storage.sync_to_s3(local_filepath)
         local_url = f"/results/{local_filename}"
+        log_export(project_id, local_filename, os.path.basename(image_url) if image_url else '', "Extract Edit", {"model": model_id}, user_id=user_id)
 
-        record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
         updated_credits = get_updated_credits(user_id)
 
         print(f"  [Extract Edit] Done in {duration:.1f}s")
-        return jsonify({'success': True, 'resultUrl': local_url, 'modelId': model_id, **updated_credits})
+        return jsonify({
+            'success': True,
+            'resultUrl': local_url,
+            'modelId': model_id,
+            'fileAccessToken': media_access_token(local_filename, user_id),
+            **updated_credits,
+        })
 
     except Exception as e:
+        refund_credits(user_id, project_id, required_credits, note='Extract edit failed')
         print(f"  [Extract Edit] Error: {e}")
         return jsonify({'error': f'Edit failed: {str(e)}'}), 500
 
 
 @bp.route('/api/generate-inspirations', methods=['POST'])
 @login_required
+@generation_rate_limit
 def generate_inspirations():
     data = request.get_json()
     user_prompt = data.get('prompt', '')
@@ -602,8 +626,8 @@ def generate_inspirations():
     mime_type = "image/png"
     try:
         if image_url and image_url.startswith('http'):
-            resp = http_requests.get(image_url, timeout=30)
-            encoded_string = base64.b64encode(resp.content).decode('utf-8')
+            content = safe_fetch_url(image_url, timeout=30)
+            encoded_string = base64.b64encode(content).decode('utf-8')
             data_uri = f"data:{mime_type};base64,{encoded_string}"
         elif filename:
             filepath = os.path.join(UPLOAD_DIR, filename)
@@ -666,9 +690,9 @@ def generate_inspirations():
         default=DEFAULT_INSPIRE_CREDITS,
     )
     required_credits = _max_model_credits * count * requested_model_count
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', count * requested_model_count)
     if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+        return jsonify(err), 403
 
     if use_seamless:
         try:
@@ -783,6 +807,8 @@ def generate_inspirations():
                     errors.append(str(e))
 
     if results:
-        record_activity(project_id, 'generation', len(results), total_credits, user_id=user_id)
+        adjust_reserved_credits(user_id, project_id, required_credits, total_credits, note='Inspirations partial refund')
+    else:
+        refund_credits(user_id, project_id, required_credits, note='Inspirations produced no results')
     updated_credits = get_updated_credits(user_id)
     return jsonify({'success': True, 'variations': results, 'errors': errors, **updated_credits})

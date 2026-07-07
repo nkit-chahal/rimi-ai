@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload, jsonAuthHeaders } from '../shared/helpers';
+import { API, apiFetch, forceDownload, jsonAuthHeaders, mediaUrl, cacheFileAccessToken } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
 import { createPortal } from 'react-dom';
+import '../../../styles/tools/exports.css';
+import OpenInQwenButton from '../shared/OpenInQwenButton';
 
 export default function ExportsTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, onExportComplete, setTool, setQwenLaunch } = props;
 
     const [exportsList, setExportsList] = useState([]);
     const [isLoadingExports, setIsLoadingExports] = useState(false);
@@ -37,6 +40,13 @@ export default function ExportsTool(props) {
         ])
             .then(([exportsData, runsData]) => {
                 if (exportsData.success) {
+                    exportsData.exports.forEach((file) => {
+                        if (file.fileAccessToken) cacheFileAccessToken(file.imageUrl, file.fileAccessToken);
+                        if (file.previewAccessToken) cacheFileAccessToken(file.previewUrl, file.previewAccessToken);
+                        if (file.inputAccessToken && file.inputUrl) {
+                            cacheFileAccessToken(file.inputUrl, file.inputAccessToken);
+                        }
+                    });
                     setExportsList(exportsData.exports);
                     setSelectedExports(new Set());
                     setExportsPage(1);
@@ -301,14 +311,11 @@ export default function ExportsTool(props) {
             };
         };
 
-        const resolveAssetUrl = (url) => {
-            if (!url) return null;
-            return url.startsWith('http') ? url : `${API}${url}`;
-        };
+        const resolveAssetUrl = (url) => mediaUrl(url);
 
         const renderOriginalImage = (src) => {
             if (src) {
-                return <img src={src} alt="Original Input" className="st-export-log-image" loading="lazy" />;
+                return <MediaImg src={src} alt="Original Input" className="st-export-log-image" loading="lazy" token={currentToken} />;
             }
             return (
                 <div className="st-export-log-placeholder">
@@ -387,7 +394,7 @@ export default function ExportsTool(props) {
                         <div className="st-stepper-title">Version history</div>
                         <div className="st-versions-grid">
                             {versions.slice(0, 12).map((version) => {
-                                const thumb = version.imageUrl?.startsWith('http') ? version.imageUrl : `${API}${version.imageUrl}`;
+                                const thumb = mediaUrl(version.imageUrl);
                                 return (
                                     <button
                                         key={version.id}
@@ -396,7 +403,7 @@ export default function ExportsTool(props) {
                                         onClick={() => restoreVersion(version.id)}
                                         disabled={restoreLoading === version.id}
                                     >
-                                        <img src={thumb} alt={version.name} loading="lazy" />
+                                        <MediaImg src={thumb} alt={version.name} loading="lazy" token={currentToken} />
                                         <div className="st-version-meta">
                                             {restoreLoading === version.id ? 'Restoring…' : version.name}
                                         </div>
@@ -445,10 +452,8 @@ export default function ExportsTool(props) {
                         {currentItems.length > 0 ? (
                             <div className="st-export-log-list">
                                 {currentItems.map((file) => {
-                                    const fullUrl = file.imageUrl.startsWith('http') ? file.imageUrl : `${API}${file.imageUrl}`;
-                                    const previewSrc = (file.previewUrl || file.imageUrl).startsWith('http')
-                                        ? (file.previewUrl || file.imageUrl)
-                                        : `${API}${file.previewUrl || file.imageUrl}`;
+                                    const fullUrl = mediaUrl(file.imageUrl);
+                                    const previewSrc = mediaUrl(file.previewUrl || file.imageUrl);
                                     const isSelected = selectedExports.has(file.id);
 
                                     // Match with a pipeline run
@@ -498,9 +503,9 @@ export default function ExportsTool(props) {
                                                 <div className="st-export-log-panel right">
                                                     <div className="st-panel-tag">Final Output</div>
                                                     <div className="st-panel-image-container">
-                                                        <img src={previewSrc} alt="Final Output" className="st-export-log-image" loading="lazy" />
+                                                        <MediaImg src={previewSrc} alt="Final Output" className="st-export-log-image" loading="lazy" token={currentToken} />
                                                         <div className="st-export-image-hover">
-                                                            <a href={fullUrl} onClick={(e) => forceDownload(e, fullUrl, file.id, currentToken)} className="st-export-hover-btn dl" title="Download">
+                                                            <a href={fullUrl} onClick={(e) => { forceDownload(e, fullUrl, file.id, currentToken); onExportComplete?.({ filename: file.id, format: file.format, type: file.type }); }} className="st-export-hover-btn dl" title="Download">
                                                                 <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
                                                                 <span>Download</span>
                                                             </a>
@@ -519,6 +524,19 @@ export default function ExportsTool(props) {
                                                             <I d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" s={13} />
                                                             {shareLoading === file.id ? 'Sharing…' : 'Share'}
                                                         </button>
+                                                        {file.type === 'image' && (
+                                                            <OpenInQwenButton
+                                                                sourceFilename={file.id}
+                                                                sourceUrl={file.imageUrl || previewSrc}
+                                                                projectId={activeProject?.id}
+                                                                userId={user?.id}
+                                                                currentToken={currentToken}
+                                                                setTool={setTool}
+                                                                setQwenLaunch={setQwenLaunch}
+                                                                className="st-export-techpack-btn"
+                                                                label="Qwen Studio"
+                                                            />
+                                                        )}
                                                         {file.type === 'image' && (
                                                             <button
                                                                 className="st-export-techpack-btn"

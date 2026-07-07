@@ -181,3 +181,17 @@ def sync_to_s3(filepath):
     except Exception as e:
         print(f"[storage] S3 sync failed for {filepath}: {e}")
 
+
+def delete_from_s3(directory_type, filename):
+    """Remove a file from S3 storage (no-op when S3 is disabled)."""
+    if not USE_S3:
+        return False
+    try:
+        key = f"{directory_type}/{filename}"
+        s3 = _get_s3()
+        s3.delete_object(Bucket=S3_BUCKET, Key=key)
+        return True
+    except Exception as e:
+        print(f"[storage] S3 delete failed for {directory_type}/{filename}: {e}")
+        return False
+

@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload } from '../shared/helpers';
+import { API, apiFetch, forceDownload, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
 import { createPortal } from 'react-dom';
 
+import '../../../styles/tools/repeat.css';
+import OpenInQwenButton from '../shared/OpenInQwenButton';
+
 export default function RepeatTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, controls, updateControls, repeatUrl, setRepeatUrl, isRepeat, setIsRepeat, rightPanelEl, handlePreUpload, onUploadInvalid, onUploadPaste, tool, state, setState, setUploads, currentToken } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, controls, updateControls, repeatUrl, setRepeatUrl, isRepeat, setIsRepeat, rightPanelEl, handlePreUpload, onUploadInvalid, onUploadPaste, tool, state, setState, setUploads, currentToken, setTool, setQwenLaunch } = props;
 
     const { pasteProps, inputProps } = useImageDropzone({
         onFile: handlePreUpload,
@@ -192,9 +196,8 @@ export default function RepeatTool(props) {
             }, currentToken);
             if (d.success) {
                 updateCreditsFromResponse?.(d);
-                const fullUrl = `${API}${d.resultUrl}`;
-                setRepeatUrl(fullUrl);
-                forceDownload({ preventDefault: () => { } }, fullUrl);
+                setRepeatUrl(d.resultUrl);
+                forceDownload({ preventDefault: () => { } }, mediaUrl(d.resultUrl), undefined, currentToken);
             } else setError(d.error);
         } catch {
             setError('Backend is not reachable. Start Flask on port 3001.');
@@ -355,7 +358,7 @@ export default function RepeatTool(props) {
         const src = (preview.startsWith('http') || preview.startsWith('blob:') || preview.startsWith('data:'))
             ? preview
             : preview.startsWith('/')
-                ? `${API}${preview}`
+                ? mediaUrl(preview)
                 : preview;
         img.src = src;
     }, [
@@ -409,8 +412,18 @@ export default function RepeatTool(props) {
                                 setUploads(p => ({ ...p, [tool]: { file: null, url: v.imageUrl } }));
                             }}
                         >
-                            <img src={v.imageUrl} alt="" />
+                            <MediaImg src={v.imageUrl} alt="" token={currentToken} />
                             <span>{v.name}</span>
+                            <OpenInQwenButton
+                                sourceUrl={v.imageUrl}
+                                projectId={activeProject?.id}
+                                userId={user?.id}
+                                currentToken={currentToken}
+                                setTool={setTool}
+                                setQwenLaunch={setQwenLaunch}
+                                className="st-variation-qwen-btn"
+                                label="Qwen"
+                            />
                         </button>
                     ))}
                     <button className="st-generate-more"><span>+</span><small>Generate More</small></button>

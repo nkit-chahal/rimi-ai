@@ -38,6 +38,12 @@ S3_ACCESS_KEY = os.getenv('AWS_ACCESS_KEY_ID')
 S3_SECRET_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 USE_S3 = bool(S3_ENDPOINT and S3_BUCKET and S3_ACCESS_KEY)
 
+if os.getenv("FLASK_ENV") == "production" and not USE_S3:
+    import logging
+    logging.getLogger(__name__).warning(
+        "S3 storage is not configured; uploads/results will use local disk only"
+    )
+
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS

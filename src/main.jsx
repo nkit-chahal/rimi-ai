@@ -1,17 +1,19 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/tokens.css'
-import './index.css'
+import './styles/base.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { initObservability } from './observability.js'
 
 initObservability()
 
+const tree = (
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+)
+
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </StrictMode>,
+  import.meta.env.DEV ? <StrictMode>{tree}</StrictMode> : tree
 )

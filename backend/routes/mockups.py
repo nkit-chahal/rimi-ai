@@ -7,7 +7,6 @@ import concurrent.futures
 import numpy as np
 from PIL import Image
 import replicate
-import requests as http_requests
 from io import BytesIO
 from scipy import ndimage
 from flask import Blueprint, request, jsonify, g
@@ -15,9 +14,12 @@ from middleware import login_required, project_access_from_payload
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client
 from auth import (
-    log_export, log_replicate_call, check_credits,
-    credit_error_payload, credit_requirement, get_updated_credits, record_activity,
+    log_export, log_replicate_call,
+    credit_requirement, get_updated_credits,
+    adjust_reserved_credits, refund_credits, reserve_credits_or_error,
 )
+from security_utils import safe_fetch_url
+from rate_limits import generation_rate_limit
 import storage
 
 bp = Blueprint('mockups', __name__)
@@ -86,9 +88,8 @@ def _load_pattern_image(filename: str = "", url: str = "") -> Image.Image:
             raise FileNotFoundError(f"Pattern file not found: {filename}")
         return Image.open(path).convert("RGB")
     if url and url.startswith("http"):
-        resp = http_requests.get(url, timeout=30)
-        resp.raise_for_status()
-        return Image.open(BytesIO(resp.content)).convert("RGB")
+        content = safe_fetch_url(url, timeout=30)
+        return Image.open(BytesIO(content)).convert("RGB")
     raise ValueError("Provide either patternFilename or patternUrl")
 
 def _parse_user_id(data: dict) -> int | None:
@@ -118,6 +119,9 @@ def _generate_single_mockup(
 
     if product_type == "custom_product" and product_reference_data_uri:
         input_images.append(product_reference_data_uri)
+
+    if mask_data_uri:
+        input_images.append(mask_data_uri)
 
     # 2. Use Groq Vision to describe the pattern, then build a rich prompt
     base_prompt = PRODUCT_PROMPTS.get(product_type, PRODUCT_PROMPTS['custom_product'])
@@ -179,6 +183,12 @@ def _generate_single_mockup(
     )
     if custom_prompt.strip():
         prompt += f" User art direction: {custom_prompt.strip()}"
+    if mask_data_uri:
+        mask_index = len(input_images)
+        prompt += (
+            f" Apply the fabric print only within the printable region indicated by @Image {mask_index}. "
+            f"Keep areas outside the mask unchanged."
+        )
 
     # 3. Call Nano Banana 2
     print(f"  [Mockup] Running {MODEL_ID} for '{product_type}'...")
@@ -221,13 +231,12 @@ def _generate_single_mockup(
         raise RuntimeError("Model returned no output.")
 
     # 4. Download and save
-    resp = http_requests.get(result_url, timeout=120)
-    resp.raise_for_status()
+    content = safe_fetch_url(result_url, timeout=120)
 
     mockup_name = f"mockup_{uuid.uuid4().hex[:8]}.png"
     mockup_path = os.path.join(RESULTS_DIR, mockup_name)
     with open(mockup_path, "wb") as f:
-        f.write(resp.content)
+        f.write(content)
     storage.sync_to_s3(mockup_path)
 
     return mockup_name, credits_used
@@ -235,6 +244,7 @@ def _generate_single_mockup(
 
 @bp.route('/api/generate-mockup', methods=['POST'])
 @login_required
+@generation_rate_limit
 def generate_mockup():
     data = request.get_json()
     pattern_filename = data.get("patternFilename", "")
@@ -258,8 +268,9 @@ def generate_mockup():
     if not pattern_filename and not pattern_url: return jsonify({"error": "patternFilename or patternUrl is required"}), 400
 
     required_credits = credit_requirement('mappings', 67)
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
-    if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
+    if not ok:
+        return jsonify(err), 403
 
     try:
         pattern_img = _load_pattern_image(pattern_filename, pattern_url)
@@ -269,7 +280,7 @@ def generate_mockup():
             product_reference_data_uri=product_reference_data_uri, mask_data_uri=mask_data_uri
         )
 
-        record_activity(project_id, "generation", 1, credits_used, user_id=user_id)
+        adjust_reserved_credits(user_id, project_id, required_credits, credits_used, note='Mockup partial refund')
         input_fn = pattern_filename if pattern_filename else (pattern_url.split("/")[-1] if pattern_url else None)
         log_export(
             project_id=project_id, filename=mockup_name, input_filename=input_fn, tool_type="Mappings",
@@ -281,12 +292,14 @@ def generate_mockup():
             **get_updated_credits(user_id)
         })
     except Exception as exc:
+        refund_credits(user_id, project_id, required_credits, note='Generate mockup failed')
         print(f"  [Mockup] Error: {exc}")
         return jsonify({"error": f"Failed to generate mockup: {str(exc)}"}), 500
 
 
 @bp.route('/api/generate-mockups-batch', methods=['POST'])
 @login_required
+@generation_rate_limit
 def generate_mockups_batch():
     data = request.get_json()
     pattern_filename = data.get("patternFilename", "")
@@ -309,9 +322,11 @@ def generate_mockups_batch():
     if not products: return jsonify({"error": "products must be a non-empty list"}), 400
 
     required_credits = credit_requirement('mappings', 67, len(products))
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
-    if not ok: return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', len(products))
+    if not ok:
+        return jsonify(err), 403
 
+    credits_settled = False
     try:
         pattern_img = _load_pattern_image(pattern_filename)
         mockups, errors = [], []
@@ -339,7 +354,8 @@ def generate_mockups_batch():
                     errors.append({"productType": product_type, "error": str(exc)})
 
         if mockups:
-            record_activity(project_id, "generation", len(mockups), total_credits, user_id=user_id)
+            adjust_reserved_credits(user_id, project_id, required_credits, total_credits, note='Batch mockups partial refund')
+            credits_settled = True
             for m in mockups:
                 log_export(
                     project_id=project_id, filename=m["mockupUrl"].split("/")[-1], input_filename=pattern_filename, tool_type="Mappings",
@@ -347,6 +363,8 @@ def generate_mockups_batch():
                 )
 
         if not mockups:
+            refund_credits(user_id, project_id, required_credits, note='Batch mockups produced no results')
+            credits_settled = True
             message = errors[0]["error"] if errors else "No mockups were generated"
             return jsonify({
                 "success": False,
@@ -361,6 +379,8 @@ def generate_mockups_batch():
         })
 
     except Exception as exc:
+        if not credits_settled:
+            refund_credits(user_id, project_id, required_credits, note='Batch mockups failed')
         print(f"  [Batch Mockup] Error: {exc}")
         import traceback
         traceback.print_exc()

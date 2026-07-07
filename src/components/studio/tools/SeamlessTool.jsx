@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, runAsyncJob, jsonAuthHeaders } from '../shared/helpers';
+import { API, forceDownload, runAsyncJob, jsonAuthHeaders, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
 import ImageDropzone from '../shared/ImageDropzone';
+import UploadStatusBadge from '../shared/UploadStatusBadge';
+import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import OpenInQwenButton from '../shared/OpenInQwenButton';
+import '../../../styles/tools/pattern.css';
 
 export default function SeamlessTool({
     uploaded,
@@ -19,6 +24,10 @@ export default function SeamlessTool({
     onUploadInvalid,
     onUploadPaste,
     currentToken,
+    uploadStatus,
+    isUploading,
+    setTool,
+    setQwenLaunch,
 }) {
     // Local state
     const [seamlessMode, setSeamlessMode] = useState('generate');
@@ -65,7 +74,7 @@ export default function SeamlessTool({
         setIsSeamless(true);
         setSeamlessUrl(null);
         setError('');
-        const trigger = async () => {
+        const trigger = async (reportProgress) => {
             hasActiveSeamlessRun.current = true;
             const payload = {
                 filename: filename || activeProject.heroImageUrl,
@@ -76,9 +85,11 @@ export default function SeamlessTool({
                 onProgress: (job) => {
                     setSeamlessProgress(job.progressPct || 0);
                     setSeamlessStatus(job.stage || 'Working…');
+                    reportProgress?.(job.progressPct || 0, job.stage);
                 },
             });
-            const resultUrl = result.resultUrl?.startsWith('http') ? result.resultUrl : `${API}${result.resultUrl}`;
+            cacheMediaFromResponse(result);
+            const resultUrl = result.resultUrl?.startsWith('http') ? result.resultUrl : result.resultUrl;
             setSeamlessUrl(resultUrl);
             updateCreditsFromResponse(result);
             setIsSeamless(false);
@@ -110,7 +121,7 @@ export default function SeamlessTool({
                 const tiles = d.tiles || [];
                 setSeamlessTiles(tiles);
                 if (tiles.length > 0) {
-                    setSeamlessUrl(`${API}${tiles[0].url}`);
+                    setSeamlessUrl(tiles[0].url);
                 }
                 updateCreditsFromResponse(d);
                 setIsSeamless(false);
@@ -237,8 +248,8 @@ export default function SeamlessTool({
                     {seamlessTiles.length > 0 && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
                             {seamlessTiles.map((tile, i) => {
-                                const tileUrl = `${API}${tile.url}`;
-                                const isSelected = seamlessUrl === tileUrl;
+                                const tileUrl = tile.url;
+                                const isSelected = seamlessUrl === tileUrl || seamlessUrl === mediaUrl(tile.url);
                                 const isBest = i === bestTileIndex;
                                 const scoreClass = tile.score >= 0.9 ? 'excellent' : tile.score >= 0.75 ? 'good' : 'poor';
                                 return (
@@ -247,7 +258,7 @@ export default function SeamlessTool({
                                         className={`st-tile-result-card ${isSelected ? 'selected' : ''}`}
                                         onClick={() => { setSeamlessUrl(tileUrl); setUploads(prev => ({ ...prev, [tool]: { ...prev[tool], url: tileUrl } })); }}
                                     >
-                                        <img src={tileUrl} alt={`Tile ${i + 1}`} />
+                                        <MediaImg src={tileUrl} alt={`Tile ${i + 1}`} token={currentToken} />
                                         <div className={`st-score-badge ${scoreClass}`}>
                                             {Math.round(tile.score * 100)}%
                                         </div>
@@ -271,6 +282,7 @@ export default function SeamlessTool({
                             title="Upload a pattern tile to fix"
                             description="Drag & drop, paste, or click — AI will analyze and fix edge seams using offset & inpaint"
                             badges={['PNG', 'JPG', 'WEBP']}
+                            uploadStatus={uploadStatus}
                             onFile={handlePreUpload}
                             onInvalidFile={onUploadInvalid}
                             onPasteSuccess={onUploadPaste}
@@ -282,10 +294,15 @@ export default function SeamlessTool({
                             <div className="st-comparison-card">
                                 <div className="st-comparison-card-head">
                                     <span>Original Input</span>
-                                    <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }}>Replace</button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <UploadStatusBadge status={uploadStatus} />
+                                        <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }}>Replace</button>
+                                    </div>
                                 </div>
                                 <div className="st-comparison-card-body">
-                                    <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    <UploadImageFrame status={uploadStatus}>
+                                        <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    </UploadImageFrame>
                                 </div>
                             </div>
 
@@ -294,7 +311,7 @@ export default function SeamlessTool({
                                 <button
                                     className={`st-extract-btn-creative ${!hasEnoughSeamlessCredits ? 'insufficient-credits' : ''}`}
                                     onClick={makeSeamless}
-                                    disabled={loading || (!uploaded && !preview && !activeProject?.heroImageUrl) || !hasEnoughSeamlessCredits}
+                                    disabled={loading || isUploading || (!uploaded && !preview && !activeProject?.heroImageUrl) || !hasEnoughSeamlessCredits}
                                     title={!hasEnoughSeamlessCredits ? `Need ${seamlessCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Fix uploaded tile'}
                                 >
                                     <I d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" s={18} />
@@ -319,17 +336,27 @@ export default function SeamlessTool({
                                 <div className="st-comparison-card-body">
                                     {seamlessUrl ? (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', alignItems: 'center' }}>
-                                            <img className="st-result-reveal" src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Seamless Result" style={{ maxWidth: '100%', maxHeight: '280px', objectFit: 'contain', borderRadius: '8px' }} />
+                                            <MediaImg className="st-result-reveal" src={seamlessUrl} alt="Seamless Result" token={currentToken} style={{ maxWidth: '100%', maxHeight: '280px', objectFit: 'contain', borderRadius: '8px' }} />
                                             <div className="st-tile-preview-2x2">
-                                                <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 1" />
-                                                <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 2" />
-                                                <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 3" />
-                                                <img src={seamlessUrl.startsWith('/') ? `${API}${seamlessUrl}` : seamlessUrl} alt="Tile 4" />
+                                                <MediaImg src={seamlessUrl} alt="Tile 1" token={currentToken} />
+                                                <MediaImg src={seamlessUrl} alt="Tile 2" token={currentToken} />
+                                                <MediaImg src={seamlessUrl} alt="Tile 3" token={currentToken} />
+                                                <MediaImg src={seamlessUrl} alt="Tile 4" token={currentToken} />
                                             </div>
                                             <a href={seamlessUrl} onClick={(e) => forceDownload(e, seamlessUrl)} className="st-extract-btn-creative" style={{ fontSize: '0.85rem', padding: '0.5rem 1.25rem' }}>
                                                 <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
                                                 Download Tile
                                             </a>
+                                            <OpenInQwenButton
+                                                sourceUrl={seamlessUrl}
+                                                projectId={activeProject?.id}
+                                                userId={user?.id}
+                                                currentToken={currentToken}
+                                                setTool={setTool}
+                                                setQwenLaunch={setQwenLaunch}
+                                                className="st-extract-btn-creative"
+                                                label="Open in Qwen Studio"
+                                            />
                                         </div>
                                     ) : loading ? (
                                         <div className="st-ai-processing">

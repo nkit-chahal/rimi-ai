@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
+import UploadStatusBadge from '../shared/UploadStatusBadge';
+import UploadImageFrame from '../shared/UploadImageFrame';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import { createPortal } from 'react-dom';
@@ -9,7 +12,7 @@ export default function VectorizeTool(props) {
     const {
         uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse,
         creditPricing, vecUrl, setVecUrl, upscaleUrl, setUpscaleUrl, tool, rightPanelEl,
-        handlePreUpload, onUploadInvalid, onUploadPaste, currentToken,
+        handlePreUpload, onUploadInvalid, onUploadPaste, currentToken, uploadStatus, isUploading,
     } = props;
 
     const [vecEngine, setVecEngine] = useState('api');
@@ -61,12 +64,12 @@ export default function VectorizeTool(props) {
                 body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, engine: vecEngine, numColors: vecColors, projectId: activeProject.id, userId: user?.id })
             });
             const d = await r.json();
+            cacheMediaFromResponse(d);
             if (d.success) {
-                const fullUrl = `${API}${d.resultUrl}`;
-                setVecUrl(fullUrl);
+                setVecUrl(d.resultUrl);
                 setIsVec(false);
                 updateCreditsFromResponse(d);
-                return { url: fullUrl };
+                return { url: d.resultUrl };
             } else {
                 setIsVec(false);
                 throw new Error(d.error || 'Vectorization failed');
@@ -97,12 +100,12 @@ export default function VectorizeTool(props) {
                 body: JSON.stringify({ filename: uploaded.filename, upscaleFactor, projectId: activeProject.id, userId: user?.id })
             });
             const d = await r.json();
+            cacheMediaFromResponse(d);
             if (d.success) {
-                const fullUrl = `${API}${d.resultUrl}`;
-                setUpscaleUrl(fullUrl);
+                setUpscaleUrl(d.resultUrl);
                 setIsUpscaling(false);
                 updateCreditsFromResponse(d);
-                return { url: fullUrl };
+                return { url: d.resultUrl };
             } else {
                 setIsUpscaling(false);
                 throw new Error(d.error || 'Upscaling failed');
@@ -136,6 +139,7 @@ export default function VectorizeTool(props) {
                         onFile={handlePreUpload}
                         onInvalidFile={onUploadInvalid}
                         onPasteSuccess={onUploadPaste}
+                        uploadStatus={uploadStatus}
                     />
                 </div>
             );
@@ -147,13 +151,18 @@ export default function VectorizeTool(props) {
                     <div className="st-comparison-card">
                         <div className="st-comparison-card-head">
                             <span>Original Input</span>
-                            <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <UploadStatusBadge status={uploadStatus} />
+                                <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} />
                                 Replace
                             </button>
+                            </div>
                         </div>
                         <div className="st-comparison-card-body">
-                            <img src={preview} alt="Original artwork" />
+                            <UploadImageFrame status={uploadStatus}>
+                                <img src={preview} alt="Original artwork" />
+                            </UploadImageFrame>
                         </div>
                     </div>
 
@@ -161,7 +170,7 @@ export default function VectorizeTool(props) {
                         <button
                             className={`st-extract-btn-creative ${!hasEnoughToolCredits ? 'insufficient-credits' : ''}`}
                             onClick={actionFunc}
-                            disabled={loading || !preview || !hasEnoughToolCredits}
+                            disabled={loading || isUploading || !preview || !hasEnoughToolCredits}
                             title={!hasEnoughToolCredits ? `Need ${creditCost} credits. You have ${userRemainingCredits} remaining.` : toolLabel}
                         >
                             <div className={loading ? 'spin-icon' : ''}>
@@ -190,14 +199,14 @@ export default function VectorizeTool(props) {
                                     <div className="st-result-reveal" style={{ position: 'absolute', inset: '0', padding: '1.25rem', display: 'flex', gap: '10px' }}>
                                         {resultUrl.map((url, i) => (
                                             <div key={i} style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                                                <img src={url.startsWith('/') ? `${API}${url}` : url} alt={`Result ${i + 1}`} style={{ flex: 1, borderRadius: '10px', objectFit: 'contain' }} />
+                                                <MediaImg src={url} alt={`Result ${i + 1}`} token={currentToken} style={{ flex: 1, borderRadius: '10px', objectFit: 'contain' }} />
                                                 <a href={url} onClick={(e) => forceDownload(e, url)} className="st-premium-download-btn" style={{ position: 'absolute', bottom: '0.5rem', right: '0.5rem' }}>Download</a>
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
                                     <div className="st-result-reveal">
-                                        <img src={resultUrl.startsWith('/') ? `${API}${resultUrl}` : resultUrl} alt="Result" />
+                                        <MediaImg src={resultUrl} alt="Result" token={currentToken} />
                                     </div>
                                 )
                             ) : loading ? (

@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
+import UploadStatusBadge from '../shared/UploadStatusBadge';
+import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import '../../../styles/tools/inspire.css';
 
 export default function InspireTool({
     uploaded,
@@ -17,6 +21,8 @@ export default function InspireTool({
     handlePreUpload,
     onUploadInvalid,
     onUploadPaste,
+    uploadStatus,
+    isUploading,
 }) {
     // State variables
     const [prompt, setPrompt] = useState('');
@@ -305,16 +311,18 @@ export default function InspireTool({
 
                     <div className="st-inspire-compose-row">
                         <div
-                            className={`st-inspire-upload-zone ${preview ? 'has-image' : ''} ${isDrag ? 'dragging' : ''}`}
+                            className={`st-inspire-upload-zone ${preview ? 'has-image' : ''} ${isDrag ? 'dragging' : ''} ${isUploading ? 'is-uploading' : ''}`}
                             {...rootProps}
                         >
                             <span><I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={18} /></span>
-                            <strong>{preview ? 'Replace Reference Image' : 'Upload Reference Image'}</strong>
-                            <small>Drag, paste, or click — JPG, PNG, or WebP</small>
+                            <strong>{isUploading ? 'Uploading…' : preview ? 'Replace Reference Image' : 'Upload Reference Image'}</strong>
+                            <small>{isUploading ? 'Saving to workspace…' : 'Drag, paste, or click — JPG, PNG, or WebP'}</small>
                         </div>
-                        <div className={`st-inspire-photo-preview ${preview ? 'has-image' : ''}`}>
+                        <div className={`st-inspire-photo-preview ${preview ? 'has-image' : ''} ${isUploading ? 'is-uploading' : ''}`}>
                             {preview ? (
-                                <img src={preview} alt="Uploaded reference preview" />
+                                <UploadImageFrame status={uploadStatus}>
+                                    <img src={preview} alt="Uploaded reference preview" />
+                                </UploadImageFrame>
                             ) : (
                                 <div>
                                     <I d="M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM8 14l2.5-2.5L13 14l2-2 3 3M8.5 8.5h.01" s={24} />
@@ -322,6 +330,7 @@ export default function InspireTool({
                                     <span>Your reference image will appear here.</span>
                                 </div>
                             )}
+                            {uploadStatus && <UploadStatusBadge status={uploadStatus} className="st-upload-status-inline" />}
                         </div>
                         <div className="st-inspire-prompt-card">
                             <label className="st-inspire-field-label" htmlFor="inspire-prompt">Prompt</label>
@@ -348,14 +357,14 @@ export default function InspireTool({
                                     {inspireModels.length > 2 && <span>+{inspireModels.length - 2}</span>}
                                 </div>
                                 <div className="st-inspire-action-row">
-                                    <button className="st-inspire-soft-btn" onClick={descImg} disabled={isDesc || !uploaded}>
+                                    <button className="st-inspire-soft-btn" onClick={descImg} disabled={isDesc || isUploading || !uploaded?.filename}>
                                         <I d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" s={13} />
                                         {isDesc ? 'Analyzing' : 'Auto-Describe'}
                                     </button>
                                     <button
                                         className={`st-inspire-primary-btn ${!hasEnoughInspireCredits ? 'insufficient-credits' : ''}`}
                                         onClick={generate}
-                                        disabled={isGen || !prompt.trim() || !hasEnoughInspireCredits}
+                                        disabled={isGen || isUploading || !prompt.trim() || !hasEnoughInspireCredits}
                                         title={!hasEnoughInspireCredits ? `Need ${inspireCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Generate inspirations'}
                                     >
                                         <I d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" s={14} />
@@ -407,7 +416,7 @@ export default function InspireTool({
                                 {generatedVariations.map((u, i) => (
                                     <div key={u + i} className={`st-inspire-var-item ${i === 0 ? 'active' : ''}`}>
                                         {i === 0 && <div className="st-inspire-selected-mark"><I d="M20 6L9 17l-5-5" s={13} /></div>}
-                                        <img src={u.startsWith('/') ? `${API}${u}` : u} alt={`Variation ${i + 1}`} />
+                                        <MediaImg src={u} alt={`Variation ${i + 1}`} token={currentToken} />
                                         <div className="st-inspire-var-actions">
                                             <button className="st-inspire-var-btn" title="Favorite"><I d="M20.8 4.6a5.5 5.5 0 0 0-7.7 0l-1.1 1-1.1-1a5.5 5.5 0 0 0-7.8 7.8l1 1 7.9 7.9 7.9-7.9 1-1a5.5 5.5 0 0 0 0-7.8z" s={14} /></button>
                                             <button className="st-inspire-var-btn" onClick={(e) => forceDownload(e, u)} title="Download"><I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /></button>

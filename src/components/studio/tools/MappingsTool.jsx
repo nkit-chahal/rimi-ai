@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload } from '../shared/helpers';
+import { API, apiFetch, forceDownload, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
 import { createPortal } from 'react-dom';
 import { isImageFile } from '../shared/imageUpload';
+import '../../../styles/tools/mappings.css';
 import { useImageDropzone } from '../shared/useImageDropzone';
 
 const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
@@ -593,7 +595,7 @@ export default function MappingsTool(props) {
                             <div className="st-map-results-grid">
                                 {mappingResults.map((result, idx) => (
                                     <div key={idx} className="st-map-result-card">
-                                        <img src={`${API}${result.mockupUrl}`} alt={result.productType} />
+                                        <MediaImg src={result.mockupUrl} alt={result.productType} token={currentToken} />
                                         <div className="st-map-result-info">
                                             <span className="st-map-result-name">{result.productType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
                                             <button type="button" className="st-map-result-dl" onClick={(e) => forceDownload(e, `${API}${result.mockupUrl}`)}>

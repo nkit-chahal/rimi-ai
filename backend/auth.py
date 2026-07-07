@@ -6,6 +6,7 @@ import os
 import io
 import json
 import base64
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from flask import request
@@ -75,17 +76,20 @@ def log_export(project_id, filename, input_filename, tool_type, settings_dict=No
             conn.close()
 
 
-def log_replicate_call(project_id, model_name, duration, credits, cost_usd):
+def log_replicate_call(project_id, model_name, duration, credits, cost_usd, session_id=None, output_bytes=None):
     created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     with db_lock:
         conn = db()
         try:
             conn.execute(
                 """
-                INSERT INTO replicate_logs (project_id, model_name, duration, credits, cost_usd, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO replicate_logs (
+                    project_id, model_name, duration, credits, cost_usd, created_at,
+                    session_id, output_bytes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (project_id, model_name, duration, credits, cost_usd, created_at)
+                (project_id, model_name, duration, credits, cost_usd, created_at, session_id, output_bytes),
             )
             conn.commit()
         except Exception as e:
@@ -163,14 +167,19 @@ def credit_error_payload(required, remaining, limit, used):
     }
 
 
-def record_activity(project_id, activity_type='export', count=1, credits=50, user_id=None):
+def record_activity(project_id, activity_type='export', count=1, credits=50, user_id=None, note=None):
+    """Atomically deduct credits and log activity. Raises ValueError if insufficient."""
     user_id = resolve_user_id(user_id)
     credits = int(credits)
+    count = max(0, int(count))
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn = db()
     try:
         if not user_id:
             raise ValueError("user_id is required to record billable activity")
+        if credits <= 0:
+            conn.commit()
+            return
 
         user_update = conn.execute(
             """
@@ -187,7 +196,7 @@ def record_activity(project_id, activity_type='export', count=1, credits=50, use
             remaining = user["credits_limit"] - user["credits_used"]
             raise ValueError(f"Insufficient AI credits. This action needs {credits} credits, but you have {remaining} remaining.")
 
-        if activity_type == 'export':
+        if activity_type == 'export' and count > 0:
             conn.execute(
                 """
                 UPDATE project_metrics
@@ -199,7 +208,7 @@ def record_activity(project_id, activity_type='export', count=1, credits=50, use
                 """,
                 (count, count, credits, credits, project_id),
             )
-        elif activity_type == 'generation':
+        elif activity_type == 'generation' and count > 0:
             conn.execute(
                 """
                 UPDATE project_metrics
@@ -218,7 +227,7 @@ def record_activity(project_id, activity_type='export', count=1, credits=50, use
             (user_id, project_id, transaction_type, credits, note, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (user_id, project_id, activity_type, -abs(credits), f"{activity_type} usage", now)
+            (user_id, project_id, activity_type, -abs(credits), note or f"{activity_type} usage", now)
         )
         conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
         conn.commit()
@@ -227,6 +236,76 @@ def record_activity(project_id, activity_type='export', count=1, credits=50, use
         raise
     finally:
         conn.close()
+
+
+def refund_credits(user_id, project_id, credits, note='Operation failed — credits refunded'):
+    """Refund previously reserved credits after a failed operation."""
+    user_id = resolve_user_id(user_id)
+    credits = int(credits)
+    if credits <= 0 or not user_id:
+        return
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    with db_lock:
+        conn = db()
+        try:
+            conn.execute(
+                """
+                UPDATE users
+                SET credits_used = CASE
+                    WHEN credits_used >= ? THEN credits_used - ?
+                    ELSE 0
+                END
+                WHERE id = ?
+                """,
+                (credits, credits, user_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO credit_transactions
+                (user_id, project_id, transaction_type, credits, note, created_at)
+                VALUES (?, ?, 'refund', ?, ?, ?)
+                """,
+                (user_id, project_id, abs(credits), note, now),
+            )
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            print(f"Error refunding credits: {exc}")
+        finally:
+            conn.close()
+
+
+def reserve_credits(user_id, project_id, credits, activity_type='generation', count=1, note=None):
+    """Reserve credits atomically before an expensive operation."""
+    record_activity(project_id, activity_type, count, credits, user_id=user_id, note=note or f"{activity_type} reserved")
+
+
+def reserve_credits_or_error(user_id, project_id, credits, activity_type='generation', count=1):
+    """Reserve credits; return (True, None) or (False, credit_error_payload dict)."""
+    try:
+        reserve_credits(user_id, project_id, credits, activity_type, count)
+        return True, None
+    except ValueError:
+        ok, remaining, limit, used = check_credits(user_id, credits)
+        return False, credit_error_payload(credits, remaining, limit, used)
+
+
+def adjust_reserved_credits(user_id, project_id, reserved, actual, note='Partial success adjustment'):
+    """Refund the difference when actual charge is less than reserved amount."""
+    diff = int(reserved) - int(actual)
+    if diff > 0:
+        refund_credits(user_id, project_id, diff, note=note)
+
+
+@contextmanager
+def credit_guard(user_id, project_id, credits, activity_type='generation', count=1):
+    """Context manager: reserve credits upfront, refund on any exception."""
+    reserve_credits(user_id, project_id, credits, activity_type, count)
+    try:
+        yield
+    except Exception:
+        refund_credits(user_id, project_id, credits, note=f"{activity_type} failed — refunded")
+        raise
 
 
 # ===== Image utility helpers =====

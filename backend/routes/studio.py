@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from db import db, db_lock, rows_to_dicts, time_ago
 from middleware import login_required
+from security_utils import issue_file_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,15 @@ def get_studio_state(project_id=1, user_id=None):
         "projects": [{"id": p["id"], "name": p["name"], "status": p["status"], "thumbnailUrl": p["thumbnail_url"],
                        "heroImageUrl": p["hero_image_url"], "updatedAt": p["updated_at"],
                        "updatedLabel": time_ago(p["updated_at"])} for p in projects],
-        "variations": [{"id": v["id"], "name": v["name"], "imageUrl": v["image_url"],
-                        "isSelected": bool(v["is_selected"])} for v in variations],
+        "variations": [{
+            "id": v["id"], "name": v["name"], "imageUrl": v["image_url"],
+            "isSelected": bool(v["is_selected"]),
+            "fileAccessToken": (
+                issue_file_access_token(v["export_filename"], user_id)
+                if user_id and v.get("export_filename")
+                else None
+            ),
+        } for v in variations],
         "metrics": {"versions": metrics["versions"], "versionsDelta": metrics["versions_delta"],
                     "exports": metrics["exports"], "exportsDelta": metrics["exports_delta"],
                     "aiGenerations": metrics["ai_generations"], "aiGenerationsDelta": metrics["ai_generations_delta"],

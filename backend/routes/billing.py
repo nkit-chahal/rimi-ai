@@ -368,6 +368,93 @@ def razorpay_config():
     })
 
 
+def _grant_payment_credits(conn, payment, paid_at, provider_payment_id=None):
+    """Idempotently mark payment paid and grant credits. Returns True if newly paid."""
+    if payment["status"] == "paid":
+        return False
+
+    conn.execute(
+        """
+        UPDATE payments
+        SET provider_payment_id = COALESCE(?, provider_payment_id), status = 'paid', paid_at = ?
+        WHERE id = ?
+        """,
+        (provider_payment_id, paid_at, payment["id"]),
+    )
+    if payment["user_id"] and payment["credits"] > 0:
+        plan = _billing_plan_map().get(payment["pack_id"] or "")
+        plan_label = plan["label"] if plan else (
+            "Custom Top-up" if payment["pack_id"] == "custom" else "Paid Credits"
+        )
+        conn.execute(
+            "UPDATE users SET credits_limit = credits_limit + ?, plan = ? WHERE id = ?",
+            (payment["credits"], plan_label, payment["user_id"]),
+        )
+        conn.execute(
+            """
+            INSERT INTO credit_transactions
+            (user_id, payment_id, transaction_type, credits, note, created_at)
+            VALUES (?, ?, 'recharge', ?, ?, ?)
+            """,
+            (
+                payment["user_id"],
+                payment["id"],
+                payment["credits"],
+                f"Razorpay recharge {payment['provider_order_id']}",
+                paid_at,
+            ),
+        )
+    return True
+
+
+@bp.route("/api/billing/razorpay-webhook", methods=["POST"])
+def razorpay_webhook():
+    webhook_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip()
+    if not webhook_secret:
+        return jsonify({"success": False, "error": "Webhook not configured"}), 500
+
+    body = request.get_data()
+    signature = request.headers.get("X-Razorpay-Signature", "")
+    expected = hmac.new(webhook_secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    if not signature or not hmac.compare_digest(expected, signature):
+        return jsonify({"success": False, "error": "Invalid webhook signature"}), 400
+
+    try:
+        event = request.get_json(force=True) or {}
+    except Exception:
+        return jsonify({"success": False, "error": "Invalid JSON payload"}), 400
+
+    event_type = event.get("event", "")
+    if event_type not in ("payment.captured", "order.paid"):
+        return jsonify({"success": True, "ignored": True})
+
+    entity = (event.get("payload") or {}).get("payment") or {}
+    if isinstance(entity, dict) and "entity" in entity:
+        entity = entity["entity"]
+    order_id = entity.get("order_id")
+    payment_id = entity.get("id")
+    if not order_id:
+        return jsonify({"success": False, "error": "Missing order_id in webhook payload"}), 400
+
+    paid_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    with db_lock:
+        conn = db()
+        try:
+            payment = conn.execute(
+                "SELECT * FROM payments WHERE provider_order_id = ?",
+                (order_id,),
+            ).fetchone()
+            if not payment:
+                return jsonify({"success": False, "error": "Payment order was not found"}), 404
+
+            _grant_payment_credits(conn, payment, paid_at, provider_payment_id=payment_id)
+            conn.commit()
+        finally:
+            conn.close()
+
+    return jsonify({"success": True})
+
+
 @bp.route("/api/verify-payment", methods=["POST"])
 @login_required
 def verify_payment():
@@ -404,36 +491,11 @@ def verify_payment():
             if not payment:
                 return jsonify({"success": False, "error": "Payment order was not found"}), 404
 
+            if int(payment["user_id"] or 0) != int(g.current_user["id"]):
+                return jsonify({"success": False, "error": "Payment does not belong to this user"}), 403
+
             if payment["status"] != "paid":
-                conn.execute(
-                    """
-                    UPDATE payments
-                    SET provider_payment_id = ?, status = 'paid', paid_at = ?
-                    WHERE id = ?
-                    """,
-                    (payment_id, paid_at, payment["id"])
-                )
-                if payment["user_id"] and payment["credits"] > 0:
-                    plan = _billing_plan_map().get(payment["pack_id"] or "")
-                    plan_label = plan["label"] if plan else ("Custom Top-up" if payment["pack_id"] == "custom" else "Paid Credits")
-                    conn.execute(
-                        "UPDATE users SET credits_limit = credits_limit + ?, plan = ? WHERE id = ?",
-                        (payment["credits"], plan_label, payment["user_id"])
-                    )
-                    conn.execute(
-                        """
-                        INSERT INTO credit_transactions
-                        (user_id, payment_id, transaction_type, credits, note, created_at)
-                        VALUES (?, ?, 'recharge', ?, ?, ?)
-                        """,
-                        (
-                            payment["user_id"],
-                            payment["id"],
-                            payment["credits"],
-                            f"Razorpay recharge {payment['provider_order_id']}",
-                            paid_at,
-                        )
-                    )
+                _grant_payment_credits(conn, payment, paid_at, provider_payment_id=payment_id)
                 conn.commit()
 
             updated_user = None

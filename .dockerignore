@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.env
+backend/.env
+backend/uploads
+backend/results
+backend/rimi_ai.sqlite3
+backend/venv
+backend/__pycache__
+**/__pycache__
+*.pyc
+.cursor
+terminals

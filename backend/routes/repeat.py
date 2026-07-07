@@ -2,14 +2,14 @@
 import math
 import os
 import uuid
-import requests as http_requests
 from io import BytesIO
 from flask import Blueprint, request, jsonify, g
 from middleware import login_required, project_access_from_payload
 from PIL import Image, ImageOps
 
 from config import UPLOAD_DIR, RESULTS_DIR
-from auth import check_credits, credit_error_payload, credit_requirement, get_updated_credits, record_activity, log_export
+from auth import credit_requirement, get_updated_credits, log_export, refund_credits, reserve_credits_or_error
+from security_utils import safe_fetch_url
 import storage
 
 bp = Blueprint('repeat', __name__)
@@ -17,9 +17,8 @@ bp = Blueprint('repeat', __name__)
 
 def _load_source_image(filename, image_url):
     if image_url and image_url.startswith('http'):
-        resp = http_requests.get(image_url, timeout=30)
-        resp.raise_for_status()
-        return Image.open(BytesIO(resp.content))
+        content = safe_fetch_url(image_url, timeout=30)
+        return Image.open(BytesIO(content))
     if filename:
         filepath = os.path.join(UPLOAD_DIR, filename)
         if not os.path.exists(filepath):
@@ -93,14 +92,17 @@ def create_repeat_set():
     grid_size = max(2, min(8, int(grid_size)))
 
     required_credits = credit_requirement('repeat', 5)
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
-    if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+    credits_reserved = False
 
     try:
         img = _load_source_image(filename, image_url)
         if img is None:
             return jsonify({'error': 'Provide either filename or imageUrl'}), 400
+
+        ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'export', 1)
+        if not ok:
+            return jsonify(err), 403
+        credits_reserved = True
 
         tile_px_w = max(1, int(round(repeat_width * dpi)))
         tile_px_h = max(1, int(round(repeat_height * dpi)))
@@ -129,7 +131,6 @@ def create_repeat_set():
             save_kwargs['quality'] = 95
         tiled.save(result_path, **save_kwargs)
         storage.sync_to_s3(result_path)
-        record_activity(project_id, 'export', 1, required_credits, user_id=user_id)
         updated_credits = get_updated_credits(user_id)
         input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
         log_export(
@@ -149,6 +150,7 @@ def create_repeat_set():
                 "fabricWidth": fabric_width,
                 "tilePixels": f"{tile_px_w}x{tile_px_h}",
             },
+            user_id=user_id,
         )
         return jsonify({
             'success': True,
@@ -163,5 +165,7 @@ def create_repeat_set():
             **updated_credits,
         })
     except Exception as e:
+        if credits_reserved:
+            refund_credits(user_id, project_id, required_credits, note='Repeat set failed')
         print(f"  [Repeat Set] Error: {e}")
         return jsonify({'error': str(e)}), 500

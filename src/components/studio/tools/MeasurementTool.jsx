@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
+import { API, forceDownload, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
 import { createPortal } from 'react-dom';
 
 /**
@@ -30,7 +31,8 @@ export default function MeasurementTool(props) {
         setError, 
         addBgTask, 
         updateCreditsFromResponse, 
-        controls 
+        controls,
+        currentToken,
     } = props;
 
     // Drag-and-drop state (inherited template structure)
@@ -154,7 +156,7 @@ export default function MeasurementTool(props) {
                     <div style={{ flex: 1, position: 'relative', minHeight: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
                         {preview ? (
                             <div style={{ position: 'relative', maxWidth: '100%', maxHeight: '500px' }}>
-                                <img src={preview.startsWith('http') || preview.startsWith('/') ? `${API}${preview}` : preview} alt="Pattern"
+                                <MediaImg src={preview} alt="Pattern" token={currentToken}
                                     style={{ maxWidth: '100%', maxHeight: '500px', objectFit: 'contain', borderRadius: '8px' }} />
                                 
                                 {/* CSS repeating gradient to simulate grid overlay */}

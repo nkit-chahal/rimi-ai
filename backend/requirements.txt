@@ -18,6 +18,7 @@ vtracer
 scikit-learn
 reportlab
 colour-science
+psd-tools>=1.9.28
 pydantic>=2.0
 pytest>=8.0
 rq>=1.16

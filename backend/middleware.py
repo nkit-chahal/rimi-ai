@@ -1,10 +1,15 @@
 """Authentication middleware for protecting API endpoints."""
 import functools
+import json
 import logging
+import time
 from flask import request, jsonify, g
 import jwt
 from db import db
 from jwt_tokens import decode_access_token
+
+_USER_CACHE = {}
+_USER_CACHE_TTL = int(__import__('os').getenv('USER_CACHE_TTL_SECONDS', '45'))
 
 
 def current_user_id():
@@ -35,9 +40,15 @@ def assert_project_access(project_id):
         conn.close()
 
 
-def project_access_from_payload(data, default_project_id=1):
+def project_access_from_payload(data, default_project_id=None):
     """Parse projectId from request JSON and verify ownership."""
-    project_id = int((data or {}).get('projectId', default_project_id))
+    raw = (data or {}).get('projectId')
+    if raw is None:
+        if default_project_id is None:
+            return None, (jsonify({'success': False, 'error': 'projectId is required'}), 400)
+        project_id = int(default_project_id)
+    else:
+        project_id = int(raw)
     denied = assert_project_access(project_id)
     if denied:
         return project_id, denied
@@ -59,16 +70,24 @@ def _get_current_user():
         user_id = payload.get('user_id')
         if not user_id:
             return None
+        cache_key = int(user_id)
+        cached = _USER_CACHE.get(cache_key)
+        now = time.time()
+        if cached and cached['expires_at'] > now:
+            user_dict = cached['user']
+            if user_dict.get('status') in ('banned', 'suspended'):
+                return None
+            return user_dict
         conn = db()
         try:
-            user = conn.execute('SELECT * FROM users WHERE id = ?', (int(user_id),)).fetchone()
+            user = conn.execute('SELECT * FROM users WHERE id = ?', (cache_key,)).fetchone()
             if not user:
                 logger.warning('JWT user_id=%s not found in database', user_id)
                 return None
             user_dict = dict(user)
-            # Reject banned or suspended users
             if user_dict.get('status') in ('banned', 'suspended'):
                 return None
+            _USER_CACHE[cache_key] = {'user': user_dict, 'expires_at': now + _USER_CACHE_TTL}
             return user_dict
         finally:
             conn.close()

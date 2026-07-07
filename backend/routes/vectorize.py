@@ -8,10 +8,11 @@ from middleware import login_required, project_access_from_payload
 
 from config import UPLOAD_DIR, RESULTS_DIR
 from auth import (
-    log_export, log_replicate_call, check_credits,
-    get_credit_price, get_updated_credits, record_activity,
-    credit_error_payload, credit_requirement,
+    log_export, log_replicate_call,
+    get_credit_price, get_updated_credits,
+    credit_requirement, refund_credits, reserve_credits_or_error,
 )
+from security_utils import safe_fetch_url
 import storage
 
 bp = Blueprint('vectorize', __name__)
@@ -27,8 +28,6 @@ def vectorize_image():
     - engine='api': Uses recraft-ai/recraft-vectorize on Replicate ($0.01/run)
     Expects JSON: { filename, engine, numColors, projectId, userId }
     """
-    import requests as http_requests
-    from io import BytesIO
     import time
     import base64
 
@@ -43,16 +42,7 @@ def vectorize_image():
         return access_error
     pricing_key = 'vectorize' if engine == 'api' else 'vectorizeLocal'
     required_credits = get_credit_price(pricing_key, 25 if engine == 'api' else 5)
-    user_id_early = g.current_user['id']
-    ok, remaining, limit, used = check_credits(user_id_early, required_credits)
-    if not ok:
-        return jsonify({
-            'error': f'Insufficient AI credits. This action needs {required_credits} credits, but you have {remaining} remaining.',
-            'creditsUsed': used,
-            'creditsLimit': limit,
-            'creditsRequired': required_credits,
-            'creditsRemaining': remaining,
-        }), 403
+    user_id = g.current_user['id']
 
     # Resolve filepath from filename or imageUrl
     filepath = None
@@ -67,14 +57,18 @@ def vectorize_image():
     elif image_url and image_url.startswith('http'):
         # Download remote image to a temp file
         print(f"  [Vectorize] Downloading image from URL...")
-        resp = http_requests.get(image_url, timeout=30)
+        content = safe_fetch_url(image_url, timeout=30)
         ext = '.png' if 'png' in image_url.lower() else '.jpg'
         filename = f"tmp_vec_{uuid.uuid4().hex[:8]}{ext}"
         filepath = os.path.join(UPLOAD_DIR, filename)
         with open(filepath, 'wb') as f:
-            f.write(resp.content)
+            f.write(content)
     else:
         return jsonify({'error': 'Provide either filename or imageUrl'}), 400
+
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
+    if not ok:
+        return jsonify(err), 403
 
     credits_used = required_credits
     try:
@@ -108,9 +102,8 @@ def vectorize_image():
                 with open(result_path, "wb") as f:
                     f.write(output.read())
             except (AttributeError, TypeError):
-                resp = http_requests.get(svg_url, timeout=30)
                 with open(result_path, "wb") as f:
-                    f.write(resp.content)
+                    f.write(safe_fetch_url(svg_url, timeout=30))
 
             storage.sync_to_s3(result_path)
             print(f"  [Vectorize] Recraft done! Saved: {result_name}")
@@ -165,13 +158,6 @@ def vectorize_image():
             storage.sync_to_s3(result_path)
             print(f"  [Vectorize] vtracer done! Saved: {result_name} ({os.path.getsize(result_path) // 1024}KB)")
 
-        user_id = g.current_user['id']
-
-        try:
-            record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
-        except ValueError as credit_error:
-            return jsonify({'error': str(credit_error), **get_updated_credits(user_id)}), 403
-
         # Log export
         input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
         log_export(
@@ -193,6 +179,7 @@ def vectorize_image():
         })
 
     except Exception as e:
+        refund_credits(user_id, project_id, required_credits, note='Vectorization failed')
         print(f"  [Vectorize] Error: {e}")
         import traceback
         traceback.print_exc()
@@ -211,18 +198,19 @@ def upscale():
     project_id, access_error = project_access_from_payload(data)
     if access_error:
         return access_error
-    user_id_early = g.current_user['id']
+    user_id = g.current_user['id']
     required_credits = credit_requirement('upscale', 23)
-    ok, remaining, limit, used = check_credits(user_id_early, required_credits)
-    if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
-    
+
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
 
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
+
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
+    if not ok:
+        return jsonify(err), 403
 
     try:
         import base64
@@ -249,8 +237,6 @@ def upscale():
         credits_used = required_credits
         cost_usd = 0.02
 
-        user_id = g.current_user['id']
-
         log_replicate_call(project_id, "google/upscaler", duration, credits_used, cost_usd)
 
         result_name = f"upscale_{uuid.uuid4().hex[:8]}.png"
@@ -261,15 +247,11 @@ def upscale():
                 file.write(output.read())
         except AttributeError:
             # Fallback if output is just a URL string or list
-            import requests as http_requests
             url = output[0] if isinstance(output, list) else str(output)
-            resp = http_requests.get(url)
             with open(result_path, "wb") as file:
-                file.write(resp.content)
+                file.write(safe_fetch_url(url, timeout=60))
 
         storage.sync_to_s3(result_path)
-
-        record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
 
         # Log export
         log_export(
@@ -290,5 +272,6 @@ def upscale():
         })
 
     except Exception as e:
+        refund_credits(user_id, project_id, required_credits, note='Upscale failed')
         print(f"  [Upscale] Error: {e}")
         return jsonify({'error': f'Failed to upscale image: {str(e)}'}), 500

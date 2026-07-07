@@ -14,6 +14,7 @@ import bcrypt
 from db import DEFAULT_CREDIT_PRICING, db, rows_to_dicts
 from jwt_tokens import issue_access_token
 from middleware import admin_required, login_required
+from rate_limits import login_rate_limit, signup_request_rate_limit, signup_verify_rate_limit
 
 bp = Blueprint('admin', __name__)
 
@@ -129,6 +130,7 @@ def _record_login_event(conn, user_id, provider):
 
 
 @bp.route('/api/login', methods=['POST'])
+@login_rate_limit
 def api_login():
     data = request.get_json() or {}
     email = data.get('email')
@@ -145,11 +147,9 @@ def api_login():
             if user.get("status") in ("suspended", "banned"):
                 return jsonify({'success': False, 'error': 'Account is suspended'}), 403
             stored_pw = user['password']
-            pw_ok = False
-            if stored_pw.startswith('$2'):
-                pw_ok = bcrypt.checkpw(password.encode('utf-8'), stored_pw.encode('utf-8'))
-            else:
-                pw_ok = stored_pw == password
+            if not stored_pw.startswith('$2'):
+                return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
+            pw_ok = bcrypt.checkpw(password.encode('utf-8'), stored_pw.encode('utf-8'))
             if pw_ok:
                 last_login_at = _record_login_event(conn, user["id"], "email")
                 conn.commit()
@@ -186,6 +186,7 @@ def api_login():
 
 
 @bp.route('/api/signup/request-otp', methods=['POST'])
+@signup_request_rate_limit
 def signup_request_otp():
     data = request.get_json() or {}
     email = (data.get('email') or '').strip().lower()
@@ -239,9 +240,11 @@ def signup_request_otp():
             'emailSent': sent_email,
             'expiresInMinutes': SIGNUP_OTP_TTL_MINUTES,
         }
-        if not sent_email:
+        if not sent_email and os.getenv('FLASK_ENV') != 'production':
             response['devOtp'] = otp
             response['message'] = 'Email service is not configured. Use the development OTP shown here.'
+        elif not sent_email:
+            response['message'] = 'Email service is not configured. Contact support if you did not receive a code.'
         return jsonify(response)
     except Exception as e:
         conn.rollback()
@@ -252,6 +255,7 @@ def signup_request_otp():
 
 
 @bp.route('/api/signup/verify-otp', methods=['POST'])
+@signup_verify_rate_limit
 def signup_verify_otp():
     data = request.get_json() or {}
     email = (data.get('email') or '').strip().lower()
@@ -439,6 +443,61 @@ def admin_budget():
         'budget': budget,
         'totalSpent': total_spent,
         'remaining': remaining
+    })
+
+
+@bp.route('/api/admin/qwen-burn', methods=['GET'])
+@admin_required
+def admin_qwen_burn():
+    """Aggregate Qwen-related replicate spend and output volume."""
+    conn = db()
+    try:
+        qwen_models = (
+            'qwen/qwen-image-layered',
+            'qwen/qwen-image-edit',
+            'fofr/style-transfer',
+        )
+        placeholders = ','.join('?' for _ in qwen_models)
+        row = conn.execute(
+            f"""
+            SELECT
+                COUNT(*) AS call_count,
+                COALESCE(SUM(cost_usd), 0) AS total_cost_usd,
+                COALESCE(SUM(credits), 0) AS total_credits,
+                COALESCE(SUM(output_bytes), 0) AS total_output_bytes
+            FROM replicate_logs
+            WHERE model IN ({placeholders})
+               OR session_id IS NOT NULL
+            """,
+            qwen_models,
+        ).fetchone()
+        session_count = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM qwen_layered_sessions"
+        ).fetchone()
+        version_count = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM qwen_layer_versions"
+        ).fetchone()
+        last_7d = conn.execute(
+            f"""
+            SELECT COALESCE(SUM(cost_usd), 0) AS burn_7d
+            FROM replicate_logs
+            WHERE (model IN ({placeholders}) OR session_id IS NOT NULL)
+              AND created_at >= datetime('now', '-7 days')
+            """,
+            qwen_models,
+        ).fetchone()
+    finally:
+        conn.close()
+
+    return jsonify({
+        'success': True,
+        'callCount': int(row['call_count'] or 0) if row else 0,
+        'totalCostUsd': float(row['total_cost_usd'] or 0) if row else 0.0,
+        'totalCredits': int(row['total_credits'] or 0) if row else 0,
+        'totalOutputBytes': int(row['total_output_bytes'] or 0) if row else 0,
+        'sessionCount': int(session_count['cnt'] or 0) if session_count else 0,
+        'versionCount': int(version_count['cnt'] or 0) if version_count else 0,
+        'burnLast7DaysUsd': float(last_7d['burn_7d'] or 0) if last_7d else 0.0,
     })
 
 
@@ -943,7 +1002,48 @@ def admin_unsuspend_user(user_id):
         conn.close()
 
 
-# --------------- Health check ---------------
+# --------------- Health checks ---------------
 @bp.route('/api/health')
 def health():
     return jsonify({'status': 'ok', 'service': 'RIMI AI Backend'})
+
+
+@bp.route('/api/health/live')
+def health_live():
+    return jsonify({'status': 'ok', 'service': 'RIMI AI Backend'})
+
+
+@bp.route('/api/health/ready')
+def health_ready():
+    checks = {}
+    overall_ok = True
+
+    conn = db()
+    try:
+        conn.execute("SELECT 1").fetchone()
+        checks['database'] = 'ok'
+    except Exception as exc:
+        checks['database'] = f'error: {exc}'
+        overall_ok = False
+    finally:
+        conn.close()
+
+    redis_url = os.getenv('REDIS_URL') or os.getenv('RATELIMIT_STORAGE_URI', '')
+    if redis_url.startswith(('redis://', 'rediss://')):
+        try:
+            from redis import Redis
+            client = Redis.from_url(redis_url, socket_connect_timeout=2)
+            client.ping()
+            checks['redis'] = 'ok'
+        except Exception as exc:
+            checks['redis'] = f'error: {exc}'
+            overall_ok = False
+    else:
+        checks['redis'] = 'skipped'
+
+    status_code = 200 if overall_ok else 503
+    return jsonify({
+        'status': 'ok' if overall_ok else 'degraded',
+        'service': 'RIMI AI Backend',
+        'checks': checks,
+    }), status_code

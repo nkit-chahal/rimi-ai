@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
 import { createPortal } from 'react-dom';
 
 export default function VectorProTool(props) {
@@ -296,7 +297,7 @@ export default function VectorProTool(props) {
                         <div className="st-comparison-card-body" style={{ position: 'relative' }}>
                             {vpReducedUrl ? (
                                 <div className="st-result-reveal">
-                                    <img src={`${API}${vpReducedUrl}`} alt="Quantized" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    <MediaImg src={vpReducedUrl} alt="Quantized" token={currentToken} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                                 </div>
                             ) : isVpReducing ? (
                                 <div className="st-ai-processing">

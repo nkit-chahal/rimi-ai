@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload, jsonAuthHeaders, bearerAuthHeaders } from '../shared/helpers';
+import { API, apiFetch, forceDownload, jsonAuthHeaders, bearerAuthHeaders, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
+import MediaImg from '../shared/MediaImg';
+import UploadStatusBadge from '../shared/UploadStatusBadge';
+import UploadImageFrame from '../shared/UploadImageFrame';
 import { createPortal } from 'react-dom';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import OpenInQwenButton from '../shared/OpenInQwenButton';
 
 export default function DashboardTool(props) {
-    const { uploaded, preview, activeProject, user, setError, setNotice, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, rightPanelEl, setTool, onUploadPaste } = props;
+    const { uploaded, preview, activeProject, user, setError, setNotice, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, rightPanelEl, setTool, onUploadPaste, setQwenLaunch } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
     const STEP_TYPES = [
@@ -15,10 +19,12 @@ export default function DashboardTool(props) {
         { type: 'repeat', label: 'Repeat', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z', desc: 'Repeat pattern grid' },
         { type: 'vectorize', label: 'Vectorize', icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z', desc: 'Convert to SVG' },
         { type: 'upscale', label: 'Upscale', icon: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7', desc: 'Enhance resolution' },
+        { type: 'decompose', label: 'Qwen Decompose', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5', desc: 'Split into RGBA layers' },
+        { type: 'edit-layer', label: 'Qwen Edit Layer', icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z', desc: 'Natural-language layer edit' },
         { type: 'export', label: 'Export', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3', desc: 'Export output' },
     ];
     const PIPELINE_CATEGORIES = {
-        'AI Tools': ['extract', 'seamless', 'vectorize', 'upscale'],
+        'AI Tools': ['extract', 'seamless', 'vectorize', 'upscale', 'decompose', 'edit-layer'],
         'Layout': ['repeat'],
         'Utility': ['upload', 'export']
     };
@@ -32,6 +38,8 @@ export default function DashboardTool(props) {
         repeat: { label: 'Repeat Set', cost: creditPricing?.repeat || 5 },
         vectorize: { label: 'Vectorize SVG', cost: creditPricing?.vectorize || 12 },
         upscale: { label: 'Super Resolution', cost: creditPricing?.upscale || 23 },
+        decompose: { label: 'Qwen Decompose', cost: creditPricing?.imageLayers || 69 },
+        'edit-layer': { label: 'Qwen Edit Layer', cost: creditPricing?.imageLayerEdit || 35 },
         export: { label: 'Export Output', cost: 0 },
     };
     const PIPELINE_TEMPLATES = [
@@ -45,6 +53,8 @@ export default function DashboardTool(props) {
         if (type === 'repeat') return { gridSize: 3, repeatType: 'block' };
         if (type === 'upscale') return { upscaleFactor: 'x4' };
         if (type === 'export') return { outputFormat: 'PNG', resolution: 300 };
+        if (type === 'decompose') return { numLayers: 4, description: 'auto' };
+        if (type === 'edit-layer') return { prompt: 'Recolor to navy blue', editType: 'recolor' };
         return {};
     };
 
@@ -59,6 +69,7 @@ export default function DashboardTool(props) {
     const [pipelinePreview, setPipelinePreview] = useState(null);
     const [pipelineRuns, setPipelineRuns] = useState([]);
     const [pipelineFile, setPipelineFile] = useState(null); // uploaded file for pipeline
+    const [pipelineUploadStatus, setPipelineUploadStatus] = useState(null);
     const [showAddMenu, setShowAddMenu] = useState(false);
     const [isDraggingOver, setIsDraggingOver] = useState(false);
     const [pipelineName, setPipelineName] = useState('My Custom Pipeline');
@@ -177,12 +188,27 @@ export default function DashboardTool(props) {
     const handlePipelineUpload = (file) => {
         if (!file) return;
         setPipelinePreview(URL.createObjectURL(file));
+        setPipelineUploadStatus('uploading');
+        setPipelineFile(null);
         const fd = new FormData();
         fd.append('image', file);
+        fd.append('projectId', String(activeProject?.id || 1));
+        if (user?.id) fd.append('userId', String(user.id));
         fetch(`${API}/api/upload`, { method: 'POST', body: fd, headers: bearerAuthHeaders(currentToken) })
             .then(r => r.json())
-            .then(d => { if (d.success) setPipelineFile(d); })
-            .catch(() => setError('Upload failed'));
+            .then(d => {
+                if (d.success) {
+                    setPipelineFile(d);
+                    setPipelineUploadStatus('ready');
+                } else {
+                    setPipelineUploadStatus('error');
+                    setError(d.error || 'Upload failed');
+                }
+            })
+            .catch(() => {
+                setPipelineUploadStatus('error');
+                setError('Upload failed');
+            });
     };
 
     const { rootProps: pipelineUploadProps, pasteProps, inputProps: pipelineInputProps, openFilePicker: openPipelinePicker, isDrag: isPipelineDrag } = useImageDropzone({
@@ -254,14 +280,14 @@ export default function DashboardTool(props) {
                 let resultUrl = null;
                 if (step.type === 'upload') {
                     // Already handled by handlePipelineUpload
-                    resultUrl = pipelineFile ? `${API}/uploads/${pipelineFile.filename}` : null;
+                    resultUrl = pipelineFile ? `/uploads/${pipelineFile.filename}` : null;
                 } else if (step.type === 'extract') {
                     const r = await fetch(`${API}/api/extract-design`, {
                         method: 'POST', headers: jsonAuthHeaders(currentToken),
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, userId: user?.id }),
                     });
                     const d = await r.json();
-                    if (d.success && d.resultUrl) { resultUrl = `${API}${d.resultUrl}`; currentInput = d.resultUrl.split('/').pop(); updateCreditsFromResponse(d); }
+                    if (d.success && d.resultUrl) { resultUrl = d.resultUrl; currentInput = d.resultUrl.split('/').pop(); cacheMediaFromResponse(d); updateCreditsFromResponse(d); }
                     else throw new Error(d.error || 'Extraction failed');
                 } else if (step.type === 'seamless') {
                     const r = await fetch(`${API}/api/make-seamless`, {
@@ -269,7 +295,7 @@ export default function DashboardTool(props) {
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, userId: user?.id }),
                     });
                     const d = await r.json();
-                    if (d.success && d.resultUrl) { resultUrl = `${API}${d.resultUrl}`; currentInput = d.resultUrl.split('/').pop(); updateCreditsFromResponse(d); }
+                    if (d.success && d.resultUrl) { resultUrl = d.resultUrl; currentInput = d.resultUrl.split('/').pop(); cacheMediaFromResponse(d); updateCreditsFromResponse(d); }
                     else throw new Error(d.error || 'Seamless failed');
                 } else if (step.type === 'repeat') {
                     const r = await fetch(`${API}/api/create-repeat-set`, {
@@ -282,7 +308,7 @@ export default function DashboardTool(props) {
                         }),
                     });
                     const d = await r.json();
-                    if (d.success && d.resultUrl) { resultUrl = `${API}${d.resultUrl}`; currentInput = d.resultUrl.split('/').pop(); updateCreditsFromResponse(d); }
+                    if (d.success && d.resultUrl) { resultUrl = d.resultUrl; currentInput = d.resultUrl.split('/').pop(); cacheMediaFromResponse(d); updateCreditsFromResponse(d); }
                     else throw new Error(d.error || 'Repeat failed');
                 } else if (step.type === 'upscale') {
                     const r = await fetch(`${API}/api/upscale`, {
@@ -290,7 +316,7 @@ export default function DashboardTool(props) {
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, factor: step.settings?.upscaleFactor || 'x4', userId: user?.id }),
                     });
                     const d = await r.json();
-                    if (d.success && d.resultUrl) { resultUrl = `${API}${d.resultUrl}`; currentInput = d.resultUrl.split('/').pop(); updateCreditsFromResponse(d); }
+                    if (d.success && d.resultUrl) { resultUrl = d.resultUrl; currentInput = d.resultUrl.split('/').pop(); cacheMediaFromResponse(d); updateCreditsFromResponse(d); }
                     else throw new Error(d.error || 'Upscale failed');
                 } else if (step.type === 'vectorize') {
                     const r = await fetch(`${API}/api/vectorize`, {
@@ -298,11 +324,41 @@ export default function DashboardTool(props) {
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, userId: user?.id }),
                     });
                     const d = await r.json();
-                    if (d.success && d.resultUrl) { resultUrl = `${API}${d.resultUrl}`; currentInput = d.resultUrl.split('/').pop(); updateCreditsFromResponse(d); }
+                    if (d.success && d.resultUrl) { resultUrl = d.resultUrl; currentInput = d.resultUrl.split('/').pop(); cacheMediaFromResponse(d); updateCreditsFromResponse(d); }
                     else throw new Error(d.error || 'Vectorize failed');
+                } else if (step.type === 'decompose') {
+                    const { runAsyncJob } = await import('../shared/helpers');
+                    const d = await runAsyncJob('/api/image-layers', {
+                        filename: currentInput,
+                        numLayers: step.settings?.numLayers || 4,
+                        description: step.settings?.description || 'auto',
+                        projectId: activeProject.id,
+                        userId: user?.id,
+                    }, currentToken);
+                    if (d.success && d.layers?.length) {
+                        resultUrl = d.layers[0].url;
+                        currentInput = d.layers[0].filename;
+                        cacheMediaFromResponse(d);
+                        updateCreditsFromResponse(d);
+                    } else throw new Error(d.error || 'Decompose failed');
+                } else if (step.type === 'edit-layer') {
+                    const { runAsyncJob } = await import('../shared/helpers');
+                    const d = await runAsyncJob('/api/edit-layer', {
+                        filename: currentInput,
+                        prompt: step.settings?.prompt || 'Enhance colors',
+                        editType: step.settings?.editType || 'recolor',
+                        projectId: activeProject.id,
+                        userId: user?.id,
+                    }, currentToken);
+                    if (d.success && d.resultUrl) {
+                        resultUrl = d.resultUrl;
+                        currentInput = d.resultUrl.split('/').pop();
+                        cacheMediaFromResponse(d);
+                        updateCreditsFromResponse(d);
+                    } else throw new Error(d.error || 'Layer edit failed');
                 } else if (step.type === 'export') {
                     // Export is just the final download
-                    resultUrl = currentInput ? `${API}/results/${currentInput}` : null;
+                    resultUrl = currentInput ? `/results/${currentInput}` : null;
                 }
 
                 results.push({ step: i, type: step.type, status: 'done', resultUrl });
@@ -526,6 +582,14 @@ export default function DashboardTool(props) {
                                                     <option value="TIFF">TIFF Output</option>
                                                 </select>
                                             )}
+                                            {step.type === 'decompose' && (
+                                                <select className="st-pl-step-select" disabled={dashboardTab === 'run'} onClick={e => e.stopPropagation()} value={step.settings?.numLayers || 4} onChange={e => updateStepSetting(step.id, 'numLayers', parseInt(e.target.value, 10))}>
+                                                    {[2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n} layers</option>)}
+                                                </select>
+                                            )}
+                                            {step.type === 'edit-layer' && (
+                                                <input className="st-pl-step-select" disabled={dashboardTab === 'run'} onClick={e => e.stopPropagation()} placeholder="Edit prompt" value={step.settings?.prompt || ''} onChange={e => updateStepSetting(step.id, 'prompt', e.target.value)} style={{ marginTop: 4 }} />
+                                            )}
                                         </div>
                                         {(uploadDone || step.status === 'done') && <div className="st-pl-step-badge done"><I d="M5 13l4 4L19 7" s={12} /></div>}
                                         {step.status === 'running' && <div className="st-pl-step-badge running"><div className="st-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /></div>}
@@ -587,10 +651,20 @@ export default function DashboardTool(props) {
 
                 {/* Pipeline upload for first step */}
                 {pipelineSteps.length > 0 && pipelineSteps[0]?.type === 'upload' && !pipelineFile && (
-                    <div className={`st-pl-upload-prompt ${isPipelineDrag ? 'dragging' : ''}`} {...pipelineUploadProps}>
-                        <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={24} />
-                        <strong>Upload your artwork to get started</strong>
-                        <span>Drag, paste, or click — PNG, JPG, WEBP</span>
+                    <div className={`st-pl-upload-prompt ${isPipelineDrag ? 'dragging' : ''} ${pipelineUploadStatus === 'uploading' ? 'is-uploading' : ''}`} {...pipelineUploadProps}>
+                        {pipelineUploadStatus === 'uploading' ? (
+                            <>
+                                <span className="st-upload-status-spinner st-upload-status-spinner-lg" />
+                                <strong>Uploading your artwork…</strong>
+                                <span>Please wait before running the pipeline</span>
+                            </>
+                        ) : (
+                            <>
+                                <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={24} />
+                                <strong>Upload your artwork to get started</strong>
+                                <span>Drag, paste, or click — PNG, JPG, WEBP</span>
+                            </>
+                        )}
                     </div>
                 )}
                 <input {...pipelineInputProps} />
@@ -604,11 +678,27 @@ export default function DashboardTool(props) {
             <div className="st-pl-right">
                 <div className="st-pl-right-header">
                     <strong>Live Preview</strong>
-                    {pipelineCurrentStep >= 0 && <span className="st-pl-step-indicator">Step {pipelineCurrentStep + 1} of {pipelineSteps.length}</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <UploadStatusBadge status={pipelineUploadStatus} />
+                        {pipelineCurrentStep >= 0 && <span className="st-pl-step-indicator">Step {pipelineCurrentStep + 1} of {pipelineSteps.length}</span>}
+                    </div>
                 </div>
                 <div className="st-pl-preview-area">
                     {pipelinePreview ? (
-                        <img src={pipelinePreview} alt="Pipeline Preview" className="st-pl-preview-img" />
+                        <UploadImageFrame status={pipelineUploadStatus} className="st-pl-preview-frame">
+                            <MediaImg src={pipelinePreview} alt="Pipeline Preview" className="st-pl-preview-img" token={currentToken} />
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', justifyContent: 'center' }}>
+                                <OpenInQwenButton
+                                    sourceUrl={pipelinePreview}
+                                    projectId={activeProject?.id}
+                                    userId={user?.id}
+                                    currentToken={currentToken}
+                                    setTool={setTool}
+                                    setQwenLaunch={setQwenLaunch}
+                                    className="st-quick-action-btn"
+                                />
+                            </div>
+                        </UploadImageFrame>
                     ) : (
                         <div className="st-pl-preview-empty">
                             <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={32} />

@@ -13,6 +13,7 @@ import bcrypt
 from config import DB_PATH, DATABASE_URL, UPLOAD_DIR, RESULTS_DIR
 
 db_lock = threading.Lock()
+_pg_pool = None
 
 # ---------------------------------------------------------------------------
 # Credit pricing
@@ -58,6 +59,9 @@ DEFAULT_CREDIT_PRICING = [
     # ----- Image Layers -----
     ("imageLayers", "Image Layers (3-layer default)", "/api/image-layers", 69, "dynamic", 1),
     ("imageLayerEdit", "Image Layer Edit", "/api/edit-layer", 35, "fixed", 1),
+    ("qwenSessionExportPsd", "Qwen Session Export PSD", "/api/qwen-sessions/export/psd", 5, "fixed", 1),
+    ("qwenSessionExportZip", "Qwen Session Export ZIP", "/api/qwen-sessions/export/zip", 2, "fixed", 1),
+    ("qwenSessionExportSvg", "Qwen Session Export SVG", "/api/qwen-sessions/export/svg", 15, "fixed", 1),
 
     # ----- Upscale / Vectorize / Misc Replicate -----
     ("upscale", "Super Resolution", "/api/upscale", 23, "dynamic", 1),
@@ -194,17 +198,31 @@ class _PgConnectionWrapper:
         self._conn.rollback()
 
     def close(self):
-        self._conn.close()
+        if getattr(self, "_pooled", False):
+            _get_pg_pool().putconn(self._conn)
+        else:
+            self._conn.close()
 
     def cursor(self):
         return _PgCursorWrapper(self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor))
 
 
+def _get_pg_pool():
+    global _pg_pool
+    if _pg_pool is None:
+        from psycopg2 import pool
+        max_conn = int(os.getenv("DB_POOL_MAX", "20"))
+        _pg_pool = pool.ThreadedConnectionPool(1, max_conn, DATABASE_URL)
+    return _pg_pool
+
+
 def db():
     if _USE_PG:
-        conn = psycopg2.connect(DATABASE_URL)
-        conn.autocommit = False
-        return _PgConnectionWrapper(conn)
+        raw = _get_pg_pool().getconn()
+        raw.autocommit = False
+        wrapper = _PgConnectionWrapper(raw)
+        wrapper._pooled = True
+        return wrapper
     else:
         conn = sqlite3.connect(DB_PATH, timeout=5.0)
         conn.row_factory = sqlite3.Row
@@ -328,7 +346,9 @@ def _pg_schema_sql():
             duration REAL NOT NULL,
             credits INTEGER NOT NULL,
             cost_usd REAL NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            session_id INTEGER,
+            output_bytes INTEGER
         );
         CREATE TABLE IF NOT EXISTS projects (
             id SERIAL PRIMARY KEY,
@@ -403,9 +423,15 @@ def _pg_schema_sql():
         );
         CREATE TABLE IF NOT EXISTS saved_workflows (
             id SERIAL PRIMARY KEY,
+            user_id INTEGER,
             name TEXT NOT NULL,
             steps_json TEXT NOT NULL,
             settings_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS user_uploads (
+            user_id INTEGER NOT NULL,
+            filename TEXT NOT NULL UNIQUE,
             created_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS exports (
@@ -554,9 +580,45 @@ def _pg_schema_sql():
             status TEXT NOT NULL DEFAULT 'invited',
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS qwen_layered_sessions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            project_id INTEGER NOT NULL,
+            name TEXT NOT NULL DEFAULT 'Untitled Session',
+            source_filename TEXT,
+            canvas_width INTEGER NOT NULL DEFAULT 1024,
+            canvas_height INTEGER NOT NULL DEFAULT 1024,
+            thumbnail_filename TEXT,
+            last_composed_filename TEXT,
+            document_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            is_archived INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS qwen_layer_versions (
+            id SERIAL PRIMARY KEY,
+            session_id INTEGER NOT NULL,
+            layer_local_id INTEGER NOT NULL,
+            version INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            edit_type TEXT NOT NULL DEFAULT 'decompose',
+            prompt TEXT,
+            parent_filename TEXT,
+            cost_usd REAL,
+            credits INTEGER,
+            duration_ms INTEGER,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_qwen_versions_session_layer ON qwen_layer_versions (session_id, layer_local_id, version);
+        CREATE INDEX IF NOT EXISTS idx_qwen_sessions_project_updated ON qwen_layered_sessions (project_id, updated_at);
         CREATE INDEX IF NOT EXISTS idx_exports_user_project ON exports (user_id, project_id);
         CREATE INDEX IF NOT EXISTS idx_exports_created ON exports (created_at);
         CREATE INDEX IF NOT EXISTS idx_replicate_logs_project ON replicate_logs (project_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_background_jobs_user_status ON background_jobs (user_id, status);
+        CREATE INDEX IF NOT EXISTS idx_credit_tx_user_created ON credit_transactions (user_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_payments_user_status ON payments (user_id, status);
+        CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id);
+        CREATE INDEX IF NOT EXISTS idx_saved_workflows_user ON saved_workflows (user_id);
     """
 
 
@@ -620,6 +682,67 @@ def _pg_run_migrations(conn):
     _pg_ensure_column(conn, "background_jobs", "progress_pct", "INTEGER NOT NULL DEFAULT 0")
     _pg_ensure_column(conn, "background_jobs", "stage", "TEXT NOT NULL DEFAULT ''")
     _pg_ensure_column(conn, "pattern_variations", "export_filename", "TEXT")
+    _pg_ensure_column(conn, "replicate_logs", "session_id", "INTEGER")
+    _pg_ensure_column(conn, "replicate_logs", "output_bytes", "INTEGER")
+    _pg_ensure_column(conn, "saved_workflows", "user_id", "INTEGER")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_uploads (
+            user_id INTEGER NOT NULL,
+            filename TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_background_jobs_user_status ON background_jobs (user_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_credit_tx_user_created ON credit_transactions (user_id, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_user_status ON payments (user_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_saved_workflows_user ON saved_workflows (user_id)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS qwen_layered_sessions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            project_id INTEGER NOT NULL,
+            name TEXT NOT NULL DEFAULT 'Untitled Session',
+            source_filename TEXT,
+            canvas_width INTEGER NOT NULL DEFAULT 1024,
+            canvas_height INTEGER NOT NULL DEFAULT 1024,
+            thumbnail_filename TEXT,
+            last_composed_filename TEXT,
+            document_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            is_archived INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS qwen_layer_versions (
+            id SERIAL PRIMARY KEY,
+            session_id INTEGER NOT NULL,
+            layer_local_id INTEGER NOT NULL,
+            version INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            edit_type TEXT NOT NULL DEFAULT 'decompose',
+            prompt TEXT,
+            parent_filename TEXT,
+            cost_usd REAL,
+            credits INTEGER,
+            duration_ms INTEGER,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_qwen_versions_session_layer ON qwen_layer_versions (session_id, layer_local_id, version)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_qwen_sessions_project_updated ON qwen_layered_sessions (project_id, updated_at)"
+    )
 
     # Assign orphaned projects to the first user so studio-state queries work.
     conn.execute(
@@ -764,9 +887,15 @@ def init_db():
             );
             CREATE TABLE IF NOT EXISTS saved_workflows (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 name TEXT NOT NULL,
                 steps_json TEXT NOT NULL,
                 settings_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS user_uploads (
+                user_id INTEGER NOT NULL,
+                filename TEXT NOT NULL UNIQUE,
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS exports (
@@ -925,6 +1054,37 @@ def init_db():
                 status TEXT NOT NULL DEFAULT 'invited',
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS qwen_layered_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
+                name TEXT NOT NULL DEFAULT 'Untitled Session',
+                source_filename TEXT,
+                canvas_width INTEGER NOT NULL DEFAULT 1024,
+                canvas_height INTEGER NOT NULL DEFAULT 1024,
+                thumbnail_filename TEXT,
+                last_composed_filename TEXT,
+                document_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS qwen_layer_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                layer_local_id INTEGER NOT NULL,
+                version INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                edit_type TEXT NOT NULL DEFAULT 'decompose',
+                prompt TEXT,
+                parent_filename TEXT,
+                cost_usd REAL,
+                credits INTEGER,
+                duration_ms INTEGER,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_qwen_versions_session_layer ON qwen_layer_versions (session_id, layer_local_id, version);
+            CREATE INDEX IF NOT EXISTS idx_qwen_sessions_project_updated ON qwen_layered_sessions (project_id, updated_at);
             CREATE INDEX IF NOT EXISTS idx_exports_user_project ON exports (user_id, project_id);
             CREATE INDEX IF NOT EXISTS idx_exports_created ON exports (created_at);
             CREATE INDEX IF NOT EXISTS idx_replicate_logs_project ON replicate_logs (project_id, created_at);
@@ -949,6 +1109,69 @@ def init_db():
         ensure_column("background_jobs", "progress_pct", "INTEGER NOT NULL DEFAULT 0")
         ensure_column("background_jobs", "stage", "TEXT NOT NULL DEFAULT ''")
         ensure_column("pattern_variations", "export_filename", "TEXT")
+        ensure_column("saved_workflows", "user_id", "INTEGER REFERENCES users(id)")
+        ensure_column("replicate_logs", "session_id", "INTEGER")
+        ensure_column("replicate_logs", "output_bytes", "INTEGER")
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_uploads (
+                user_id INTEGER NOT NULL,
+                filename TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS qwen_layered_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
+                name TEXT NOT NULL DEFAULT 'Untitled Session',
+                source_filename TEXT,
+                canvas_width INTEGER NOT NULL DEFAULT 1024,
+                canvas_height INTEGER NOT NULL DEFAULT 1024,
+                thumbnail_filename TEXT,
+                last_composed_filename TEXT,
+                document_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS qwen_layer_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                layer_local_id INTEGER NOT NULL,
+                version INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                edit_type TEXT NOT NULL DEFAULT 'decompose',
+                prompt TEXT,
+                parent_filename TEXT,
+                cost_usd REAL,
+                credits INTEGER,
+                duration_ms INTEGER,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
+        _sqlite_hot_path_indexes = [
+            "CREATE INDEX IF NOT EXISTS idx_background_jobs_user_status ON background_jobs (user_id, status)",
+            "CREATE INDEX IF NOT EXISTS idx_credit_tx_user_created ON credit_transactions (user_id, created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_payments_user_status ON payments (user_id, status)",
+            "CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_saved_workflows_user ON saved_workflows (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_qwen_versions_session_layer ON qwen_layer_versions (session_id, layer_local_id, version)",
+            "CREATE INDEX IF NOT EXISTS idx_qwen_sessions_project_updated ON qwen_layered_sessions (project_id, updated_at)",
+        ]
+        for stmt in _sqlite_hot_path_indexes:
+            conn.execute(stmt)
 
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL")
         conn.commit()

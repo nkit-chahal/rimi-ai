@@ -1,1 +1,2 @@
 web: gunicorn -c gunicorn_config.py server:app
+worker: rq worker --url ${REDIS_URL:-redis://localhost:6379/0} rimi-ai

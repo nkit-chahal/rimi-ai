@@ -4,44 +4,54 @@ services:
     ports:
       - "3001:3001"
     environment:
-      FLASK_ENV: development
-      JWT_SECRET: local-dev-jwt-secret
-      DATABASE_URL: postgresql://rimi:rimi@postgres:5432/rimi
+      FLASK_ENV: production
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET for production}
+      DATABASE_URL: postgresql://rimi:${POSTGRES_PASSWORD:-rimi}@postgres:5432/rimi
       REDIS_URL: redis://redis:6379/0
       RATELIMIT_STORAGE_URI: redis://redis:6379/1
-      CORS_ORIGINS: http://localhost:5173
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      PORT: 3001
     volumes:
       - ./backend/uploads:/app/backend/uploads
       - ./backend/results:/app/backend/results
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+    restart: unless-stopped
 
   worker:
     build: .
     command: rq worker --url redis://redis:6379/0 rimi-ai
+    working_dir: /app/backend
     environment:
+      FLASK_ENV: production
       REDIS_URL: redis://redis:6379/0
       PYTHONPATH: /app/backend
+      DATABASE_URL: postgresql://rimi:${POSTGRES_PASSWORD:-rimi}@postgres:5432/rimi
     depends_on:
       - redis
       - backend
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: rimi
-      POSTGRES_PASSWORD: rimi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rimi}
       POSTGRES_DB: rimi
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    restart: unless-stopped
 
 volumes:
   pgdata:

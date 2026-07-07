@@ -10,14 +10,15 @@ from flask import Blueprint, jsonify, request, g
 from middleware import login_required, project_access_from_payload
 
 from auth import (
-    check_credits,
     credit_error_payload,
     credit_requirement,
     get_updated_credits,
     log_export,
     log_replicate_call,
-    record_activity,
+    refund_credits,
+    reserve_credits_or_error,
 )
+from security_utils import safe_fetch_url, media_access_token
 from config import RESULTS_DIR, UPLOAD_DIR
 
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'public')
@@ -48,10 +49,9 @@ def _resolve_image_path(filename='', image_url=''):
         ext = '.png' if '.png' in image_url.lower() else '.jpg'
         filename = f"tmp_rmbg_{uuid.uuid4().hex[:8]}{ext}"
         filepath = os.path.join(UPLOAD_DIR, filename)
-        resp = http_requests.get(image_url, timeout=30)
-        resp.raise_for_status()
+        content = safe_fetch_url(image_url, timeout=30)
         with open(filepath, 'wb') as handle:
-            handle.write(resp.content)
+            handle.write(content)
         return filename, filepath
 
     raise ValueError('Provide either filename or imageUrl')
@@ -76,9 +76,9 @@ def remove_background():
     user_id = g.current_user['id']
 
     required_credits = credit_requirement('removeBg', 2)
-    ok, remaining, limit, used = check_credits(user_id, required_credits)
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
     if not ok:
-        return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
+        return jsonify(err), 403
 
     try:
         source_name, filepath = _resolve_image_path(filename, image_url)
@@ -112,7 +112,6 @@ def remove_background():
                 handle.write(resp.content)
 
         storage.sync_to_s3(result_path)
-        record_activity(project_id, 'generation', 1, credits_used, user_id=user_id)
         log_export(
             project_id=project_id,
             filename=result_name,
@@ -127,9 +126,11 @@ def remove_background():
         return jsonify({
             'success': True,
             'resultUrl': f'/results/{result_name}',
+            'fileAccessToken': media_access_token(result_name, user_id),
             **updated_credits,
         })
     except Exception as exc:
+        refund_credits(user_id, project_id, required_credits, note='Remove background failed')
         print(f"  [RemoveBG] Error: {exc}")
         import traceback
         traceback.print_exc()

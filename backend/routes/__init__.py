@@ -24,11 +24,13 @@ def register_all_blueprints(app):
     from routes.remove_bg import bp as remove_bg_bp
     from routes.jobs import bp as jobs_bp
     from routes.product import bp as product_bp
+    from routes.qwen_sessions import bp as qwen_sessions_bp
 
     for blueprint in [
         studio_bp, upload_bp, color_bp, generation_bp, seamless_bp,
         repeat_bp, vectorize_bp, layers_bp, mockups_bp, colorways_bp,
         exports_bp, pipeline_bp, projects_bp, admin_bp, billing_bp,
         google_auth_bp, credits_bp, remove_bg_bp, jobs_bp, product_bp,
+        qwen_sessions_bp,
     ]:
         app.register_blueprint(blueprint)

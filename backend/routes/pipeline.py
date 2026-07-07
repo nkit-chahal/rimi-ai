@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from db import db, rows_to_dicts
 from auth import log_export
-from middleware import login_required, project_access_from_payload, assert_project_access
+from middleware import login_required, project_access_from_payload, current_user_id, assert_project_access
 
 bp = Blueprint('pipeline', __name__)
 
@@ -186,11 +186,12 @@ def list_pipeline_runs():
 def save_workflow():
     """Save a workflow configuration."""
     data = request.get_json()
+    user_id = current_user_id()
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn = db()
     cur = conn.execute(
-        "INSERT INTO saved_workflows (name, steps_json, settings_json, created_at) VALUES (?, ?, ?, ?)",
-        (data.get('name', 'My Workflow'), json.dumps(data.get('steps', [])),
+        "INSERT INTO saved_workflows (user_id, name, steps_json, settings_json, created_at) VALUES (?, ?, ?, ?, ?)",
+        (user_id, data.get('name', 'My Workflow'), json.dumps(data.get('steps', [])),
          json.dumps(data.get('settings', {})), now)
     )
     wf_id = cur.lastrowid
@@ -202,9 +203,13 @@ def save_workflow():
 @bp.route('/api/workflows')
 @login_required
 def list_workflows():
-    """List all saved workflows."""
+    """List saved workflows for the current user."""
+    user_id = current_user_id()
     conn = db()
-    rows = conn.execute("SELECT * FROM saved_workflows ORDER BY created_at DESC").fetchall()
+    rows = conn.execute(
+        "SELECT * FROM saved_workflows WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,),
+    ).fetchall()
     conn.close()
     workflows = []
     for r in rows_to_dicts(rows):
@@ -221,9 +226,15 @@ def list_workflows():
 @bp.route('/api/workflows/<int:wf_id>', methods=['DELETE'])
 @login_required
 def delete_workflow(wf_id):
-    """Delete a saved workflow."""
+    """Delete a saved workflow owned by the current user."""
+    user_id = current_user_id()
     conn = db()
-    conn.execute("DELETE FROM saved_workflows WHERE id = ?", (wf_id,))
+    cur = conn.execute(
+        "DELETE FROM saved_workflows WHERE id = ? AND user_id = ?",
+        (wf_id, user_id),
+    )
     conn.commit()
     conn.close()
+    if cur.rowcount == 0:
+        return jsonify({'success': False, 'error': 'Workflow not found'}), 404
     return jsonify({'success': True})

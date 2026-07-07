@@ -1,0 +1,753 @@
+/* ===== EXPORTS PAGE ===== */
+.st-exports-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: #f8fafc;
+}
+.st-exports-select-all {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text2);
+}
+.st-exports-select-all input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.st-exports-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-lux);
+}
+.st-exports-delete-btn:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #f87171;
+  transform: translateY(-1px);
+}
+.st-exports-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.st-var-item.selected {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  background: #f5f3ff;
+}
+.st-export-check {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 5;
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  background: rgba(255,255,255,0.9);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d1d5db;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+.st-export-check:hover {
+  border-color: var(--primary);
+  background: #fff;
+  transform: scale(1.05);
+}
+.st-export-check input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  pointer-events: none;
+}
+.st-var-item.selected .st-export-check {
+  background: var(--gradient-primary);
+  border-color: transparent;
+}
+.st-var-item.selected .st-export-check input[type="checkbox"] {
+  accent-color: #fff;
+}
+.st-export-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(8px);
+  padding: 0.5rem;
+  z-index: 6;
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-top: 1px solid rgba(0,0,0,0.04);
+  gap: 0.5rem;
+}
+.st-var-item:hover .st-export-actions {
+  opacity: 1;
+}
+.st-export-actions .st-dl-btn {
+  position: static;
+  flex: 1;
+  text-align: center;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.6rem;
+}
+.st-export-trash {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255,255,255,0.9);
+  color: #dc2626;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.02);
+}
+.st-export-trash:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #b91c1c;
+  transform: scale(1.05);
+}
+.st-export-trash:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.st-exports-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.st-exports-filter {
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text2);
+  background: #fff;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+.st-exports-filter:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.08);
+}
+.st-export-meta {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  z-index: 4;
+}
+.st-export-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+.st-export-badge.image {
+  background: rgba(20,184,166,0.12);
+  color: #0d9488;
+}
+.st-export-badge.vector {
+  background: rgba(139,92,246,0.12);
+  color: #7c3aed;
+}
+.st-export-size {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+
+/* ===== PREMIUM EXPORTS PAGE OVERRIDES & LAYOUT ===== */
+.st-export-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: transparent;
+  width: 100%;
+}
+
+.st-export-log-card {
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 2px solid rgba(139, 92, 246, 0.1);
+}
+
+.st-export-log-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 36px rgba(139, 92, 246, 0.08), 0 0 0 1px rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.25);
+  background: #ffffff;
+}
+
+.st-export-log-card.selected {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+  background: rgba(139, 92, 246, 0.02);
+  box-shadow: 0 12px 32px rgba(139, 92, 246, 0.1);
+}
+
+.st-export-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1.25rem;
+  background: rgba(15, 23, 42, 0.02);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.05);
+}
+
+.st-export-log-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.st-export-log-id {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text2);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-export-timestamp {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.st-export-log-body {
+  display: grid;
+  grid-template-columns: 220px 1fr 220px;
+  gap: 1.5rem;
+  padding: 1.25rem;
+  align-items: center;
+}
+
+.st-export-log-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: center;
+  position: relative;
+}
+
+.st-export-log-panel.left {
+  align-items: flex-start;
+}
+
+.st-export-log-panel.right {
+  align-items: flex-end;
+}
+
+.st-export-log-panel.center {
+  align-items: center;
+  padding: 0 1rem;
+}
+
+.st-panel-tag {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.st-panel-image-container {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f1f5f9;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.st-export-log-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.st-export-log-card:hover .st-export-log-image {
+  transform: scale(1.04);
+}
+
+.st-export-log-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.st-export-placeholder-svg {
+  width: 28px;
+  height: 28px;
+  opacity: 0.5;
+}
+
+.st-panel-connection-line-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.25) 50%, rgba(139, 92, 246, 0.1) 100%);
+  z-index: 1;
+}
+
+.st-panel-connection-content {
+  z-index: 2;
+  width: 100%;
+}
+
+/* Custom Workflow Stepper */
+.st-export-stepper {
+  background: #ffffff;
+  border: 1px solid rgba(139, 92, 246, 0.12);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.03);
+  text-align: center;
+}
+
+.st-stepper-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+.st-stepper-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.st-stepper-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  position: relative;
+}
+
+.st-node-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid rgba(139, 92, 246, 0.18);
+  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.05);
+  transition: all 0.2s;
+}
+
+.st-stepper-node:hover .st-node-icon {
+  background: var(--gradient-primary);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--gradient-glow);
+}
+
+.st-node-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--text2);
+  white-space: nowrap;
+}
+
+.st-stepper-connector {
+  width: 24px;
+  height: 2px;
+  background: rgba(139, 92, 246, 0.2);
+  margin-bottom: 12px;
+}
+
+/* Single Tool Style */
+.st-export-single-tool {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  text-align: center;
+}
+
+.st-tool-params {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.st-tool-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.st-tool-badge-pill.repeat {
+  background: rgba(244, 63, 94, 0.08);
+  color: #f43f5e;
+  border: 1px solid rgba(244, 63, 94, 0.15);
+}
+
+.st-tool-badge-pill.vectorize {
+  background: rgba(139, 92, 246, 0.08);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+.st-tool-badge-pill.upscale {
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.st-tool-badge-pill.seamless {
+  background: rgba(14, 165, 233, 0.08);
+  color: #0ea5e9;
+  border: 1px solid rgba(14, 165, 233, 0.15);
+}
+
+.st-tool-badge-pill.mappings {
+  background: rgba(245, 158, 11, 0.08);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.st-tool-badge-pill.generic {
+  background: rgba(100, 116, 139, 0.08);
+  color: #64748b;
+  border: 1px solid rgba(100, 116, 139, 0.15);
+}
+
+.st-params-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.st-params-list {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.st-param-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: #f1f5f9;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+}
+
+/* Hover final output elements */
+.st-export-image-hover {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 3;
+}
+
+.st-panel-image-container:hover .st-export-image-hover {
+  opacity: 1;
+}
+
+.st-export-hover-btn.dl {
+  background: var(--gradient-primary);
+  color: #fff;
+  padding: 0.55rem 1.15rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.st-export-hover-btn.dl:hover {
+  background: var(--gradient-hover);
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.5);
+}
+
+.st-export-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.st-export-meta-row .st-export-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.st-export-meta-row .st-export-badge.png {
+  background: rgba(20, 184, 166, 0.08);
+  color: #0d9488;
+  border: 1px solid rgba(20, 184, 166, 0.15);
+}
+
+.st-export-meta-row .st-export-badge.svg {
+  background: rgba(139, 92, 246, 0.08);
+  color: #7c3aed;
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+.st-export-meta-row .st-export-badge.tiff {
+  background: rgba(236, 72, 153, 0.08);
+  color: #db2777;
+  border: 1px solid rgba(236, 72, 153, 0.15);
+}
+
+.st-export-meta-row .st-export-size {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text2);
+  background: rgba(15, 23, 42, 0.05);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+}
+
+.st-export-trash-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+
+.st-export-trash-btn:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* Glassmorphic Pagination controls */
+.st-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1.5rem 0;
+  width: 100%;
+}
+
+.st-pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.95rem;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.02);
+}
+
+.st-pagination-btn:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(139, 92, 246, 0.06);
+}
+
+.st-pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.st-pagination-numbers {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.st-pagination-number {
+  min-width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text2);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.st-pagination-number:hover {
+  background: #ffffff;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.st-pagination-number.active {
+  background: var(--gradient-primary);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25);
+}
+
+/* Custom Checkbox integration */
+.st-export-log-card .st-export-check {
+  position: static;
+  z-index: 5;
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  transition: all 0.2s;
+  box-shadow: none;
+}
+
+.st-export-log-card .st-export-check input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+}
+
+.st-export-log-card.selected .st-export-check {
+  background: var(--gradient-primary);
+  border-color: transparent;
+}
+
+.st-export-log-card.selected .st-export-check input[type="checkbox"] {
+  accent-color: #fff;
+}
+
+/* Responsive adjustment for split view */
+@media (max-width: 900px) {
+  .st-export-log-body {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .st-export-log-panel.left, 
+  .st-export-log-panel.right {
+    align-items: center;
+    max-width: 260px;
+    margin: 0 auto;
+  }
+  
+  .st-export-log-panel.center {
+    padding: 0.5rem 0;
+  }
+}
+

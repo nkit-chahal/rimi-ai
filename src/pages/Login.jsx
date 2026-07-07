@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { API, normalizeToken, prefetchStudioState } from '../components/studio/shared/helpers';
+import { t } from '../i18n/en-IN';
+import '../styles/landing.css';
 
 function readGooglePhaseFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -423,7 +425,9 @@ export default function Login({ onLogin }) {
         </div>
       )}
       {notice && <div className="login-notice-badge">{notice}</div>}
-      {devOtp && <div className="login-dev-otp">Development OTP: <strong>{devOtp}</strong></div>}
+      {import.meta.env.DEV && devOtp && (
+        <div className="login-dev-otp">{t('login.devOtp')}: <strong>{devOtp}</strong></div>
+      )}
     </>
   );
 
@@ -438,20 +442,20 @@ export default function Login({ onLogin }) {
       <div className="login-container">
         <div className="login-brand">
           <span className="ln-logo-badge">RI</span>
-          <span className="login-logo-text">RIMI AI</span>
+          <span className="login-logo-text">{t('appName')}</span>
         </div>
 
         <div className={`login-card ${googlePhase ? 'is-oauth-busy' : ''}`}>
           {renderGoogleOverlay()}
           <div className="login-header">
-            <h2>{mode === 'signin' ? 'Welcome Back' : mode === 'googleSetup' ? 'Finish Google Signup' : 'Verify Email'}</h2>
-            <p>{mode === 'verify' ? `Enter the code sent to ${pendingEmail}.` : mode === 'googleSetup' ? `Verified Google email: ${googleSignupEmail}` : 'Access the generative pattern intelligence studio.'}</p>
+            <h2>{mode === 'signin' ? t('login.welcomeBack') : mode === 'googleSetup' ? t('login.finishGoogleSignup') : t('login.verifyEmail')}</h2>
+            <p>{mode === 'verify' ? `Enter the code sent to ${pendingEmail}.` : mode === 'googleSetup' ? `Verified Google email: ${googleSignupEmail}` : t('login.subtitle')}</p>
           </div>
 
-          {false && mode !== 'verify' && mode !== 'googleSetup' && (
+          {mode !== 'verify' && mode !== 'googleSetup' && (
             <div className="login-mode-tabs">
-              <button type="button" className={mode === 'signin' ? 'active' : ''} onClick={() => switchMode('signin')}>Sign in</button>
-              <button type="button" className={mode === 'signup' ? 'active' : ''} onClick={() => switchMode('signup')}>Sign up</button>
+              <button type="button" className={mode === 'signin' ? 'active' : ''} onClick={() => switchMode('signin')}>{t('login.signIn')}</button>
+              <button type="button" className={mode === 'signup' ? 'active' : ''} onClick={() => switchMode('signup')}>{t('login.signUp')}</button>
             </div>
           )}
 
@@ -478,7 +482,7 @@ export default function Login({ onLogin }) {
             </form>
           )}
 
-          {false && mode === 'signup' && (
+          {mode === 'signup' && (
             <form onSubmit={handleSignup} className="login-form">
               {renderStatus()}
               <div className="login-field">
