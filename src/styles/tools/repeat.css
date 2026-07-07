@@ -118,6 +118,50 @@
 .st-repeat-canvas-container:active {
   cursor: grabbing;
 }
+.st-repeat-upload-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(248, 250, 252, 0.92);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  border: 2px dashed rgba(99, 102, 241, 0.18);
+}
+.st-repeat-upload-overlay:hover,
+.st-repeat-upload-overlay.dragging {
+  background: rgba(238, 242, 255, 0.96);
+  border-color: rgba(99, 102, 241, 0.45);
+}
+.st-repeat-upload-overlay.is-uploading {
+  pointer-events: none;
+  opacity: 0.85;
+}
+.st-repeat-upload-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 2rem 2.5rem;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  box-shadow: 0 12px 32px rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+  text-align: center;
+  max-width: 320px;
+}
+.st-repeat-upload-card strong {
+  font-size: 1.05rem;
+  color: #1e293b;
+}
+.st-repeat-upload-card span {
+  font-size: 0.85rem;
+  color: #64748b;
+  line-height: 1.5;
+}
 .st-repeat-canvas-wrapper {
   position: absolute;
   top: 50%;

@@ -916,6 +916,41 @@ input[type=range]::-moz-range-track {
   border-radius: 10px;
   box-shadow: 0 6px 20px rgba(0,0,0,0.05);
 }
+.st-tool-upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 280px;
+  padding: 2rem;
+  border-radius: 14px;
+  border: 2px dashed rgba(99, 102, 241, 0.2);
+  background: rgba(248, 250, 252, 0.8);
+  color: #6366f1;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.st-tool-upload-zone:hover,
+.st-tool-upload-zone.dragging {
+  background: rgba(238, 242, 255, 0.95);
+  border-color: rgba(99, 102, 241, 0.45);
+}
+.st-tool-upload-zone.is-uploading {
+  pointer-events: none;
+  opacity: 0.85;
+}
+.st-tool-upload-zone strong {
+  font-size: 1rem;
+  color: #1e293b;
+}
+.st-tool-upload-zone span {
+  font-size: 0.85rem;
+  color: #64748b;
+  line-height: 1.5;
+}
 .st-comparison-action-bridge {
   display: flex;
   flex-direction: column;

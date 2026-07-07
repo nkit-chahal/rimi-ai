@@ -1,11 +1,24 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders, mediaUrl } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
-import { createPortal } from 'react-dom';
+import UploadStatusBadge from '../shared/UploadStatusBadge';
+import UploadImageFrame from '../shared/UploadImageFrame';
+import { useImageDropzone } from '../shared/useImageDropzone';
 
 export default function VectorProTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, brandPalettes, currentToken } = props;
+    const {
+        uploaded, preview, activeProject, user, setError, updateCreditsFromResponse, creditPricing, brandPalettes, currentToken,
+        handlePreUpload, onUploadInvalid, onUploadPaste, uploadStatus,
+    } = props;
+
+    const uploadReady = Boolean(uploaded?.filename) && uploadStatus === 'ready';
+
+    const { pasteProps, inputProps, openFilePicker, rootProps, isDrag } = useImageDropzone({
+        onFile: handlePreUpload,
+        onInvalidFile: onUploadInvalid,
+        onPasteSuccess: onUploadPaste,
+    });
 
     const [layerExportLoading, setLayerExportLoading] = useState(null);
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
@@ -13,8 +26,6 @@ export default function VectorProTool(props) {
     const hasEnoughColorReductionCredits = userRemainingCredits >= colorReductionCreditCost;
     const layerExportCreditCost = creditPricing.layerExport || 2;
     const hasEnoughLayerExportCredits = userRemainingCredits >= layerExportCreditCost;
-    const [isDrag, setIsDrag] = useState(false);
-    const fileRef = useRef(null);
 
     const [vpTab, setVpTab] = useState('reduce');
     const [vpNumColors, setVpNumColors] = useState(6);
@@ -27,7 +38,7 @@ export default function VectorProTool(props) {
     const [vpBrandPaletteId, setVpBrandPaletteId] = useState('');
 
     const reduceColors = async () => {
-        if (!uploaded) return;
+        if (!uploadReady) return;
         if (!hasEnoughColorReductionCredits) {
             setError(`Insufficient credits. Color reduction needs ${colorReductionCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
             return;
@@ -81,7 +92,7 @@ export default function VectorProTool(props) {
     };
 
     const exportLayers = async (format) => {
-        if (!uploaded) return;
+        if (!uploadReady) return;
         if (!hasEnoughLayerExportCredits) {
             setError(`Insufficient credits. Layer export needs ${layerExportCreditCost} credits, but you have ${userRemainingCredits} remaining.`);
             return;
@@ -121,7 +132,7 @@ export default function VectorProTool(props) {
 
 
     return (
-        <div className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
+        <div {...pasteProps} className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
             {/* Premium Tab Bar */}
             <div className="st-comparison-card" style={{ marginBottom: '1.5rem', overflow: 'visible' }}>
                 <div className="st-comparison-card-head" style={{ padding: 0, border: 'none' }}>
@@ -201,7 +212,7 @@ export default function VectorProTool(props) {
                             <button
                                 className={`st-extract-btn-creative ${!hasEnoughColorReductionCredits ? 'insufficient-credits' : ''}`}
                                 onClick={reduceColors}
-                                disabled={!uploaded || isVpReducing || !hasEnoughColorReductionCredits}
+                                disabled={!uploadReady || isVpReducing || !hasEnoughColorReductionCredits}
                                 title={!hasEnoughColorReductionCredits ? `Need ${colorReductionCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Reduce and match colors'}
                                 style={{ width: '100%' }}
                             >
@@ -293,6 +304,11 @@ export default function VectorProTool(props) {
                                     <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
                                 </button>
                             )}
+                            {uploadReady && !vpReducedUrl && (
+                                <button type="button" onClick={openFilePicker} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '700', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={14} /> Replace
+                                </button>
+                            )}
                         </div>
                         <div className="st-comparison-card-body" style={{ position: 'relative' }}>
                             {vpReducedUrl ? (
@@ -311,13 +327,20 @@ export default function VectorProTool(props) {
                                     </div>
                                     <span className="st-ai-phase-text">AI is reducing colors...</span>
                                 </div>
-                            ) : uploaded ? (
-                                <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                            ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', color: 'var(--text-muted)', gap: '1rem' }}>
-                                    <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />
-                                    <p style={{ fontWeight: 600, fontSize: '0.9rem', margin: 0 }}>Upload an image to start reducing colors</p>
+                            ) : !uploadReady ? (
+                                <div
+                                    className={`st-tool-upload-zone ${isDrag ? 'dragging' : ''} ${uploadStatus === 'uploading' ? 'is-uploading' : ''}`}
+                                    {...rootProps}
+                                >
+                                    <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={34} />
+                                    <strong>{uploadStatus === 'uploading' ? 'Uploading…' : 'Upload artwork'}</strong>
+                                    <span>Drag, paste, or click — PNG, JPG, WEBP</span>
+                                    <UploadStatusBadge status={uploadStatus} />
                                 </div>
+                            ) : (
+                                <UploadImageFrame status={uploadStatus}>
+                                    <img src={preview} alt="Original" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                </UploadImageFrame>
                             )}
                         </div>
                     </div>
@@ -433,6 +456,7 @@ export default function VectorProTool(props) {
                     </div>
                 </div>
             )}
+            <input {...inputProps} />
         </div>
     );
 

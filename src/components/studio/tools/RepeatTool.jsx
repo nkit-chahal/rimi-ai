@@ -9,9 +9,9 @@ import '../../../styles/tools/repeat.css';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
 
 export default function RepeatTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, controls, updateControls, repeatUrl, setRepeatUrl, isRepeat, setIsRepeat, rightPanelEl, handlePreUpload, onUploadInvalid, onUploadPaste, tool, state, setState, setUploads, currentToken, setTool, setQwenLaunch } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, controls, updateControls, repeatUrl, setRepeatUrl, isRepeat, setIsRepeat, rightPanelEl, handlePreUpload, onUploadInvalid, onUploadPaste, uploadStatus, tool, state, setState, setUploads, currentToken, setTool, setQwenLaunch } = props;
 
-    const { pasteProps, inputProps } = useImageDropzone({
+    const { pasteProps, inputProps, openFilePicker, rootProps, isDrag } = useImageDropzone({
         onFile: handlePreUpload,
         onInvalidFile: onUploadInvalid,
         onPasteSuccess: onUploadPaste,
@@ -452,6 +452,11 @@ export default function RepeatTool(props) {
                         <button className={`st-tb-btn-text ${showTileBoundary ? 'active' : ''}`} onClick={() => setShowTileBoundary(!showTileBoundary)}>
                             <I d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" s={16} /> Show Tile Boundary
                         </button>
+                        {preview && (
+                            <button type="button" className="st-tb-btn-text" onClick={openFilePicker}>
+                                <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={16} /> Replace
+                            </button>
+                        )}
                     </div>
                     <div
                         className="st-repeat-canvas-container"
@@ -461,6 +466,18 @@ export default function RepeatTool(props) {
                         onMouseUp={handleMouseUp}
                         onMouseLeave={handleMouseUp}
                     >
+                        {!preview && (
+                            <div
+                                className={`st-repeat-upload-overlay ${isDrag ? 'dragging' : ''} ${uploadStatus === 'uploading' ? 'is-uploading' : ''}`}
+                                {...rootProps}
+                            >
+                                <div className="st-repeat-upload-card">
+                                    <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={34} />
+                                    <strong>{uploadStatus === 'uploading' ? 'Uploading…' : 'Upload artwork'}</strong>
+                                    <span>Drag, paste, or click — PNG, JPG, WEBP</span>
+                                </div>
+                            </div>
+                        )}
                         <div
                             className="st-repeat-canvas-wrapper"
                             style={{ transform: `translate(-50%, -50%) translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${canvasZoom})` }}

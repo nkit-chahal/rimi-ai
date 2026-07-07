@@ -87,24 +87,28 @@ def validate_image_bytes(data):
         img.verify()
         img = Image.open(io.BytesIO(data))
         fmt = (img.format or "").upper()
-        if fmt not in {"JPEG", "PNG", "WEBP", "GIF", "TIFF", "BMP"}:
+        if fmt not in {"JPEG", "PNG", "WEBP"}:
             raise ValueError(f"Unsupported image format: {fmt}")
         return True
+    except ValueError:
+        raise
     except Exception as exc:
         raise ValueError('File is not a valid JPG, PNG, or WEBP image') from exc
 
 
 def validate_upload_file(file_storage):
     """Validate an uploaded file's extension and magic bytes."""
-    from config import allowed_file
+    from config import allowed_file, MAX_FILE_SIZE
 
     if not file_storage or not file_storage.filename:
         raise ValueError("No file selected")
     if not allowed_file(file_storage.filename):
         raise ValueError("Invalid file type. Supported: JPG, PNG, WEBP")
-    head = file_storage.stream.read(8192)
+    data = file_storage.stream.read(MAX_FILE_SIZE + 1)
     file_storage.stream.seek(0)
-    validate_image_bytes(head)
+    if len(data) > MAX_FILE_SIZE:
+        raise ValueError(f"File too large. Maximum size is {MAX_FILE_SIZE // (1024 * 1024)}MB")
+    validate_image_bytes(data)
     return True
 
 
