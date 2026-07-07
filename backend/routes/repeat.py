@@ -9,7 +9,7 @@ from PIL import Image, ImageOps
 
 from config import UPLOAD_DIR, RESULTS_DIR
 from auth import credit_requirement, get_updated_credits, log_export, refund_credits, reserve_credits_or_error
-from security_utils import safe_fetch_url
+from security_utils import safe_fetch_url, media_access_token
 import storage
 
 bp = Blueprint('repeat', __name__)
@@ -155,6 +155,7 @@ def create_repeat_set():
         return jsonify({
             'success': True,
             'resultUrl': f'/results/{result_name}',
+            'fileAccessToken': media_access_token(result_name, user_id),
             'gridSize': grid_size,
             'dimensions': f'{tiled.size[0]}x{tiled.size[1]}',
             'tileDimensions': f'{tile_px_w}x{tile_px_h}',

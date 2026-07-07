@@ -12,7 +12,7 @@ from auth import (
     get_credit_price, get_updated_credits,
     credit_requirement, refund_credits, reserve_credits_or_error,
 )
-from security_utils import safe_fetch_url
+from security_utils import safe_fetch_url, media_access_token
 import storage
 
 bp = Blueprint('vectorize', __name__)
@@ -175,6 +175,7 @@ def vectorize_image():
         return jsonify({
             'success': True,
             'resultUrl': f'/results/{result_name}',
+            'fileAccessToken': media_access_token(result_name, user_id),
             **updated_credits
         })
 
@@ -268,6 +269,7 @@ def upscale():
         return jsonify({
             'success': True,
             'resultUrl': f'/results/{result_name}',
+            'fileAccessToken': media_access_token(result_name, user_id),
             **updated_credits
         })
 

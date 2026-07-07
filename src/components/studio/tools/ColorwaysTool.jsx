@@ -71,10 +71,15 @@ export default function ColorwaysTool(props) {
                 }),
             }, currentToken);
             if (d.success) {
+                cacheMediaFromResponse(d);
                 setCwUrl(d.resultUrl);
                 updateCreditsFromResponse(d);
-                setCwVariations(prev => [{ url: d.resultUrl, targetPalette: [...cwTargetPalette] }, ...prev]);
-                return { url: d.resultUrl };
+                setCwVariations(prev => [{
+                    url: d.resultUrl,
+                    fileAccessToken: d.fileAccessToken,
+                    targetPalette: [...cwTargetPalette],
+                }, ...prev]);
+                return { url: d.resultUrl, fileAccessToken: d.fileAccessToken };
             } else {
                 throw new Error(d.error || 'Recolor failed');
             }
@@ -154,7 +159,7 @@ export default function ColorwaysTool(props) {
                     <div className="st-comparison-card-body">
                         {cwUrl ? (
                             <div className="st-result-reveal">
-                                <MediaImg src={cwUrl} alt="Result" token={currentToken} />
+                                <MediaImg src={cwUrl} alt="Result" token={currentToken} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                             </div>
                         ) : isCwRecoloring ? (
                             <div className="st-ai-processing">
@@ -237,7 +242,7 @@ export default function ColorwaysTool(props) {
                     <div className="st-variations-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem' }}>
                         {cwVariations.map((v, i) => (
                             <div key={i} style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer', transition: 'transform 0.2s' }} onClick={() => { setCwUrl(v.url); setCwTargetPalette([...v.targetPalette]); }}>
-                                <MediaImg src={v.url} alt={`Variation ${i}`} token={currentToken} style={{ width: '100%', display: 'block', aspectRatio: '1/1', objectFit: 'cover' }} />
+                                <MediaImg src={v.url} alt={`Variation ${i}`} token={currentToken} accessToken={v.fileAccessToken} style={{ width: '100%', display: 'block', aspectRatio: '1/1', objectFit: 'cover' }} />
                                 <div style={{ position: 'absolute', top: 6, right: 6 }} onClick={(e) => e.stopPropagation()}>
                                     <OpenInQwenButton sourceUrl={v.url} projectId={activeProject?.id} userId={user?.id} currentToken={currentToken} setTool={setTool} setQwenLaunch={setQwenLaunch} className="st-quick-action-btn" label="Qwen" />
                                 </div>

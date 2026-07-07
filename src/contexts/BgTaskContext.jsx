@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { trackEvent } from '../../observability';
+import { cacheMediaFromResponse } from '../components/studio/shared/helpers';
 
 const BgTaskContext = createContext(null);
 
@@ -23,6 +24,7 @@ export function BgTaskProvider({ children }) {
             filename: filename || 'design_input.png',
             resultUrl: null,
             resultUrls: null,
+            fileAccessToken: null,
             error: null,
             createdAt: new Date().toLocaleTimeString(),
             _ts: Date.now(),
@@ -41,12 +43,16 @@ export function BgTaskProvider({ children }) {
         triggerFn(reportProgress)
             .then((result) => {
                 trackEvent('generation_complete', { tool: type, label, filename });
+                if (result?.fileAccessToken && result?.url) {
+                    cacheMediaFromResponse({ resultUrl: result.url, fileAccessToken: result.fileAccessToken });
+                }
                 setBgTasks(prev => prev.map(t => t.id === taskId ? {
                     ...t,
                     status: 'completed',
                     progress: 100,
                     resultUrl: result.url,
                     resultUrls: result.urls || null,
+                    fileAccessToken: result.fileAccessToken || null,
                     _ts: Date.now(),
                 } : t).slice(0, MAX_TASKS));
             })

@@ -95,7 +95,7 @@ export default function BgTaskManager({ bgTasks, show, onToggle, setTool, setRes
                                     {t.status === 'completed' && t.resultUrl && (
                                         <div style={{ display: 'flex', gap: '8px', marginTop: '4px', alignItems: 'center' }}>
                                             <div style={{ width: '32px', height: '32px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <MediaImg src={t.resultUrl} alt="Result" token={currentToken} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                <MediaImg src={t.resultUrl} alt="Result" token={currentToken} accessToken={t.fileAccessToken} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                             </div>
                                             <div style={{ display: 'flex', gap: '6px', flex: 1, justifyContent: 'flex-end' }}>
                                                 <button onClick={() => {
