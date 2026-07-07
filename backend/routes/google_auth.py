@@ -200,27 +200,30 @@ def google_callback():
                     (user_id,),
                 )
         else:
-            signup_token = secrets.token_urlsafe(32)
-            conn.execute(
+            reset_at = (now + timedelta(days=30)).isoformat()
+            password_hash = bcrypt.hashpw(
+                secrets.token_urlsafe(32).encode("utf-8"),
+                bcrypt.gensalt(),
+            ).decode("utf-8")
+            cur = conn.execute(
                 """
-                INSERT INTO google_signup_tokens
-                (token, email, google_sub, name, avatar_url, expires_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO users
+                (email, password, name, initials, role, plan, credits_used, credits_limit,
+                 reset_at, login_provider, google_sub, avatar_url, email_verified, created_at, status)
+                VALUES (?, ?, ?, ?, 'user', 'Free Trial', 0, 200, ?, 'google', ?, ?, 1, ?, 'active')
                 """,
                 (
-                    signup_token,
                     email,
-                    google_sub,
+                    password_hash,
                     name,
+                    initials_from_name(name, email),
+                    reset_at,
+                    google_sub,
                     avatar_url,
-                    (now + timedelta(minutes=15)).isoformat(),
                     now.isoformat(),
                 ),
             )
-            conn.commit()
-            response = make_response(redirect(f"{frontend_url()}?{urlencode({'google_signup_token': signup_token})}"))
-            response.delete_cookie("google_oauth_state")
-            return response
+            user_id = cur.lastrowid
 
         record_login(conn, user_id, "google")
         login_token = secrets.token_urlsafe(32)
