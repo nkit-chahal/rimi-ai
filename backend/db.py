@@ -611,15 +611,14 @@ def _pg_schema_sql():
         );
         CREATE INDEX IF NOT EXISTS idx_qwen_versions_session_layer ON qwen_layer_versions (session_id, layer_local_id, version);
         CREATE INDEX IF NOT EXISTS idx_qwen_sessions_project_updated ON qwen_layered_sessions (project_id, updated_at);
-        CREATE INDEX IF NOT EXISTS idx_exports_user_project ON exports (user_id, project_id);
         CREATE INDEX IF NOT EXISTS idx_exports_created ON exports (created_at);
         CREATE INDEX IF NOT EXISTS idx_replicate_logs_project ON replicate_logs (project_id, created_at);
-        CREATE INDEX IF NOT EXISTS idx_background_jobs_user_status ON background_jobs (user_id, status);
-        CREATE INDEX IF NOT EXISTS idx_credit_tx_user_created ON credit_transactions (user_id, created_at);
-        CREATE INDEX IF NOT EXISTS idx_payments_user_status ON payments (user_id, status);
-        CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id);
-        CREATE INDEX IF NOT EXISTS idx_saved_workflows_user ON saved_workflows (user_id);
     """
+    # NOTE: Indexes on columns that are added by _pg_run_migrations (user_id on
+    # exports/projects/saved_workflows, etc.) must NOT be created here. On an
+    # existing database those columns do not exist until migrations run, and
+    # CREATE INDEX would fail before the ALTER TABLE. They are created in
+    # _pg_run_migrations after the columns are ensured.
 
 
 def _split_sql_script(sql):
@@ -677,6 +676,9 @@ def _pg_run_migrations(conn):
     _pg_ensure_column(conn, "users", "status", "TEXT NOT NULL DEFAULT 'active'")
     _pg_ensure_column(conn, "projects", "user_id", "INTEGER")
     _pg_ensure_column(conn, "exports", "user_id", "INTEGER")
+    _pg_ensure_column(conn, "background_jobs", "user_id", "INTEGER")
+    _pg_ensure_column(conn, "credit_transactions", "user_id", "INTEGER")
+    _pg_ensure_column(conn, "payments", "user_id", "INTEGER")
     _pg_ensure_column(conn, "project_controls", "print_height", "INTEGER NOT NULL DEFAULT 12")
     _pg_ensure_column(conn, "project_controls", "fabric_width", "INTEGER NOT NULL DEFAULT 54")
     _pg_ensure_column(conn, "background_jobs", "progress_pct", "INTEGER NOT NULL DEFAULT 0")
@@ -695,6 +697,7 @@ def _pg_run_migrations(conn):
         )
         """
     )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_exports_user_project ON exports (user_id, project_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_background_jobs_user_status ON background_jobs (user_id, status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_credit_tx_user_created ON credit_transactions (user_id, created_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_user_status ON payments (user_id, status)")
