@@ -9,7 +9,7 @@ import { useImageDropzone } from '../shared/useImageDropzone';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
 
 export default function DashboardTool(props) {
-    const { uploaded, preview, activeProject, user, setError, setNotice, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, rightPanelEl, setTool, onUploadPaste, setQwenLaunch } = props;
+    const { uploaded, preview, activeProject, user, setError, setNotice, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, rightPanelEl, setTool, onUploadPaste, setQwenLaunch, setUploads } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
     const STEP_TYPES = [
@@ -695,6 +695,8 @@ export default function DashboardTool(props) {
                                     currentToken={currentToken}
                                     setTool={setTool}
                                     setQwenLaunch={setQwenLaunch}
+                                    setUploads={setUploads}
+                                    setError={setError}
                                     className="st-quick-action-btn"
                                 />
                             </div>

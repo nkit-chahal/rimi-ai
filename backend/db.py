@@ -59,6 +59,7 @@ DEFAULT_CREDIT_PRICING = [
     # ----- Image Layers -----
     ("imageLayers", "Image Layers (3-layer default)", "/api/image-layers", 69, "dynamic", 1),
     ("imageLayerEdit", "Image Layer Edit", "/api/edit-layer", 35, "fixed", 1),
+    ("layerCompose", "Layer Compose / Flatten", "/api/compose-layers", 10, "fixed", 1),
     ("qwenSessionExportPsd", "Qwen Session Export PSD", "/api/qwen-sessions/export/psd", 5, "fixed", 1),
     ("qwenSessionExportZip", "Qwen Session Export ZIP", "/api/qwen-sessions/export/zip", 2, "fixed", 1),
     ("qwenSessionExportSvg", "Qwen Session Export SVG", "/api/qwen-sessions/export/svg", 15, "fixed", 1),

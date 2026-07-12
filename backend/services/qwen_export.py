@@ -99,7 +99,7 @@ def export_session_zip(document, session_name='qwen_session'):
 
 
 def export_session_psd(document, canvas_width, canvas_height):
-    """Build a layered PSD using psd-tools."""
+    """Build a layered PSD using psd-tools (same transform pipeline as PNG)."""
     try:
         from psd_tools import PSDImage
         from psd_tools.api.layers import PixelLayer
@@ -114,6 +114,27 @@ def export_session_psd(document, canvas_width, canvas_height):
         if img is None:
             continue
 
+        if layer.get('flipX'):
+            img = img.transpose(Image.FLIP_LEFT_RIGHT)
+        if layer.get('flipY'):
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
+
+        sx = float(layer.get('scaleX', 1.0))
+        sy = float(layer.get('scaleY', 1.0))
+        new_w = max(1, int(img.width * abs(sx)))
+        new_h = max(1, int(img.height * abs(sy)))
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+
+        angle = float(layer.get('angle', 0))
+        if angle != 0:
+            img = img.rotate(-angle, expand=True, resample=Image.BICUBIC)
+
+        opacity = float(layer.get('opacity', 1.0))
+        if opacity < 1.0:
+            r, g, b, a = img.split()
+            a = a.point(lambda p: int(p * opacity))
+            img = Image.merge('RGBA', (r, g, b, a))
+
         layer_canvas = Image.new('RGBA', (canvas_width, canvas_height), (0, 0, 0, 0))
         x = int(float(layer.get('x', 0)))
         y = int(float(layer.get('y', 0)))
@@ -122,9 +143,9 @@ def export_session_psd(document, canvas_width, canvas_height):
             layer_canvas,
             psd,
             layer_name=layer.get('name') or f"Layer {layer.get('local_id', 0)}",
-            top=y,
-            left=x,
-            opacity=int(float(layer.get('opacity', 1.0)) * 255),
+            top=0,
+            left=0,
+            opacity=255,
         )
         psd.append(pixel_layer)
 

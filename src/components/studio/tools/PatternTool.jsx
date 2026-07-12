@@ -8,6 +8,7 @@ import '../../../styles/tools/pattern.css';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
+import ModelLoadingBar from '../shared/ModelLoadingBar';
 
 // Per-model credits must mirror EXTRACT_MODELS in backend/routes/generation.py
 // and DEFAULT_CREDIT_PRICING in backend/db.py.  At 4 credits per INR 1, the
@@ -22,7 +23,7 @@ const EXTRACT_MODEL_DEFS = [
 
 export default function PatternTool({
     uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, tool, creditPricing, setEnhUrl, setTool,
-    handlePreUpload, onUploadInvalid, onUploadPaste, currentToken, uploadStatus, isUploading, setQwenLaunch,
+    handlePreUpload, onUploadInvalid, onUploadPaste, currentToken, uploadStatus, isUploading, setQwenLaunch, setUploads,
 }) {
     // ===== LOCAL STATE =====
     const [extractResults, setExtractResults] = useState(EXTRACT_MODEL_DEFS.map(m => ({ ...m, loading: false, url: null, error: null, duration: 0 })));
@@ -377,16 +378,13 @@ export default function PatternTool({
                                             </div>
                                         </>
                                     ) : model.loading ? (
-                                        <div className="st-ai-processing" style={{ transform: 'scale(0.7)' }}>
-                                            <div className="st-ai-sparkle-container">
-                                                <div className="st-ai-sparkle-icon" style={{ color: model.accent }}>
-                                                    <span className={`st-model-brand st-extract-model-brand ${model.brand}`}>{model.logo}</span>
-                                                </div>
-                                                <div className="st-ai-ring" style={{ borderColor: `${model.accent}40` }} />
-                                                <div className="st-ai-ring" style={{ borderColor: `${model.accent}25` }} />
-                                                <div className="st-ai-ring" style={{ borderColor: `${model.accent}15` }} />
-                                            </div>
-                                        </div>
+                                        <ModelLoadingBar
+                                            active
+                                            modelId={model.id}
+                                            label={`${model.name}…`}
+                                            accent={model.accent}
+                                            compact
+                                        />
                                     ) : model.error && model.error !== 'disabled' ? (
                                         <div style={{ textAlign: 'center', color: '#ef4444', padding: '1.5rem', fontSize: '0.8rem' }}>
                                             <I d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" s={28} />
@@ -427,6 +425,8 @@ export default function PatternTool({
                                 currentToken={currentToken}
                                 setTool={setTool}
                                 setQwenLaunch={setQwenLaunch}
+                                setUploads={setUploads}
+                                setError={setError}
                                 className="st-quick-action-btn"
                             />
                         )}
@@ -478,13 +478,13 @@ export default function PatternTool({
                             {galleryModel.url ? (
                                 <MediaImg src={galleryModel.url} alt={galleryModel.name} key={galleryModel.url} token={currentToken} />
                             ) : galleryModel.loading ? (
-                                <div className="st-ai-processing">
-                                    <div className="st-ai-sparkle-container">
-                                        <div className="st-ai-sparkle-icon" style={{ color: galleryModel.color }}><I d={galleryModel.icon} s={36} /></div>
-                                        <div className="st-ai-ring" /><div className="st-ai-ring" /><div className="st-ai-ring" />
-                                    </div>
-                                    <span className="st-ai-phase-text" style={{ color: '#fff' }}>Generating with {galleryModel.name}...</span>
-                                </div>
+                                <ModelLoadingBar
+                                    active
+                                    modelId={galleryModel.id}
+                                    label={`Generating with ${galleryModel.name}…`}
+                                    accent={galleryModel.accent || galleryModel.color || '#6366f1'}
+                                    tone="light"
+                                />
                             ) : (
                                 <div style={{ color: '#fff', textAlign: 'center' }}>
                                     <I d="M12 9v2m0 4h.01" s={48} />

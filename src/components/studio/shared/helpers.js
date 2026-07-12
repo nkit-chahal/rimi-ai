@@ -62,16 +62,18 @@ export function cacheFileAccessTokens(tokens = {}) {
 export function cacheMediaFromResponse(data) {
     if (!data || typeof data !== 'object') return;
     if (data.fileAccessToken) {
-        const path = data.resultUrl || data.fileUrl || data.url || data.mockupUrl;
+        const path = data.resultUrl || data.fileUrl || data.url || data.maskUrl || data.mockupUrl;
         if (path) cacheFileAccessToken(path, data.fileAccessToken);
+        if (data.filename) cacheFileAccessToken(data.filename, data.fileAccessToken);
     }
-    if (Array.isArray(data.results)) {
-        data.results.forEach((row) => {
-            if (row?.fileAccessToken && (row.resultUrl || row.url)) {
-                cacheFileAccessToken(row.resultUrl || row.url, row.fileAccessToken);
+    const nestedLists = [data.results, data.layers].filter(Array.isArray);
+    nestedLists.forEach((list) => {
+        list.forEach((row) => {
+            if (row?.fileAccessToken && (row.resultUrl || row.url || row.filename)) {
+                cacheFileAccessToken(row.resultUrl || row.url || row.filename, row.fileAccessToken);
             }
         });
-    }
+    });
 }
 
 function cachedTokenForFilename(filename) {
@@ -486,9 +488,14 @@ export async function openInQwenStudio({
     token,
     setTool,
     setQwenLaunch,
+    setUploads,
     sessionName,
 }) {
     const fname = sourceFilename || filenameFromUrl(sourceUrl || '');
+    const previewUrl = sourceUrl
+        ? (sourceUrl.startsWith('http') || sourceUrl.startsWith('/') ? sourceUrl : `/results/${sourceUrl}`)
+        : (fname ? `/results/${fname}` : null);
+
     const res = await apiFetch('/api/qwen-sessions', {
         method: 'POST',
         body: JSON.stringify({
@@ -499,8 +506,30 @@ export async function openInQwenStudio({
         }),
     }, token);
 
+    if (!res?.success && !res?.session) {
+        throw new Error(res?.error || 'Failed to open Qwen Studio session');
+    }
+
+    if (setUploads && fname) {
+        setUploads((prev) => ({
+            ...prev,
+            imagelayers: {
+                // Studio derives `uploaded` from uploads[tool].file — keep a file-like object
+                file: { filename: fname, originalName: fname },
+                url: previewUrl,
+                filename: fname,
+                originalName: fname,
+                status: 'ready',
+            },
+        }));
+    }
+
     if (setQwenLaunch) {
-        setQwenLaunch({ sessionId: res.session?.id, sourceFilename: fname, sourceUrl });
+        setQwenLaunch({
+            sessionId: res.session?.id,
+            sourceFilename: fname,
+            sourceUrl: previewUrl,
+        });
     }
     if (setTool) setTool('imagelayers');
     return res.session;

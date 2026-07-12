@@ -151,3 +151,64 @@ def test_open_file_in_tool_key_map():
     assert "openFileInTool" in text
     assert "openInQwenStudio" in text
     assert "setTool('imagelayers')" in text
+    assert "imagelayers" in text
+    assert "setUploads" in text
+
+
+def test_export_honors_live_document(seeded_qwen, client, monkeypatch):
+    """Export POST with document body should use live layers, not stale DB snapshot."""
+    headers = _auth_headers()
+    create = client.post(
+        "/api/qwen-sessions",
+        data=json.dumps({
+            "projectId": 1,
+            "userId": 1,
+            "sourceFilename": "input.png",
+            "name": "Export Live Doc",
+            "document": {"layers": [], "canvas": {"width": 100, "height": 100}},
+        }),
+        headers=headers,
+    )
+    session_id = create.get_json()["session"]["id"]
+
+    from config import RESULTS_DIR
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    layer_path = os.path.join(RESULTS_DIR, "live_layer.png")
+    # Minimal valid 1x1 PNG
+    import base64
+    png_b64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    with open(layer_path, "wb") as f:
+        f.write(base64.b64decode(png_b64))
+
+    live_doc = {
+        "layers": [{
+            "local_id": 0,
+            "name": "Live",
+            "filename": "live_layer.png",
+            "url": "/results/live_layer.png",
+            "x": 0, "y": 0, "visible": True,
+            "scaleX": 1, "scaleY": 1, "angle": 0, "opacity": 1,
+        }],
+        "canvas": {"width": 64, "height": 64},
+    }
+
+    resp = client.post(
+        f"/api/qwen-sessions/{session_id}/export",
+        data=json.dumps({"format": "png", "document": live_doc}),
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["success"] is True
+    assert body.get("fileAccessToken")
+    assert body.get("resultUrl") or body.get("url")
+
+
+def test_layer_compose_pricing_key_exists():
+    from db import DEFAULT_CREDIT_PRICING
+    keys = {row[0] for row in DEFAULT_CREDIT_PRICING}
+    assert "layerCompose" in keys
+    compose = next(r for r in DEFAULT_CREDIT_PRICING if r[0] == "layerCompose")
+    assert compose[3] == 10

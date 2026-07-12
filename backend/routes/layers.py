@@ -24,6 +24,7 @@ from services.qwen_layers import (
     execute_inpaint_layer,
     _resolve_filepath,
 )
+from security_utils import media_access_token
 import storage
 
 bp = Blueprint('layers', __name__)
@@ -292,7 +293,6 @@ def smart_mask():
   import io
   import uuid
   import replicate
-  import requests as http_requests
   from PIL import Image
   from auth import rgba_layer_to_green_matte
   from services.qwen_layers import _download_replicate_output
@@ -306,6 +306,7 @@ def smart_mask():
   if access_error:
     return access_error
 
+  user_id = g.current_user['id']
   filepath = _resolve_filepath(filename)
   if not filepath or not prompt:
     return jsonify({'error': 'Filename and prompt are required'}), 400
@@ -330,7 +331,21 @@ def smart_mask():
     with open(result_path, 'wb') as f:
       f.write(result_bytes)
     storage.sync_to_s3(result_path)
-    return jsonify({'success': True, 'maskUrl': f'/results/{result_name}', 'filename': result_name})
+    log_export(
+      project_id=project_id,
+      filename=result_name,
+      input_filename=filename,
+      tool_type='Smart Mask',
+      settings_dict={'prompt': prompt, 'x': click_x, 'y': click_y},
+      user_id=user_id,
+    )
+    return jsonify({
+      'success': True,
+      'maskUrl': f'/results/{result_name}',
+      'resultUrl': f'/results/{result_name}',
+      'filename': result_name,
+      'fileAccessToken': media_access_token(result_name, user_id),
+    })
   except Exception as e:
     print(f"  [Smart Mask] Error: {e}")
     return jsonify({'error': f'Smart mask failed: {str(e)}'}), 500
@@ -353,6 +368,10 @@ def compose_layers():
   if access_error:
     return access_error
   user_id = g.current_user['id']
+  required_credits = credit_requirement('layerCompose', 10)
+  ok, remaining, limit, used = check_credits(user_id, required_credits)
+  if not ok:
+    return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
   if not layer_data:
     return jsonify({'error': 'No layers provided'}), 400
@@ -425,7 +444,7 @@ def compose_layers():
     canvas.save(result_path, 'PNG')
     storage.sync_to_s3(result_path)
 
-    record_activity(project_id, 'export', 1, 10, user_id=user_id)
+    record_activity(project_id, 'export', 1, required_credits, user_id=user_id)
     log_export(
       project_id=project_id,
       filename=result_name,
@@ -461,6 +480,8 @@ def compose_layers():
       'success': True,
       'resultUrl': f'/results/{result_name}',
       'filename': result_name,
+      'fileAccessToken': media_access_token(result_name, user_id),
+      'creditsUsed': required_credits,
       **updated_credits
     })
 

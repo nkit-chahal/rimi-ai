@@ -7,11 +7,12 @@ import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
+import ModelLoadingBar from '../shared/ModelLoadingBar';
 
 export default function ColorwaysTool(props) {
     const {
         uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse,
-        creditPricing, cwUrl, setCwUrl, currentToken, handlePreUpload, onUploadInvalid, onUploadPaste, uploadStatus, isUploading, setTool, setQwenLaunch,
+        creditPricing, cwUrl, setCwUrl, currentToken, handlePreUpload, onUploadInvalid, onUploadPaste, uploadStatus, isUploading, setTool, setQwenLaunch, setUploads,
     } = props;
 
     const colorwayCreditCost = creditPricing.recolor || 3;
@@ -68,31 +69,37 @@ export default function ColorwaysTool(props) {
         setError('');
 
         const trigger = async () => {
-            const d = await apiFetch('/api/recolor', {
-                method: 'POST',
-                body: JSON.stringify({
-                    filename: uploaded.filename,
-                    colorMapping: cwTargetPalette,
-                    projectId: activeProject.id,
-                    userId: user.id
-                }),
-            }, currentToken);
-            if (d.success) {
-                cacheMediaFromResponse(d);
-                setCwUrl(d.resultUrl);
-                updateCreditsFromResponse(d);
-                setCwVariations(prev => [{
-                    url: d.resultUrl,
-                    fileAccessToken: d.fileAccessToken,
-                    targetPalette: [...cwTargetPalette],
-                }, ...prev]);
-                return { url: d.resultUrl, fileAccessToken: d.fileAccessToken };
-            } else {
-                throw new Error(d.error || 'Recolor failed');
+            try {
+                const d = await apiFetch('/api/recolor', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        filename: uploaded.filename,
+                        colorMapping: cwTargetPalette,
+                        projectId: activeProject.id,
+                        userId: user.id
+                    }),
+                }, currentToken);
+                if (d.success) {
+                    cacheMediaFromResponse(d);
+                    setCwUrl(d.resultUrl);
+                    updateCreditsFromResponse(d);
+                    setCwVariations(prev => [{
+                        url: d.resultUrl,
+                        fileAccessToken: d.fileAccessToken,
+                        targetPalette: [...cwTargetPalette],
+                    }, ...prev]);
+                    return { url: d.resultUrl, fileAccessToken: d.fileAccessToken };
+                } else {
+                    throw new Error(d.error || 'Recolor failed');
+                }
+            } finally {
+                setIsCwRecoloring(false);
             }
         };
-        addBgTask('colorways', 'Colorway Generation', uploaded.filename, trigger);
-        setIsCwRecoloring(false);
+        addBgTask('colorways', 'Colorway Generation', uploaded.filename, trigger, {
+            modelId: 'local',
+            expectedMs: 2500,
+        });
     };
     // ===== END COLORWAYS FUNCTIONS =====
 
@@ -169,17 +176,13 @@ export default function ColorwaysTool(props) {
                                 <MediaImg src={cwUrl} alt="Result" token={currentToken} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                             </div>
                         ) : isCwRecoloring ? (
-                            <div className="st-ai-processing">
-                                <div className="st-ai-sparkle-container">
-                                    <div className="st-ai-sparkle-icon">
-                                        <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={28} />
-                                    </div>
-                                    <div className="st-ai-ring" />
-                                    <div className="st-ai-ring" />
-                                    <div className="st-ai-ring" />
-                                </div>
-                                <span className="st-ai-phase-text">AI is recoloring pattern...</span>
-                            </div>
+                            <ModelLoadingBar
+                                active
+                                modelId="local"
+                                expectedMs={2500}
+                                label="Recoloring pattern…"
+                                accent="#8b5cf6"
+                            />
                         ) : (
                             <div style={{ textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
                                 <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />
@@ -251,7 +254,7 @@ export default function ColorwaysTool(props) {
                             <div key={i} style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer', transition: 'transform 0.2s' }} onClick={() => { setCwUrl(v.url); setCwTargetPalette([...v.targetPalette]); }}>
                                 <MediaImg src={v.url} alt={`Variation ${i}`} token={currentToken} accessToken={v.fileAccessToken} style={{ width: '100%', display: 'block', aspectRatio: '1/1', objectFit: 'cover' }} />
                                 <div style={{ position: 'absolute', top: 6, right: 6 }} onClick={(e) => e.stopPropagation()}>
-                                    <OpenInQwenButton sourceUrl={v.url} projectId={activeProject?.id} userId={user?.id} currentToken={currentToken} setTool={setTool} setQwenLaunch={setQwenLaunch} className="st-quick-action-btn" label="Qwen" />
+                                    <OpenInQwenButton sourceUrl={v.url} projectId={activeProject?.id} userId={user?.id} currentToken={currentToken} setTool={setTool} setQwenLaunch={setQwenLaunch} setUploads={setUploads} setError={setError} className="st-quick-action-btn" label="Qwen" />
                                 </div>
                                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', padding: '0.5rem', display: 'flex', gap: '4px', overflowX: 'auto' }}>
                                     {v.targetPalette.map((p, j) => (

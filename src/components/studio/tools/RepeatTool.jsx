@@ -421,6 +421,8 @@ export default function RepeatTool(props) {
                                 currentToken={currentToken}
                                 setTool={setTool}
                                 setQwenLaunch={setQwenLaunch}
+                                setUploads={setUploads}
+                                setError={setError}
                                 className="st-variation-qwen-btn"
                                 label="Qwen"
                             />

@@ -144,10 +144,29 @@ export function useQwenSession({
     }, [refreshSessions]);
 
     useEffect(() => {
-        if (!qwenLaunch?.sessionId) return;
-        loadSession(qwenLaunch.sessionId);
+        if (!qwenLaunch) return;
+        const launch = qwenLaunch;
         clearQwenLaunch?.();
-    }, [qwenLaunch, loadSession, clearQwenLaunch]);
+        if (launch.sessionId) {
+            loadSession(launch.sessionId).then((session) => {
+                if (session && !(session.document?.layers || []).length && launch.sourceFilename) {
+                    onSessionLoaded?.({
+                        ...session,
+                        source_filename: launch.sourceFilename || session.source_filename,
+                        _launchSourceOnly: true,
+                        _launchSourceUrl: launch.sourceUrl,
+                    });
+                }
+            });
+        } else if (launch.sourceFilename) {
+            onSessionLoaded?.({
+                document: { layers: [] },
+                source_filename: launch.sourceFilename,
+                _launchSourceOnly: true,
+                _launchSourceUrl: launch.sourceUrl,
+            });
+        }
+    }, [qwenLaunch, loadSession, clearQwenLaunch, onSessionLoaded]);
 
     useEffect(() => {
         if (!sessionId || layersList.length === 0) return undefined;

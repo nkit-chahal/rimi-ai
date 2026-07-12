@@ -9,6 +9,8 @@ export default function OpenInQwenButton({
     currentToken,
     setTool,
     setQwenLaunch,
+    setUploads,
+    setError,
     className = 'st-quick-action-btn',
     label = 'Open in Qwen Studio',
     onDone,
@@ -31,10 +33,12 @@ export default function OpenInQwenButton({
                         token: currentToken,
                         setTool,
                         setQwenLaunch,
+                        setUploads,
                     });
                     onDone?.();
                 } catch (err) {
                     console.error('Open in Qwen Studio failed', err);
+                    setError?.(err.message || 'Open in Qwen Studio failed');
                 }
             }}
         >

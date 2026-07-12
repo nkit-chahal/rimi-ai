@@ -7,6 +7,7 @@ import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
+import ModelLoadingBar from '../shared/ModelLoadingBar';
 import '../../../styles/tools/pattern.css';
 
 export default function SeamlessTool({
@@ -28,6 +29,8 @@ export default function SeamlessTool({
     isUploading,
     setTool,
     setQwenLaunch,
+    setUploads,
+    tool,
 }) {
     // Local state
     const [seamlessMode, setSeamlessMode] = useState('generate');
@@ -37,6 +40,7 @@ export default function SeamlessTool({
     const [isSeamless, setIsSeamless] = useState(false);
     const [seamlessProgress, setSeamlessProgress] = useState(0);
     const [seamlessStatus, setSeamlessStatus] = useState('');
+    const [seamlessModelId, setSeamlessModelId] = useState('black-forest-labs/flux-fill-pro');
     const hasActiveSeamlessRun = useRef(false);
 
     const { pasteProps, openFilePicker, inputProps } = useImageDropzone({
@@ -74,6 +78,8 @@ export default function SeamlessTool({
         setIsSeamless(true);
         setSeamlessUrl(null);
         setError('');
+        setSeamlessMode('fix');
+        setSeamlessModelId('black-forest-labs/flux-fill-pro');
         const trigger = async (reportProgress) => {
             hasActiveSeamlessRun.current = true;
             const payload = {
@@ -95,7 +101,9 @@ export default function SeamlessTool({
             setIsSeamless(false);
             return { url: resultUrl };
         };
-        addBgTask('seamless', 'Make Seamless', filename || 'hero_image', trigger);
+        addBgTask('seamless', 'Make Seamless', filename || 'hero_image', trigger, {
+            modelId: 'black-forest-labs/flux-fill-pro',
+        });
     };
 
     // Generate new seamless tile from text
@@ -105,33 +113,57 @@ export default function SeamlessTool({
         setSeamlessTiles([]);
         setSeamlessUrl(null);
         setError('');
-        const trigger = async () => {
-            const res = await fetch(`${API}/api/generate-seamless`, {
-                method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
-                body: JSON.stringify({
-                    prompt: seamlessPrompt,
-                    referenceFilename: uploaded?.filename || null,
-                    projectId: activeProject.id,
-                    userId: user.id,
-                }),
-            });
-            const d = await res.json();
-            if (d.success) {
-                const tiles = d.tiles || [];
-                setSeamlessTiles(tiles);
-                if (tiles.length > 0) {
-                    setSeamlessUrl(tiles[0].url);
+        setSeamlessMode('generate');
+        setSeamlessModelId('replicate/seamless-texture');
+        setSeamlessProgress(1);
+        setSeamlessStatus('Generating seamless texture…');
+        const trigger = async (reportProgress) => {
+            // Timed progress for sync endpoint (no job stream)
+            const started = Date.now();
+            const expectedMs = 31000;
+            const tick = window.setInterval(() => {
+                const elapsed = Date.now() - started;
+                const pct = Math.min(97, (1 - Math.exp(-2.3 * (elapsed / expectedMs))) * 100);
+                setSeamlessProgress(pct);
+                setSeamlessStatus(pct < 90 ? 'Generating seamless texture…' : 'Scoring tiles…');
+                reportProgress?.(pct, 'Generating…');
+            }, 120);
+            try {
+                const res = await fetch(`${API}/api/generate-seamless`, {
+                    method: 'POST',
+                    headers: jsonAuthHeaders(currentToken),
+                    body: JSON.stringify({
+                        prompt: seamlessPrompt,
+                        referenceFilename: uploaded?.filename || null,
+                        projectId: activeProject.id,
+                        userId: user.id,
+                    }),
+                });
+                const d = await res.json();
+                window.clearInterval(tick);
+                if (d.success) {
+                    const tiles = d.tiles || [];
+                    setSeamlessTiles(tiles);
+                    if (tiles.length > 0) {
+                        setSeamlessUrl(tiles[0].url);
+                    }
+                    updateCreditsFromResponse(d);
+                    setIsSeamless(false);
+                    setSeamlessProgress(100);
+                    return { url: tiles[0]?.url, urls: tiles.map(t => t.url) };
+                } else {
+                    setIsSeamless(false);
+                    throw new Error(d.error || 'Generation failed');
                 }
-                updateCreditsFromResponse(d);
+            } catch (err) {
+                window.clearInterval(tick);
                 setIsSeamless(false);
-                return { url: tiles[0]?.url, urls: tiles.map(t => t.url) };
-            } else {
-                setIsSeamless(false);
-                throw new Error(d.error || 'Generation failed');
+                throw err;
             }
         };
-        addBgTask('seamless', 'Generate Seamless Tiles', uploaded?.filename || 'text-prompt', trigger);
+        addBgTask('seamless', 'Generate Seamless Tiles', uploaded?.filename || 'text-prompt', trigger, {
+            modelId: 'replicate/seamless-texture',
+        });
     };
 
     const loading = isSeamless;
@@ -195,8 +227,7 @@ export default function SeamlessTool({
                     {/* Action Area */}
                     <div style={{ display: 'flex', justifyContent: 'center' }}>
                         {loading || seamlessProgress > 0 ? (
-                            /* Pipeline Progress Visualization */
-                            <div className="st-pipeline-progress">
+                            <div className="st-pipeline-progress" style={{ flexDirection: 'column', gap: '1rem', width: '100%', maxWidth: 420 }}>
                                 <div className="st-pipeline-stages">
                                     {pipelineStages.map((stage, idx) => {
                                         const stepNum = idx + 1;
@@ -217,8 +248,13 @@ export default function SeamlessTool({
                                         );
                                     })}
                                 </div>
-                                <div className="st-pipeline-pct">{Math.round(seamlessProgress)}%</div>
-                                <div className="st-pipeline-status">{seamlessStatus}</div>
+                                <ModelLoadingBar
+                                    active={loading || (seamlessProgress > 0 && seamlessProgress < 100)}
+                                    modelId={seamlessModelId}
+                                    label={seamlessStatus || 'Generating seamless tiles…'}
+                                    serverProgress={seamlessProgress}
+                                    accent="#8b5cf6"
+                                />
                             </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
@@ -354,22 +390,20 @@ export default function SeamlessTool({
                                                 currentToken={currentToken}
                                                 setTool={setTool}
                                                 setQwenLaunch={setQwenLaunch}
+                                                setUploads={setUploads}
+                                                setError={setError}
                                                 className="st-extract-btn-creative"
                                                 label="Open in Qwen Studio"
                                             />
                                         </div>
                                     ) : loading ? (
-                                        <div className="st-ai-processing">
-                                            <div className="st-ai-sparkle-container">
-                                                <div className="st-ai-sparkle-icon">
-                                                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={24} />
-                                                </div>
-                                                <div className="st-ai-ring" />
-                                                <div className="st-ai-ring" />
-                                                <div className="st-ai-ring" />
-                                            </div>
-                                            <div className="st-ai-phase-text">{seamlessStatus || 'AI is fixing seams...'}</div>
-                                        </div>
+                                        <ModelLoadingBar
+                                            active
+                                            modelId={seamlessModelId}
+                                            label={seamlessStatus || 'AI is fixing seams…'}
+                                            serverProgress={seamlessProgress}
+                                            accent="#6366f1"
+                                        />
                                     ) : (
                                         <div style={{ textAlign: 'center', color: '#9ca3af', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '2rem 0' }}>
                                             <I d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" s={48} />

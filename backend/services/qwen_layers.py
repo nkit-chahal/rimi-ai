@@ -22,6 +22,7 @@ from auth import (
     save_rgba_content_layer,
 )
 from config import RESULTS_DIR, UPLOAD_DIR
+from security_utils import media_access_token
 import storage
 
 
@@ -147,6 +148,7 @@ def execute_image_layers(payload, on_progress=None):
             'url': f'/results/{layer_name}',
             'index': i,
             'filename': layer_name,
+            'fileAccessToken': media_access_token(layer_name, user_id),
             **placement,
         })
 
@@ -298,6 +300,7 @@ def execute_edit_layer(payload, on_progress=None):
         'success': True,
         'resultUrl': f'/results/{result_name}',
         'filename': result_name,
+        'fileAccessToken': media_access_token(result_name, user_id),
         'duration': duration,
         'costUsd': cost_usd,
         'creditsUsed': required_credits,
@@ -426,6 +429,7 @@ def execute_inpaint_layer(payload, on_progress=None):
         'success': True,
         'resultUrl': f'/results/{result_name}',
         'filename': result_name,
+        'fileAccessToken': media_access_token(result_name, user_id),
         'width': canvas_width,
         'height': canvas_height,
         'duration': duration,

@@ -7,7 +7,7 @@ import '../../../styles/tools/exports.css';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
 
 export default function ExportsTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, onExportComplete, setTool, setQwenLaunch } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, onExportComplete, setTool, setQwenLaunch, setUploads } = props;
 
     const [exportsList, setExportsList] = useState([]);
     const [isLoadingExports, setIsLoadingExports] = useState(false);
@@ -533,6 +533,8 @@ export default function ExportsTool(props) {
                                                                 currentToken={currentToken}
                                                                 setTool={setTool}
                                                                 setQwenLaunch={setQwenLaunch}
+                                                                setUploads={setUploads}
+                                                                setError={setError}
                                                                 className="st-export-techpack-btn"
                                                                 label="Qwen Studio"
                                                             />

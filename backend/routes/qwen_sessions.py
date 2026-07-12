@@ -29,6 +29,7 @@ from services.qwen_export import (
     save_export_bytes,
 )
 from services.qwen_layers import _resolve_filepath
+from security_utils import media_access_token
 
 bp = Blueprint('qwen_sessions', __name__)
 
@@ -407,9 +408,31 @@ def export_session(session_id):
         if not ok:
             return jsonify(credit_error_payload(required_credits, remaining, limit, used)), 403
 
-    document = json.loads(session.get('document_json') or '{}')
-    canvas_width = int(session.get('canvas_width') or document.get('canvas', {}).get('width', 1024))
-    canvas_height = int(session.get('canvas_height') or document.get('canvas', {}).get('height', 1024))
+    live_document = data.get('document')
+    if isinstance(live_document, dict) and 'layers' in live_document:
+        document = live_document
+        # Persist live document so subsequent exports / session loads stay in sync
+        canvas_meta = document.get('canvas') or {}
+        canvas_width = int(canvas_meta.get('width') or session.get('canvas_width') or 1024)
+        canvas_height = int(canvas_meta.get('height') or session.get('canvas_height') or 1024)
+        with db_lock:
+            conn = db()
+            try:
+                conn.execute(
+                    "UPDATE qwen_layered_sessions SET document_json = ?, canvas_width = ?, canvas_height = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                    (json.dumps(document), canvas_width, canvas_height, _now_iso(), session_id, user_id),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+    else:
+        document = json.loads(session.get('document_json') or '{}')
+        canvas_width = int(session.get('canvas_width') or document.get('canvas', {}).get('width', 1024))
+        canvas_height = int(session.get('canvas_height') or document.get('canvas', {}).get('height', 1024))
+
+    if not (document.get('layers') or []):
+        return jsonify({'error': 'No layers to export'}), 400
+
     session_name = session.get('name') or 'qwen_session'
 
     try:
@@ -445,7 +468,9 @@ def export_session(session_id):
             'success': True,
             'format': export_format,
             'resultUrl': url,
+            'url': url,
             'filename': filename,
+            'fileAccessToken': media_access_token(filename, user_id),
             **updated_credits,
         })
     except Exception as e:
