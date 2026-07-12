@@ -5,6 +5,7 @@ import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import ModelLoadingBar from '../shared/ModelLoadingBar';
 
 export default function VectorProTool(props) {
     const {
@@ -316,17 +317,13 @@ export default function VectorProTool(props) {
                                     <MediaImg src={vpReducedUrl} alt="Quantized" token={currentToken} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                                 </div>
                             ) : isVpReducing ? (
-                                <div className="st-ai-processing">
-                                    <div className="st-ai-sparkle-container">
-                                        <div className="st-ai-sparkle-icon">
-                                            <I d="M4 6h16M4 12h10M4 18h6" s={28} />
-                                        </div>
-                                        <div className="st-ai-ring" />
-                                        <div className="st-ai-ring" />
-                                        <div className="st-ai-ring" />
-                                    </div>
-                                    <span className="st-ai-phase-text">AI is reducing colors...</span>
-                                </div>
+                                <ModelLoadingBar
+                                    active
+                                    modelId="local"
+                                    expectedMs={4000}
+                                    label="Reducing colors…"
+                                    accent="#6366f1"
+                                />
                             ) : !uploadReady ? (
                                 <div
                                     className={`st-tool-upload-zone ${isDrag ? 'dragging' : ''} ${uploadStatus === 'uploading' ? 'is-uploading' : ''}`}

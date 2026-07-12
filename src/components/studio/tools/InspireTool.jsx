@@ -5,6 +5,8 @@ import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import ModelLoadingBar from '../shared/ModelLoadingBar';
+import { getModelTiming } from '../shared/modelTimings';
 import '../../../styles/tools/inspire.css';
 
 export default function InspireTool({
@@ -399,18 +401,27 @@ export default function InspireTool({
                     </div>
 
                     {isGen && generatedVariations.length === 0 ? (
-                        <div className="st-inspire-loading">
-                            <div className="st-spinner" />
-                            <strong>Generating {variants * inspireModels.length} variations</strong>
-                            <span>Using {inspireModels.length} active model{inspireModels.length > 1 ? 's' : ''} in parallel.</span>
-                        </div>
+                        <ModelLoadingBar
+                            active
+                            modelId={inspireModels[0] || 'google/nano-banana'}
+                            expectedMs={Math.max(
+                                ...inspireModels.map((id) => getModelTiming(id).expectedMs),
+                                9500,
+                            )}
+                            label={`Generating ${variants * inspireModels.length} variations…`}
+                            accent="#6366f1"
+                        />
                     ) : generatedVariations.length > 0 ? (
                         <div className="st-inspire-results-stack">
                             {isGen && (
-                                <div className="st-inspire-progress">
-                                    <div><span style={{ width: `${inspireProgress}%` }} /></div>
-                                    <strong>{inspireProgress}%</strong>
-                                </div>
+                                <ModelLoadingBar
+                                    active
+                                    compact
+                                    modelId={inspireModels[0] || 'google/nano-banana'}
+                                    serverProgress={inspireProgress}
+                                    label="More models still generating…"
+                                    accent="#6366f1"
+                                />
                             )}
                             <div className="st-inspire-var-grid">
                                 {generatedVariations.map((u, i) => (

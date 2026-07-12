@@ -7,6 +7,7 @@ import ImageDropzone from '../shared/ImageDropzone';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import ModelLoadingBar from '../shared/ModelLoadingBar';
 
 export default function RemoveBgTool(props) {
     const {
@@ -104,7 +105,9 @@ export default function RemoveBgTool(props) {
             throw new Error(data.error || 'Background removal failed');
         };
 
-        addBgTask('removebg', 'Remove Background', payload.filename || 'image.png', trigger);
+        addBgTask('removebg', 'Remove Background', payload.filename || 'image.png', trigger, {
+            modelId: '851-labs/background-remover',
+        });
     };
 
     const renderControls = () => (
@@ -115,7 +118,7 @@ export default function RemoveBgTool(props) {
                     <strong>PNG (transparent)</strong>
                 </div>
                 <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5, margin: '0 0 0.75rem' }}>
-                    AI removes the background and returns a transparent PNG. Typical processing time is about 3 seconds.
+                    AI removes the background and returns a transparent PNG. Typical time is about 1–8 seconds.
                 </p>
 
                 <button
@@ -214,17 +217,12 @@ export default function RemoveBgTool(props) {
                                     <MediaImg src={removeBgUrl} alt="Background removed" token={currentToken} />
                                 </div>
                             ) : isProcessing ? (
-                                <div className="st-ai-processing">
-                                    <div className="st-ai-sparkle-container">
-                                        <div className="st-ai-sparkle-icon">
-                                            <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
-                                        </div>
-                                        <div className="st-ai-ring" />
-                                        <div className="st-ai-ring" />
-                                        <div className="st-ai-ring" />
-                                    </div>
-                                    <span className="st-ai-phase-text">Removing background...</span>
-                                </div>
+                                <ModelLoadingBar
+                                    active
+                                    modelId="851-labs/background-remover"
+                                    label="Removing background…"
+                                    accent="#14b8a6"
+                                />
                             ) : (
                                 <div style={{ textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
                                     <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />

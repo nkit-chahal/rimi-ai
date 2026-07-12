@@ -7,6 +7,7 @@ import UploadImageFrame from '../shared/UploadImageFrame';
 import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import { createPortal } from 'react-dom';
+import ModelLoadingBar from '../shared/ModelLoadingBar';
 
 export default function VectorizeTool(props) {
     const {
@@ -76,7 +77,10 @@ export default function VectorizeTool(props) {
             }
         };
 
-        addBgTask('vectorize', 'Bezier Vectorization', safeFilename || 'vector.png', trigger);
+        addBgTask('vectorize', 'Bezier Vectorization', safeFilename || 'vector.png', trigger, {
+            modelId: vecEngine === 'api' ? 'recraft-ai/recraft-vectorize' : 'local',
+            expectedMs: vecEngine === 'api' ? undefined : 5000,
+        });
     };
 
 
@@ -112,7 +116,9 @@ export default function VectorizeTool(props) {
             }
         };
 
-        addBgTask('upscale', `Super Resolution (${upscaleFactor})`, uploaded.filename, trigger);
+        addBgTask('upscale', `Super Resolution (${upscaleFactor})`, uploaded.filename, trigger, {
+            modelId: 'google/upscaler',
+        });
     };
 
 
@@ -210,17 +216,15 @@ export default function VectorizeTool(props) {
                                     </div>
                                 )
                             ) : loading ? (
-                                <div className="st-ai-processing">
-                                    <div className="st-ai-sparkle-container">
-                                        <div className="st-ai-sparkle-icon">
-                                            <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
-                                        </div>
-                                        <div className="st-ai-ring" />
-                                        <div className="st-ai-ring" />
-                                        <div className="st-ai-ring" />
-                                    </div>
-                                    <span className="st-ai-phase-text">AI is {tool === 'vectorize' ? 'converting to vector' : 'enhancing resolution'}...</span>
-                                </div>
+                                <ModelLoadingBar
+                                    active
+                                    modelId={tool === 'vectorize'
+                                        ? (vecEngine === 'api' ? 'recraft-ai/recraft-vectorize' : 'local')
+                                        : 'google/upscaler'}
+                                    label={tool === 'vectorize' ? 'Converting to vector…' : 'Enhancing resolution…'}
+                                    accent="#6366f1"
+                                    expectedMs={tool === 'vectorize' && vecEngine !== 'api' ? 5000 : undefined}
+                                />
                             ) : (
                                 <div style={{ textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
                                     <I d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" s={48} />

@@ -15,6 +15,7 @@ import { I } from '../components/studio/shared/StudioIcons';
 import { API, apiFetch, consumeStudioPrefetch, forceDownload, cacheFileAccessToken, mediaUrl } from '../components/studio/shared/helpers';
 import ImageDropzone from '../components/studio/shared/ImageDropzone';
 import { isImageFile } from '../components/studio/shared/imageUpload';
+import { getModelTiming, resolveModelId, timedProgressPct } from '../components/studio/shared/modelTimings';
 import BgTaskManager from '../components/studio/BgTaskManager';
 import { useResultUrls } from '../stores/resultUrls';
 
@@ -189,34 +190,60 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const [isRepeat, setIsRepeat] = useState(false);
     const [rightPanelEl, setRightPanelEl] = useState(null);
 
-    const addBgTask = (type, label, filename, triggerFn) => {
-        const taskId = Date.now().toString();
+    const addBgTask = (type, label, filename, triggerFn, options = {}) => {
+        const taskId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const modelId = resolveModelId(options.modelId, options.toolType || type);
+        const timing = getModelTiming(modelId);
+        const expectedMs = Math.max(
+            800,
+            (options.expectedMs ?? timing.expectedMs) * Math.max(1, options.multiplier || 1),
+        );
         const newTask = {
             id: taskId,
             type,
             label,
             status: 'running',
-            progress: 0,
-            stage: '',
+            progress: 1,
+            stage: timing.label || 'Processing…',
+            modelId,
+            expectedMs,
             filename: filename || 'design_input.png',
             resultUrl: null,
             resultUrls: null,
             error: null,
             createdAt: new Date().toLocaleTimeString(),
+            _startedAt: Date.now(),
         };
 
         setBgTasks(prev => [newTask, ...prev].slice(0, 20));
 
+        let serverProgress = 0;
         const reportProgress = (progressPct, stage) => {
+            if (typeof progressPct === 'number') {
+                serverProgress = Math.min(99, progressPct);
+            }
             setBgTasks(prev => prev.map(t => t.id === taskId ? {
                 ...t,
-                progress: Math.min(99, progressPct ?? t.progress),
+                progress: Math.min(99, Math.max(t.progress, serverProgress)),
                 stage: stage ?? t.stage,
             } : t));
         };
 
+        const tickId = window.setInterval(() => {
+            setBgTasks(prev => prev.map(t => {
+                if (t.id !== taskId || t.status !== 'running') return t;
+                const elapsed = Date.now() - (t._startedAt || Date.now());
+                const timed = timedProgressPct(elapsed, t.expectedMs || expectedMs);
+                return {
+                    ...t,
+                    progress: Math.min(99, Math.max(timed, serverProgress, t.progress || 0)),
+                };
+            }));
+        }, 120);
+
         triggerFn(reportProgress)
             .then((result) => {
+                window.clearInterval(tickId);
                 trackEvent('generation_complete', { tool: type, label, filename });
                 setBgTasks(prev => prev.map(t => t.id === taskId ? {
                     ...t,
@@ -225,10 +252,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                     resultUrl: result.url,
                     resultUrls: result.urls || null,
                     sessionId: result.sessionId || null,
+                    fileAccessToken: result.fileAccessToken || null,
                     _ts: Date.now(),
                 } : t).slice(0, 20));
             })
             .catch((err) => {
+                window.clearInterval(tickId);
                 setBgTasks(prev => prev.map(t => t.id === taskId ? {
                     ...t,
                     status: 'failed',

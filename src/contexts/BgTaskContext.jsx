@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { trackEvent } from '../../observability';
 import { cacheMediaFromResponse } from '../components/studio/shared/helpers';
+import { getModelTiming, resolveModelId, timedProgressPct } from '../components/studio/shared/modelTimings';
 
 const BgTaskContext = createContext(null);
 
@@ -12,36 +13,62 @@ export function BgTaskProvider({ children }) {
     const tasksRef = useRef(bgTasks);
     tasksRef.current = bgTasks;
 
-    const addBgTask = useCallback((type, label, filename, triggerFn) => {
-        const taskId = Date.now().toString();
+    const addBgTask = useCallback((type, label, filename, triggerFn, options = {}) => {
+        const taskId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const modelId = resolveModelId(options.modelId, options.toolType || type);
+        const timing = getModelTiming(modelId);
+        const expectedMs = Math.max(
+            800,
+            (options.expectedMs ?? timing.expectedMs) * Math.max(1, options.multiplier || 1),
+        );
         const newTask = {
             id: taskId,
             type,
             label,
             status: 'running',
-            progress: 0,
-            stage: '',
+            progress: 1,
+            stage: timing.label || 'Processing…',
+            modelId,
+            expectedMs,
             filename: filename || 'design_input.png',
             resultUrl: null,
             resultUrls: null,
             fileAccessToken: null,
             error: null,
             createdAt: new Date().toLocaleTimeString(),
+            _startedAt: Date.now(),
             _ts: Date.now(),
         };
 
         setBgTasks(prev => [newTask, ...prev].slice(0, MAX_TASKS));
 
+        let serverProgress = 0;
         const reportProgress = (progressPct, stage) => {
+            if (typeof progressPct === 'number') {
+                serverProgress = Math.min(99, progressPct);
+            }
             setBgTasks(prev => prev.map(t => t.id === taskId ? {
                 ...t,
-                progress: Math.min(99, progressPct ?? t.progress),
+                progress: Math.min(99, Math.max(t.progress, serverProgress)),
                 stage: stage ?? t.stage,
             } : t));
         };
 
+        const tickId = window.setInterval(() => {
+            setBgTasks(prev => prev.map(t => {
+                if (t.id !== taskId || t.status !== 'running') return t;
+                const elapsed = Date.now() - (t._startedAt || Date.now());
+                const timed = timedProgressPct(elapsed, t.expectedMs || expectedMs);
+                return {
+                    ...t,
+                    progress: Math.min(99, Math.max(timed, serverProgress, t.progress || 0)),
+                };
+            }));
+        }, 120);
+
         triggerFn(reportProgress)
             .then((result) => {
+                window.clearInterval(tickId);
                 trackEvent('generation_complete', { tool: type, label, filename });
                 if (result?.fileAccessToken && result?.url) {
                     cacheMediaFromResponse({ resultUrl: result.url, fileAccessToken: result.fileAccessToken });
@@ -57,6 +84,7 @@ export function BgTaskProvider({ children }) {
                 } : t).slice(0, MAX_TASKS));
             })
             .catch((err) => {
+                window.clearInterval(tickId);
                 setBgTasks(prev => prev.map(t => t.id === taskId ? {
                     ...t,
                     status: 'failed',

@@ -6,6 +6,7 @@ import ImageDropzone from '../shared/ImageDropzone';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import ModelLoadingBar from '../shared/ModelLoadingBar';
 
 export default function ColorwayManagerTool(props) {
     const {
@@ -255,17 +256,13 @@ export default function ColorwayManagerTool(props) {
                         <div style={{ flex: '2 1 600px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                             {isCwmGenerating ? (
                                 <div className="st-comparison-card" style={{ height: '100%', minHeight: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                                    <div className="st-ai-processing">
-                                        <div className="st-ai-sparkle-container">
-                                            <div className="st-ai-sparkle-icon">
-                                                <I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z" s={36} />
-                                            </div>
-                                            <div className="st-ai-ring" />
-                                            <div className="st-ai-ring" />
-                                            <div className="st-ai-ring" />
-                                        </div>
-                                        <span className="st-ai-phase-text" style={{ marginTop: '1.5rem', fontSize: '1.1rem' }}>AI is calculating multi-colorway distribution...</span>
-                                    </div>
+                                    <ModelLoadingBar
+                                        active
+                                        modelId="local"
+                                        expectedMs={5000}
+                                        label="Calculating colorway distribution…"
+                                        accent="#8b5cf6"
+                                    />
                                 </div>
                             ) : cwmColorways.length > 0 ? (
                                 <div className="st-comparison-card" style={{ padding: '2rem' }}>

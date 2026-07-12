@@ -84,11 +84,17 @@ export default function BgTaskManager({ bgTasks, show, onToggle, setTool, setRes
                                     {t.status === 'running' && (
                                         <div style={{ width: '100%' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#6366f1', fontWeight: 700, marginBottom: '2px' }}>
-                                                <span>Processing...</span>
-                                                <span>{t.progress}%</span>
+                                                <span>{t.stage || 'Processing...'}</span>
+                                                <span>{Math.round(t.progress || 0)}%</span>
                                             </div>
-                                            <div style={{ width: '100%', height: '4px', background: '#e2e8f0', borderRadius: '99px', overflow: 'hidden' }}>
-                                                <div style={{ width: `${t.progress}%`, height: '100%', background: 'linear-gradient(90deg, #6366f1, #ec4899)' }} />
+                                            <div style={{ width: '100%', height: '5px', background: '#e2e8f0', borderRadius: '99px', overflow: 'hidden' }}>
+                                                <div style={{
+                                                    width: `${Math.max(2, Math.min(100, t.progress || 0))}%`,
+                                                    height: '100%',
+                                                    background: 'linear-gradient(90deg, #6366f1, #ec4899)',
+                                                    transition: 'width 0.18s linear',
+                                                    borderRadius: '99px',
+                                                }} />
                                             </div>
                                         </div>
                                     )}

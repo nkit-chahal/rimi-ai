@@ -6,6 +6,8 @@ import { createPortal } from 'react-dom';
 import { isImageFile } from '../shared/imageUpload';
 import '../../../styles/tools/mappings.css';
 import { useImageDropzone } from '../shared/useImageDropzone';
+import ModelLoadingBar from '../shared/ModelLoadingBar';
+import { getModelTiming } from '../shared/modelTimings';
 
 const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
     const canvasRef = useRef(null);
@@ -266,7 +268,10 @@ export default function MappingsTool(props) {
             throw new Error(d.error || detail || 'Failed to generate mockups');
         };
 
-        addBgTask('mappings', `Product Mockup: ${mappingSelectedProducts.size} item(s)`, mappingPrint.filename, trigger);
+        addBgTask('mappings', `Product Mockup: ${mappingSelectedProducts.size} item(s)`, mappingPrint.filename, trigger, {
+            modelId: 'google/nano-banana-2',
+            multiplier: Math.max(1, mappingSelectedProducts.size),
+        });
     };
     // ===== END MAPPINGS =====
 
@@ -576,17 +581,17 @@ export default function MappingsTool(props) {
 
                     {/* Loading state */}
                     {isMappingGenerating && (
-                        <div style={{ textAlign: 'center', padding: '3.5rem 2rem' }}>
-                            <div className="st-ai-processing" style={{ margin: '0 auto' }}>
-                                <div className="st-ai-sparkle-container">
-                                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={28} />
-                                    <div className="st-ai-ring" />
-                                    <div className="st-ai-ring" />
-                                    <div className="st-ai-ring" />
-                                </div>
-                            </div>
-                            <p style={{ fontWeight: 800, color: '#111827', fontSize: '1.05rem', marginTop: '1.5rem', letterSpacing: '-0.02em' }}>Generating AI Mockups</p>
-                            <p style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 500, marginTop: '0.35rem' }}>Mapping your pattern onto selected products — 30-60s per product</p>
+                        <div style={{ textAlign: 'center', padding: '2.5rem 1.5rem' }}>
+                            <ModelLoadingBar
+                                active
+                                modelId="google/nano-banana-2"
+                                multiplier={Math.max(1, mappingSelectedProducts.size)}
+                                label={`Generating ${mappingSelectedProducts.size} mockup${mappingSelectedProducts.size === 1 ? '' : 's'}…`}
+                                accent="#6366f1"
+                            />
+                            <p style={{ fontSize: '0.8rem', color: '#6b7280', fontWeight: 500, marginTop: '0.75rem' }}>
+                                {getModelTiming('google/nano-banana-2').label} · ~{Math.round(getModelTiming('google/nano-banana-2').expectedMs / 1000)}s each
+                            </p>
                         </div>
                     )}
 
