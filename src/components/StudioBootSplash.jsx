@@ -67,8 +67,9 @@ export default function StudioBootSplash({ visible, dataReady = false, minDurati
         <div className={`rim-boot-splash ${exiting ? 'is-exiting' : ''}`} role="status" aria-live="polite">
             <div className="rim-boot-pattern" aria-hidden="true" />
             <div className="rim-boot-content">
-                <p className="rim-boot-kicker">Pattern studio</p>
-                <h1 className="rim-boot-title">RIMI</h1>
+                <span className="rim-boot-mark" aria-hidden="true">R</span>
+                <p className="rim-boot-kicker">Studio</p>
+                <h1 className="rim-boot-title">RIMI AI</h1>
                 <p className="rim-boot-subtitle">{BOOT_STEPS[stepIndex]}</p>
                 <div className="rim-boot-progress-track" aria-hidden="true">
                     <div className="rim-boot-progress-bar" style={{ width: `${progress}%` }} />

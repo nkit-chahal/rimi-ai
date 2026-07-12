@@ -1,7 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { API, normalizeToken, prefetchStudioState } from '../components/studio/shared/helpers';
-import { t } from '../i18n/en-IN';
 import '../styles/login.css';
+
+const LOGIN_STAGE_IMAGES = [
+  { src: '/demo_floral.png', label: 'Floral textile' },
+  { src: '/demo_geometric.png', label: 'Geometric textile' },
+  { src: '/demo_botanical.png', label: 'Botanical textile' },
+];
+
+const STAGE_INTERVAL_MS = 6000;
 
 function readGooglePhaseFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -13,15 +20,45 @@ function clearAuthQueryParams() {
   window.history.replaceState(null, '', window.location.pathname + window.location.hash);
 }
 
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(() =>
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onChange = () => setReduced(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  return reduced;
+}
+
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [googlePhase, setGooglePhase] = useState(readGooglePhaseFromUrl);
+  const [stageIndex, setStageIndex] = useState(0);
+  const [stagePaused, setStagePaused] = useState(false);
+  const prefersReducedMotion = usePrefersReducedMotion();
   const oauthHandledRef = useRef(false);
   const onLoginRef = useRef(onLogin);
   onLoginRef.current = onLogin;
+
+  useEffect(() => {
+    if (prefersReducedMotion || stagePaused || LOGIN_STAGE_IMAGES.length < 2) return undefined;
+
+    const timer = window.setInterval(() => {
+      setStageIndex((prev) => (prev + 1) % LOGIN_STAGE_IMAGES.length);
+    }, STAGE_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [prefersReducedMotion, stagePaused, stageIndex]);
 
   useEffect(() => {
     if (oauthHandledRef.current) return;
@@ -144,34 +181,15 @@ export default function Login({ onLogin }) {
 
   return (
     <div className="login-portal">
-      <aside className="login-stage">
-        <div className="login-stage-pattern" aria-hidden="true" />
-        <div className="login-stage-veil" aria-hidden="true" />
-        <div className="login-stage-copy">
-          <p className="login-stage-kicker">Textile &amp; surface design</p>
-          <h1 className="login-stage-brand">{t('appName')}</h1>
-          <p className="login-stage-lead">
-            Extract motifs, build seamless repeats, map colorways, and export print-ready files —
-            one studio for production teams.
-          </p>
-          <ul className="login-stage-points">
-            <li>Repeat sets in real fabric widths</li>
-            <li>Colorways &amp; Pantone-aware workflows</li>
-            <li>Credits-based AI tools, INR billing</li>
-          </ul>
-        </div>
-      </aside>
-
       <main className="login-panel">
         <div className={`login-sheet ${googlePhase ? 'is-oauth-busy' : ''}`}>
           {renderGoogleOverlay()}
 
-          <header className="login-sheet-head">
-            <span className="login-mark" aria-hidden="true">R</span>
-            <div>
-              <h2>Sign in</h2>
-              <p>Continue to your pattern studio</p>
-            </div>
+          <header className="login-brand">
+            <h1 className="login-brand-name">RIMI AI</h1>
+            <p className="login-brand-line">
+              Pattern studio for print-ready repeats and colorways.
+            </p>
           </header>
 
           <form onSubmit={handleLogin} className="login-form">
@@ -243,9 +261,47 @@ export default function Login({ onLogin }) {
             </button>
           </div>
 
-          <p className="login-footnote">© 2026 RIMI AI · Built for print production</p>
+          <p className="login-footnote">© 2026 RIMI AI</p>
         </div>
       </main>
+
+      <aside
+        className="login-stage"
+        aria-hidden="true"
+        onMouseEnter={() => setStagePaused(true)}
+        onMouseLeave={() => setStagePaused(false)}
+      >
+        <div className="login-stage-frame">
+          <div className="login-stage-slides">
+            {LOGIN_STAGE_IMAGES.map((image, index) => (
+              <img
+                key={image.src}
+                className={`login-stage-image${index === stageIndex ? ' is-active' : ''}`}
+                src={image.src}
+                alt=""
+                width={1024}
+                height={1024}
+                decoding="async"
+                loading={index === 0 ? 'eager' : 'lazy'}
+              />
+            ))}
+          </div>
+          {!prefersReducedMotion && LOGIN_STAGE_IMAGES.length > 1 && (
+            <div className="login-stage-dots">
+              {LOGIN_STAGE_IMAGES.map((image, index) => (
+                <button
+                  key={image.src}
+                  type="button"
+                  className={`login-stage-dot${index === stageIndex ? ' is-active' : ''}`}
+                  tabIndex={-1}
+                  onClick={() => setStageIndex(index)}
+                  aria-label={image.label}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
