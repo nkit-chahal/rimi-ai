@@ -7,6 +7,7 @@ import UploadImageFrame from '../shared/UploadImageFrame';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import ModelLoadingBar from '../shared/ModelLoadingBar';
 import { getModelTiming } from '../shared/modelTimings';
+import { isProUser, isProModel } from '../shared/planTiers';
 import '../../../styles/tools/inspire.css';
 
 export default function InspireTool({
@@ -25,6 +26,7 @@ export default function InspireTool({
     onUploadPaste,
     uploadStatus,
     isUploading,
+    setTool,
 }) {
     // State variables
     const [prompt, setPrompt] = useState('');
@@ -53,28 +55,43 @@ export default function InspireTool({
     // Pricing rule (Option A, 4 credits per INR 1, ~57% gross margin):
     //   credits = ceil(cost_usd * 1150)
     const allAvailableModels = [
-
-        { id: 'google/imagen-4-fast', name: 'Imagen 4 Fast', sub: 'Google', brand: 'google', logo: 'I4', credits: 23, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-
-
-        { id: 'xai/grok-imagine-image', name: 'Grok Imagine', sub: 'xAI', brand: 'xai', logo: 'GR', credits: 23, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: 46, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', credits: 78, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-
-        { id: 'black-forest-labs/flux-schnell', name: 'Flux Schnell', sub: 'Black Forest', brand: 'bfl', logo: 'FS', credits: 4, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'google/nano-banana', name: 'Nano Banana', sub: 'Google', brand: 'google', logo: 'NB', credits: 45, icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'black-forest-labs/flux-schnell', name: 'Flux Schnell', sub: 'Black Forest', brand: 'bfl', logo: 'FS', credits: 4, tier: 'normal', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'xai/grok-imagine-image', name: 'Grok Imagine', sub: 'xAI', brand: 'xai', logo: 'GR', credits: 23, tier: 'normal', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/imagen-4-fast', name: 'Imagen 4 Fast', sub: 'Google', brand: 'google', logo: 'I4', credits: 23, tier: 'normal', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/nano-banana', name: 'Nano Banana', sub: 'Google', brand: 'google', logo: 'NB', credits: 45, tier: 'normal', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: 46, tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest', brand: 'bfl', logo: 'F2', credits: uploaded?.filename ? 52 : 35, tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/imagen-4-ultra', name: 'Imagen 4 Ultra', sub: 'Google', brand: 'google', logo: 'IU', credits: 69, tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', credits: 78, tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'G2', credits: 148, tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
     ];
 
+    const userIsPro = isProUser(user);
     const promptChips = ['Botanical repeat', 'Hand-painted floral', 'Art deco geometric', 'Soft watercolor', 'Vintage textile', 'Tropical foliage'];
 
+    const toggleInspireModel = (modelId) => {
+        const proLocked = isProModel(modelId, 'inspire') && !userIsPro;
+        if (proLocked) {
+            setError('That model is Pro-only. Open Billing and choose a Pro or Scale pack.');
+            if (typeof setTool === 'function') setTool('billing');
+            return;
+        }
+        setInspireModels((prev) => {
+            if (prev.includes(modelId)) {
+                if (prev.length <= 1) return prev;
+                return prev.filter((id) => id !== modelId);
+            }
+            return [...prev, modelId];
+        });
+    };
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
     // Sum per-model credits for every selected model and multiply by variants
     // so cost reflects the true mix.  Cheap models (Flux Schnell = 4) cost far
     // less than premium ones (Nano Banana Pro = 173).
     const creditsPerVariant = inspireModels.reduce((sum, modelId) => {
         const cfg = allAvailableModels.find(m => m.id === modelId);
-        return sum + (cfg?.credits || creditPricing?.inspire || 148);
-    }, 0) || (creditPricing?.inspire || 148);
+        return sum + (cfg?.credits || creditPricing?.inspire || 45);
+    }, 0) || (creditPricing?.inspire || 45);
     const inspireCreditCost = variants * creditsPerVariant;
     const hasEnoughInspireCredits = userRemainingCredits >= inspireCreditCost;
 
@@ -203,27 +220,25 @@ export default function InspireTool({
                         <div className="st-model-list">
                             {allAvailableModels.map(m => {
                                 const isActive = inspireModels.includes(m.id);
+                                const locked = m.tier === 'pro' && !userIsPro;
                                 return (
-                                    <div key={m.id} className="st-model-row" style={{ opacity: isActive ? 1 : 0.6 }}>
+                                    <div key={m.id} className="st-model-row" style={{ opacity: locked ? 0.55 : (isActive ? 1 : 0.6) }}>
                                         <div className="st-model-row-left">
                                             <div className="st-model-drag">
                                                 <I d="M8 6h2v2H8V6zm0 5h2v2H8v-2zm0 5h2v2H8v-2zm4-10h2v2h-2V6zm0 5h2v2h-2v-2zm0 5h2v2h-2v-2z" s={16} />
                                             </div>
                                             <div className="st-model-name">
                                                 <I d={m.icon} s={16} /> {m.name}
+                                                {m.tier === 'pro' && (
+                                                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>PRO</span>
+                                                )}
                                             </div>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center' }}>
                                             <div className="st-model-dropdown">
-                                                {m.sub} <I d="M6 9l6 6 6-6" s={12} style={{ marginLeft: '4px' }} />
+                                                {m.credits} cr · {m.sub}
                                             </div>
-                                            <div className={`st-toggle ${isActive ? 'active' : ''}`} onClick={() => {
-                                                if (isActive) {
-                                                    if (inspireModels.length > 1) setInspireModels(inspireModels.filter(id => id !== m.id));
-                                                } else {
-                                                    setInspireModels([...inspireModels, m.id]);
-                                                }
-                                            }}>
+                                            <div className={`st-toggle ${isActive && !locked ? 'active' : ''}`} onClick={() => toggleInspireModel(m.id)}>
                                                 <div className="st-toggle-knob" />
                                             </div>
                                         </div>
@@ -292,18 +307,19 @@ export default function InspireTool({
                             <div className="st-inspire-model-top-grid">
                                 {allAvailableModels.map((m) => {
                                     const active = inspireModels.includes(m.id);
+                                    const locked = m.tier === 'pro' && !userIsPro;
                                     return (
-                                        <button key={m.id} className="st-inspire-model-row" onClick={() => {
-                                            if (active) {
-                                                if (inspireModels.length > 1) setInspireModels(inspireModels.filter(id => id !== m.id));
-                                            } else {
-                                                setInspireModels([...inspireModels, m.id]);
-                                            }
-                                        }}>
+                                        <button
+                                            key={m.id}
+                                            type="button"
+                                            className="st-inspire-model-row"
+                                            style={{ opacity: locked ? 0.55 : 1 }}
+                                            onClick={() => toggleInspireModel(m.id)}
+                                        >
                                             <span className={`st-model-brand ${m.brand}`}>{m.logo}</span>
-                                            <strong>{m.name}</strong>
-                                            <small>{m.sub}</small>
-                                            <i className={active ? 'active' : ''} />
+                                            <strong>{m.name}{m.tier === 'pro' ? ' · Pro' : ''}</strong>
+                                            <small>{m.credits} cr · {m.sub}</small>
+                                            <i className={active && !locked ? 'active' : ''} />
                                         </button>
                                     );
                                 })}

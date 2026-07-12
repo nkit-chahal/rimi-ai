@@ -1,14 +1,4 @@
 export const COMING_SOON_TOOLS = {
-    mockup3d: {
-        title: '3D Mockup',
-        description: 'Real-time 3D garment and product previews are on the way. Tile patterns on apparel and rotate mockups in the browser.',
-        icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.3 7l8.7 5 8.7-5M12 22V12',
-        features: [
-            'T-shirt, dress & tote previews',
-            'Adjustable pattern tiling',
-            'Drag to rotate · scroll to zoom',
-        ],
-    },
     library: {
         title: 'Brand Library',
         description: 'Save brand palettes, logos, and approved color systems in one place for every project and colorway workflow.',

@@ -9,15 +9,13 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from routes.generation import EXTRACT_MODELS, EXTRACT_PROMPT, _run_single_extract
+from routes.generation import EXTRACT_MODELS, EXTRACT_PROMPT, _run_single_extract, MODEL_TO_CREDITS
 
 
-def test_all_extract_models_receive_source_image():
-    assert EXTRACT_MODELS, "EXTRACT_MODELS must not be empty"
-    for model in EXTRACT_MODELS:
-        assert model.get("supports_image") is True, (
-            f"{model['id']} must support image input for faithful extraction"
-        )
+def test_image_models_receive_source_image():
+    image_models = [m for m in EXTRACT_MODELS if m.get("supports_image")]
+    assert image_models, "At least one extract model must support image input"
+    for model in image_models:
         assert model.get("input_key"), f"{model['id']} needs input_key"
         assert model.get("prompt"), f"{model['id']} needs an extraction prompt"
         assert "input image" in model["prompt"].lower() or "extract" in model["prompt"].lower()
@@ -38,6 +36,17 @@ def test_model_input_keys_match_replicate_apis():
     assert by_id["bytedance/seedream-4.5"]["input_list"] is True
     assert by_id["xai/grok-imagine-image"]["input_key"] == "image"
     assert by_id["xai/grok-imagine-image"]["input_list"] is False
+    assert by_id["openai/gpt-image-2"]["credits"] == 148
+    assert by_id["black-forest-labs/flux-2-pro"]["credits"] == 52
+    assert by_id["google/imagen-4-ultra"]["credits"] == 69
+    assert by_id["google/imagen-4-fast"]["supports_image"] is False
+    assert by_id["black-forest-labs/flux-schnell"]["supports_image"] is False
+
+
+def test_new_pro_model_credits_in_registry():
+    assert MODEL_TO_CREDITS["openai/gpt-image-2"] == 148
+    assert MODEL_TO_CREDITS["google/imagen-4-ultra"] == 69
+    assert MODEL_TO_CREDITS["black-forest-labs/flux-2-pro"] == 35
 
 
 def test_run_single_extract_builds_image_conditioned_input(monkeypatch):

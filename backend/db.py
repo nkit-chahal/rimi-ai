@@ -35,18 +35,22 @@ DEFAULT_CREDIT_PRICING = [
 
 
     ("extract_imagen_fast", "Extract — Imagen 4 Fast", "google/imagen-4-fast", 23, "dynamic", 1),
-
-
     ("extract_seedream", "Extract — Seedream 4.5", "bytedance/seedream-4.5", 46, "dynamic", 1),
     ("extract_nano_banana", "Extract — Nano Banana", "google/nano-banana", 45, "dynamic", 1),
     ("extract_nano_banana_2", "Extract — Nano Banana 2", "google/nano-banana-2", 78, "dynamic", 1),
-
     ("extract_grok", "Extract — Grok Imagine", "xai/grok-imagine-image", 23, "dynamic", 1),
     ("extract_flux_schnell", "Extract — Flux Schnell", "black-forest-labs/flux-schnell", 4, "dynamic", 1),
+    # Pro extract — Replicate panels 2026-07-12: gpt high $0.128→148; flux2+1MP $0.045→52
+    ("extract_gpt_image_2", "Extract — GPT Image 2 (high)", "openai/gpt-image-2", 148, "dynamic", 1),
+    ("extract_flux_2_pro", "Extract — Flux 2 Pro (+1MP ref)", "black-forest-labs/flux-2-pro", 52, "dynamic", 1),
+    ("extract_imagen_ultra", "Extract — Imagen 4 Ultra (Inspire)", "google/imagen-4-ultra", 69, "dynamic", 1),
 
     # ----- Inspirations (mirrors extract pricing per model) -----
     ("inspire", "Inspirations (default)", "/api/generate-inspirations", 45, "dynamic", 1),
-
+    ("inspire_gpt_image_2", "Inspire — GPT Image 2 (high)", "openai/gpt-image-2", 148, "dynamic", 1),
+    ("inspire_imagen_ultra", "Inspire — Imagen 4 Ultra", "google/imagen-4-ultra", 69, "dynamic", 1),
+    ("inspire_flux_2_pro", "Inspire — Flux 2 Pro (text 1MP)", "black-forest-labs/flux-2-pro", 35, "dynamic", 1),
+    ("inspire_flux_2_pro_ref", "Inspire — Flux 2 Pro (+1MP ref)", "black-forest-labs/flux-2-pro+ref", 52, "dynamic", 1),
     # ----- Seamless -----
     ("seamless", "Make Seamless (Flux Fill Pro)", "/api/make-seamless", 58, "dynamic", 1),
     ("seamless_texture", "Seamless Texture (text-to-img)", "replicate/seamless-texture", 84, "dynamic", 1),

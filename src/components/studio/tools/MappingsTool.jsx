@@ -8,6 +8,7 @@ import '../../../styles/tools/mappings.css';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import ModelLoadingBar from '../shared/ModelLoadingBar';
 import { getModelTiming } from '../shared/modelTimings';
+import UploadStatusBadge from '../shared/UploadStatusBadge';
 
 const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
     const canvasRef = useRef(null);
@@ -117,7 +118,7 @@ const isMappingFile = (file) => {
 };
 
 export default function MappingsTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, onUploadPaste } = props;
+    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, onUploadPaste, setTool } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
 
@@ -173,11 +174,15 @@ export default function MappingsTool(props) {
     const [mappingStep, setMappingStep] = useState(1);
     const [mappingPrint, setMappingPrint] = useState(null); // { file, filename, url }
     const [mappingPrintPreview, setMappingPrintPreview] = useState(null);
+    const [mappingUploadStatus, setMappingUploadStatus] = useState(null); // uploading | ready | error
+    const [mappingPendingName, setMappingPendingName] = useState('');
     const [mappingCategory, setMappingCategory] = useState('home');
     const [mappingSelectedProducts, setMappingSelectedProducts] = useState(new Set());
     const [mappingResults, setMappingResults] = useState([]);
     const [isMappingGenerating, setIsMappingGenerating] = useState(false);
     const [mappingProductSearch, setMappingProductSearch] = useState('');
+    const mappingUploadGenRef = useRef(0);
+    const mappingPreviewUrlRef = useRef(null);
 
     // Custom Mapping Editor States
     const [mappingBackground, setMappingBackground] = useState('studio');
@@ -189,18 +194,61 @@ export default function MappingsTool(props) {
     const [mappingCustomMask, setMappingCustomMask] = useState(null); // The drawn mask URL
     const [isCanvasOpen, setIsCanvasOpen] = useState(false);
 
+    const revokeMappingPreview = useCallback(() => {
+        if (mappingPreviewUrlRef.current) {
+            URL.revokeObjectURL(mappingPreviewUrlRef.current);
+            mappingPreviewUrlRef.current = null;
+        }
+    }, []);
+
+    const resetMappingPrint = useCallback(() => {
+        mappingUploadGenRef.current += 1;
+        revokeMappingPreview();
+        setMappingPrint(null);
+        setMappingPrintPreview(null);
+        setMappingUploadStatus(null);
+        setMappingPendingName('');
+    }, [revokeMappingPreview]);
+
+    useEffect(() => () => {
+        if (mappingPreviewUrlRef.current) URL.revokeObjectURL(mappingPreviewUrlRef.current);
+    }, []);
+
+    const printReady = Boolean(mappingPrint?.filename) && mappingUploadStatus === 'ready';
+    const isPrintUploading = mappingUploadStatus === 'uploading';
+    const printDisplayName = mappingPrint?.file?.name || mappingPendingName || 'pattern.png';
+
     const handleMappingUpload = async (file) => {
         if (!file) return;
-        setMappingPrintPreview(URL.createObjectURL(file));
+        const uploadGen = ++mappingUploadGenRef.current;
+        revokeMappingPreview();
+        const localUrl = URL.createObjectURL(file);
+        mappingPreviewUrlRef.current = localUrl;
+        setMappingPrint(null);
+        setMappingPrintPreview(localUrl);
+        setMappingPendingName(file.name || 'pattern.png');
+        setMappingUploadStatus('uploading');
+        setError('');
+
         const fd = new FormData();
         fd.append('image', file);
         fd.append('projectId', String(activeProject?.id || 1));
         if (user?.id) fd.append('userId', String(user.id));
         try {
             const d = await apiFetch('/api/upload', { method: 'POST', body: fd }, currentToken);
-            if (d.success) setMappingPrint({ file, filename: d.filename, url: d.url });
-            else setError(d.error || 'Upload failed');
+            if (uploadGen !== mappingUploadGenRef.current) return;
+            if (d.success && d.filename) {
+                setMappingPrint({ file, filename: d.filename, url: d.fileUrl || d.url || null });
+                setMappingUploadStatus('ready');
+            } else {
+                setMappingPrint(null);
+                setMappingUploadStatus('error');
+                setError(d.error || 'Upload failed');
+            }
         } catch (err) {
+            if (uploadGen !== mappingUploadGenRef.current) return;
+            setMappingPrint(null);
+            setMappingUploadStatus('error');
             setError(err.message || 'Upload failed');
         }
     };
@@ -211,6 +259,7 @@ export default function MappingsTool(props) {
         onPasteSuccess: onUploadPaste,
         accept: '.jpg,.jpeg,.png,.webp,.svg',
         isValidFile: isMappingFile,
+        disabled: mappingUploadStatus === 'uploading',
     });
 
     const toggleMappingProduct = (productId) => {
@@ -223,7 +272,7 @@ export default function MappingsTool(props) {
 
     const generateMockups = async () => {
         if (!mappingPrint?.filename || mappingSelectedProducts.size === 0) return;
-        const requiredCredits = mappingSelectedProducts.size * (creditPricing.mappings || 148);
+        const requiredCredits = mappingSelectedProducts.size * (creditPricing.mappings || 67);
         if (userRemainingCredits < requiredCredits) {
             setError(`Insufficient credits. Mockup generation needs ${requiredCredits} credits, but you have ${userRemainingCredits} remaining.`);
             return;
@@ -283,7 +332,7 @@ export default function MappingsTool(props) {
     const filteredProducts = mappingProductSearch
         ? currentProducts.filter(p => p.name.toLowerCase().includes(mappingProductSearch.toLowerCase()))
         : currentProducts;
-    const mappingCreditCost = mappingSelectedProducts.size * (creditPricing.mappings || 148);
+    const mappingCreditCost = mappingSelectedProducts.size * (creditPricing.mappings || 67);
     const hasEnoughMappingCredits = userRemainingCredits >= mappingCreditCost;
 
     return (
@@ -294,7 +343,7 @@ export default function MappingsTool(props) {
                     <React.Fragment key={i}>
                         <div
                             className={`st-map-step ${mappingStep === i + 1 ? 'active' : ''} ${mappingStep > i + 1 ? 'completed' : ''}`}
-                            onClick={() => { if (i + 1 < mappingStep || (i + 1 === 2 && mappingPrint)) setMappingStep(i + 1); }}
+                            onClick={() => { if (i + 1 < mappingStep || (i + 1 === 2 && printReady)) setMappingStep(i + 1); }}
                         >
                             <div className="st-map-step-num">
                                 {mappingStep > i + 1 ? <I d="M5 13l4 4L19 7" s={14} /> : i + 1}
@@ -313,18 +362,49 @@ export default function MappingsTool(props) {
                 <div className="st-map-section">
                     <h2 className="st-map-section-title">Upload Your Print</h2>
                     <p className="st-map-section-desc">Upload a high quality print or pattern</p>
-                    <div className="st-map-upload-row">
+                    <div className={`st-map-upload-row ${printReady ? 'uploaded' : ''}`}>
                         <div
-                            className={`st-map-upload-zone ${mappingPrintPreview ? 'has-image' : ''} ${isDrag ? 'dragging' : ''}`}
+                            className={`st-map-upload-zone ${mappingPrintPreview ? 'has-image' : ''} ${isPrintUploading ? 'is-uploading' : ''} ${printReady ? 'is-ready' : ''} ${mappingUploadStatus === 'error' ? 'is-error' : ''} ${isDrag ? 'dragging' : ''}`}
                             {...rootProps}
                         >
                             {mappingPrintPreview ? (
                                 <>
-                                    <div className="st-map-upload-icon" style={{ background: '#dcfce7', color: '#16a34a' }}>
-                                        <I d="M5 13l4 4L19 7" s={24} />
+                                    <div
+                                        className="st-map-upload-icon"
+                                        style={
+                                            printReady
+                                                ? { background: '#dcfce7', color: '#16a34a' }
+                                                : mappingUploadStatus === 'error'
+                                                    ? { background: '#fee2e2', color: '#dc2626' }
+                                                    : { background: '#eef2ff', color: '#4f46e5' }
+                                        }
+                                    >
+                                        {isPrintUploading ? (
+                                            <span className="st-upload-status-spinner st-upload-status-spinner-lg" aria-hidden="true" />
+                                        ) : mappingUploadStatus === 'error' ? (
+                                            <I d="M6 18L18 6M6 6l12 12" s={24} />
+                                        ) : (
+                                            <I d="M5 13l4 4L19 7" s={24} />
+                                        )}
                                     </div>
-                                    <h3>Print uploaded successfully!</h3>
-                                    <p>{mappingPrint?.file?.name || 'pattern.png'}</p>
+                                    <h3>
+                                        {isPrintUploading
+                                            ? 'Uploading print…'
+                                            : mappingUploadStatus === 'error'
+                                                ? 'Upload failed'
+                                                : 'Print uploaded successfully!'}
+                                    </h3>
+                                    <p>{printDisplayName}</p>
+                                    <UploadStatusBadge status={mappingUploadStatus} className="st-map-upload-status" />
+                                    {mappingUploadStatus === 'error' && (
+                                        <button
+                                            className="st-map-upload-btn"
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); openFilePicker(); }}
+                                        >
+                                            Try again
+                                        </button>
+                                    )}
                                 </>
                             ) : (
                                 <>
@@ -344,13 +424,28 @@ export default function MappingsTool(props) {
                             <div className="st-map-print-preview-title">Print Preview</div>
                             {mappingPrintPreview ? (
                                 <>
-                                    <img className="st-map-print-img" src={mappingPrintPreview} alt="Print Preview" />
+                                    <div className={`st-map-print-img-wrap ${isPrintUploading ? 'is-uploading' : ''}`}>
+                                        <img className="st-map-print-img" src={mappingPrintPreview} alt="Print Preview" />
+                                        {isPrintUploading && (
+                                            <div className="st-map-print-upload-overlay" aria-live="polite">
+                                                <span className="st-upload-status-spinner st-upload-status-spinner-lg" />
+                                                <span>Uploading to server…</span>
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="st-map-print-info">
                                         <div className="st-map-print-name">
                                             Print Name
-                                            <span>{mappingPrint?.file?.name || 'pattern.png'}</span>
+                                            <span>{printDisplayName}</span>
                                         </div>
-                                        <button className="st-map-replace-btn" onClick={() => openFilePicker()}>Replace</button>
+                                        <button
+                                            className="st-map-replace-btn"
+                                            type="button"
+                                            disabled={isPrintUploading}
+                                            onClick={() => openFilePicker()}
+                                        >
+                                            Replace
+                                        </button>
                                     </div>
                                 </>
                             ) : (
@@ -644,8 +739,7 @@ export default function MappingsTool(props) {
                     )}
                     <button onClick={() => {
                         setMappingStep(1);
-                        setMappingPrint(null);
-                        setMappingPrintPreview(null);
+                        resetMappingPrint();
                         setMappingSelectedProducts(new Set());
                         setMappingResults([]);
                     }} style={{ color: '#9ca3af' }}>Reset</button>
@@ -655,18 +749,23 @@ export default function MappingsTool(props) {
                         <button
                             className="st-map-primary-btn"
                             disabled={
-                                (mappingStep === 1 && !mappingPrint) ||
+                                (mappingStep === 1 && !printReady) ||
                                 (mappingStep === 2 && !mappingCategory) ||
                                 (mappingStep === 3 && mappingSelectedProducts.size === 0)
                             }
                             onClick={() => setMappingStep(s => s + 1)}
                         >
-                            {mappingStep === 3 ? 'Continue to Generate' : 'Next Step'} <I d="M5 12h14M12 5l7 7-7 7" s={16} />
+                            {mappingStep === 1 && isPrintUploading
+                                ? 'Uploading…'
+                                : mappingStep === 3
+                                    ? 'Continue to Generate'
+                                    : 'Next Step'}{' '}
+                            {!(mappingStep === 1 && isPrintUploading) && <I d="M5 12h14M12 5l7 7-7 7" s={16} />}
                         </button>
                     ) : (
                         <button
                             className={`st-map-primary-btn ${!hasEnoughMappingCredits ? 'insufficient-credits' : ''}`}
-                            disabled={!mappingPrint || mappingSelectedProducts.size === 0 || isMappingGenerating || !hasEnoughMappingCredits}
+                            disabled={!printReady || mappingSelectedProducts.size === 0 || isMappingGenerating || !hasEnoughMappingCredits}
                             onClick={generateMockups}
                             title={!hasEnoughMappingCredits ? `Need ${mappingCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Generate mockups'}
                         >

@@ -8,15 +8,16 @@
   --accent: #8B5CF6;
   --accent-warm: #F43F5E;
   --accent-cool: #10B981;
-  --bg: #F8FAFC;
-  --bg2: #F1F5F9;
-  --card: #FFFFFF;
-  --text: #0F172A;
-  --text2: #334155;
-  --muted: #64748B;
-  --border: rgba(0, 0, 0, 0.06);
+  /* Warm paper/stone surfaces (~90% lightness) — not clinical white */
+  --bg: #F3F0EC;
+  --bg2: #EBE7E2;
+  --card: #FAF8F5;
+  --text: #1C1917;
+  --text2: #44403C;
+  --muted: #78716C;
+  --border: rgba(68, 64, 60, 0.14);
   --radius: 12px;
-  --shadow: 0 10px 30px rgba(15, 23, 42, 0.03);
+  --shadow: 0 10px 30px rgba(28, 25, 23, 0.05);
   --font: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   --text-primary: var(--text);
   --text-secondary: var(--text2);
@@ -28,8 +29,8 @@
   --gradient-hover: linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%);
   --gradient-glow: 0 0 25px rgba(139, 92, 246, 0.35);
   --gradient-dark: linear-gradient(180deg, #0B0F19 0%, #111827 100%);
-  --border-glass: rgba(255, 255, 255, 0.08);
-  --bg-glass: rgba(255, 255, 255, 0.7);
+  --border-glass: rgba(250, 248, 245, 0.1);
+  --bg-glass: rgba(250, 248, 245, 0.72);
   --transition-lux: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

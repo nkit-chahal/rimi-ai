@@ -10,7 +10,7 @@
   border-radius: 14px;
   padding: 2.5rem 2rem;
   text-align: center;
-  background: #f8fafc;
+  background: var(--bg);
   cursor: pointer;
   transition: var(--transition-lux);
   box-shadow: inset 0 2px 4px rgba(0,0,0,0.01);
@@ -294,7 +294,7 @@
 .st-toggle-knob {
   width: 18px;
   height: 18px;
-  background: #fff;
+  background: var(--card);
   border-radius: 50%;
   position: absolute;
   top: 2px;
@@ -398,7 +398,7 @@
   border-radius: 99px;
   font-size: 0.75rem;
   font-weight: 700;
-  color: #64748b;
+  color: var(--muted);
   background: rgba(255,255,255,0.8);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -417,14 +417,14 @@
 }
 .st-inspire-settings-btn {
   background: none;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(68, 64, 60, 0.112);
   border-radius: 8px;
   width: 38px;
   height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #64748b;
+  color: var(--muted);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -470,7 +470,7 @@
 }
 .st-inspire-section-title p {
   font-size: 0.82rem;
-  color: #64748b;
+  color: var(--muted);
   margin: 0;
   font-weight: 500;
 }
@@ -494,8 +494,8 @@
   gap: 1rem;
 }
 .st-inspire-card {
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: var(--card);
+  border: 1px solid rgba(68, 64, 60, 0.19);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.01);
@@ -593,7 +593,7 @@
   transition: all 0.2s;
 }
 .st-inspire-var-btn:hover {
-  background: #fff;
+  background: var(--card);
   color: var(--primary);
   transform: scale(1.05);
 }
@@ -603,9 +603,9 @@
 .st-inspire-studio {
   min-height: 100%;
   padding: 0;
-  color: #111827;
+  color: var(--text);
   background:
-    linear-gradient(180deg, #fbfcff 0%, #f8fafc 55%, #f3f6fb 100%);
+    linear-gradient(180deg, #FAF8F5 0%, #F3F0EC 55%, #EBE7E2 100%);
   gap: 1.25rem;
 }
 
@@ -615,10 +615,10 @@
   align-items: flex-end;
   gap: 1.5rem;
   padding: 1.25rem 1.5rem;
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 14px;
-  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.025);
+  box-shadow: 0 8px 30px rgba(28, 25, 23, 0.04);
 }
 
 .st-inspire-kicker {
@@ -639,7 +639,7 @@
 
 .st-inspire-hero h2 {
   max-width: 720px;
-  color: #111827;
+  color: var(--text);
   font-size: 1.55rem;
   line-height: 1.2;
   font-weight: 850;
@@ -665,8 +665,8 @@
 .st-inspire-summary div {
   padding: 0.85rem;
   border-radius: 10px;
-  background: #f8fafc;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  background: var(--bg);
+  border: 1px solid rgba(68, 64, 60, 0.18);
 }
 
 .st-inspire-summary span,
@@ -675,7 +675,7 @@
 }
 
 .st-inspire-summary span {
-  color: #111827;
+  color: var(--text);
   font-size: 1rem;
   font-weight: 850;
 }
@@ -698,10 +698,10 @@
 
 .st-inspire-composer,
 .st-inspire-results-panel {
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: var(--card);
+  border: 1px solid rgba(68, 64, 60, 0.19);
   border-radius: 14px;
-  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.025);
+  box-shadow: 0 8px 30px rgba(28, 25, 23, 0.04);
 }
 
 .st-inspire-composer {
@@ -724,7 +724,7 @@
 }
 
 .st-inspire-card-head h3 {
-  color: #111827;
+  color: var(--text);
   font-size: 1.05rem;
   font-weight: 850;
   letter-spacing: -0.015em;
@@ -742,8 +742,8 @@
 .st-inspire-settings-btn,
 .st-inspire-ghost-btn {
   min-height: 40px;
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  background: #ffffff;
+  border: 1px solid rgba(68, 64, 60, 0.111);
+  background: var(--card);
   color: #344054;
   border-radius: 8px;
   display: inline-flex;
@@ -786,10 +786,10 @@
   width: 100%;
   min-height: 148px;
   resize: vertical;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(68, 64, 60, 0.112);
   border-radius: 12px;
-  background: #fbfcff;
-  color: #111827;
+  background: #FAF8F5;
+  color: var(--text);
   padding: 0.9rem 1rem;
   font: inherit;
   font-size: 0.92rem;
@@ -805,7 +805,7 @@
 
 .st-inspire-prompt-area:focus {
   border-color: rgba(139, 92, 246, 0.45);
-  background: #ffffff;
+  background: var(--card);
   box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.08);
 }
 
@@ -820,7 +820,7 @@
   min-height: 34px;
   padding: 0 0.7rem;
   border-radius: 999px;
-  background: #f8fafc;
+  background: var(--bg);
   border: 1px solid rgba(0, 0, 0, 0.055);
   color: #475467;
   font-size: 0.74rem;
@@ -839,9 +839,9 @@
   gap: 0.85rem;
   align-items: center;
   padding: 0.8rem;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(68, 64, 60, 0.19);
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--bg);
   margin-bottom: 1rem;
 }
 
@@ -850,7 +850,7 @@
   height: 56px;
   border-radius: 10px;
   border: 1px dashed rgba(139, 92, 246, 0.35);
-  background: #ffffff;
+  background: var(--card);
   color: var(--primary);
   display: flex;
   align-items: center;
@@ -875,7 +875,7 @@
 }
 
 .st-inspire-reference-card strong {
-  color: #111827;
+  color: var(--text);
   font-size: 0.86rem;
   font-weight: 800;
 }
@@ -898,9 +898,9 @@
 .st-inspire-select {
   width: 100%;
   min-height: 42px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(68, 64, 60, 0.112);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--card);
   color: #344054;
   padding: 0 0.75rem;
   font: inherit;
@@ -922,7 +922,7 @@
   padding: 0.25rem;
   border-radius: 8px;
   background: #f1f5f9;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(68, 64, 60, 0.18);
 }
 
 .st-inspire-segmented.wide {
@@ -938,9 +938,9 @@
 }
 
 .st-inspire-segmented button.active {
-  background: #ffffff;
+  background: var(--card);
   color: var(--primary);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
+  box-shadow: 0 2px 8px rgba(28, 25, 23, 0.08);
 }
 
 .st-inspire-swatches {
@@ -953,7 +953,7 @@
 .st-inspire-swatches input[type="color"] {
   width: 42px;
   height: 42px;
-  border: 2px solid #ffffff;
+  border: 2px solid var(--card);
   border-radius: 10px;
   padding: 0;
   background: none;
@@ -987,7 +987,7 @@
   min-height: 470px;
   border: 1px dashed rgba(139, 92, 246, 0.22);
   border-radius: 12px;
-  background: linear-gradient(135deg, #fbfcff 0%, #f8fafc 100%);
+  background: linear-gradient(135deg, #FAF8F5 0%, #F3F0EC 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1009,7 +1009,7 @@
 
 .st-inspire-loading strong,
 .st-inspire-empty-state strong {
-  color: #111827;
+  color: var(--text);
   font-size: 1rem;
   font-weight: 850;
 }
@@ -1035,8 +1035,8 @@
   gap: 0.85rem;
   padding: 0.8rem;
   border-radius: 10px;
-  background: #f8fafc;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: var(--bg);
+  border: 1px solid rgba(68, 64, 60, 0.19);
 }
 
 .st-inspire-progress div {
@@ -1072,8 +1072,8 @@
   border-width: 1px;
   border-color: rgba(0, 0, 0, 0.06);
   border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.03);
+  background: var(--card);
+  box-shadow: 0 6px 18px rgba(28, 25, 23, 0.045);
 }
 
 .st-inspire-studio .st-inspire-var-item.active {
@@ -1090,7 +1090,7 @@
   height: 32px;
   border-radius: 8px;
   color: #344054;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(68, 64, 60, 0.110);
 }
 
 .st-inspire-studio .st-model-modal-overlay {
@@ -1098,9 +1098,9 @@
 }
 
 .st-inspire-studio .st-model-modal-content {
-  background: #ffffff;
-  color: #111827;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid rgba(68, 64, 60, 0.110);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
 }
 
@@ -1111,7 +1111,7 @@
 
 .st-inspire-studio .st-model-header h2,
 .st-inspire-studio .st-model-name {
-  color: #111827;
+  color: var(--text);
 }
 
 .st-inspire-studio .st-model-header p,
@@ -1122,13 +1122,13 @@
 
 .st-inspire-studio .st-model-row,
 .st-inspire-studio .st-modal-group {
-  background: #f8fafc !important;
+  background: var(--bg) !important;
   border-color: rgba(0, 0, 0, 0.05) !important;
 }
 
 .st-inspire-studio .st-model-dropdown,
 .st-inspire-studio .st-modal-dark-select {
-  background: #ffffff;
+  background: var(--card);
   color: #344054;
   border-color: rgba(0, 0, 0, 0.08);
 }
@@ -1201,7 +1201,7 @@
   min-height: 114px;
   padding: 1rem 1.15rem;
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--inspire-line);
   box-shadow: 0 10px 28px rgba(35, 22, 77, 0.035);
   display: flex;
@@ -1327,7 +1327,7 @@
   min-height: 76px;
   padding: 0.75rem 0.5rem;
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--inspire-line);
   box-shadow: 0 8px 22px rgba(35, 22, 77, 0.035);
   display: flex;
@@ -1356,7 +1356,7 @@
 }
 
 .st-inspire-prompt-card {
-  background: #ffffff;
+  background: var(--card);
   border: 1.5px solid rgba(139, 92, 246, 0.22);
   border-radius: 10px;
   padding: 1rem;
@@ -1384,7 +1384,7 @@
   resize: vertical;
   border: 0;
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--card);
   color: #28304a;
   padding: 0;
   font-size: 0.9rem;
@@ -1482,7 +1482,7 @@
   height: 190px;
   border-radius: 10px;
   border: 1px solid var(--inspire-line);
-  background: #ffffff;
+  background: var(--card);
   box-shadow: 0 8px 22px rgba(35, 22, 77, 0.025);
 }
 
@@ -1532,12 +1532,12 @@
   background:
     linear-gradient(45deg, rgba(139, 92, 246, 0.035) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(139, 92, 246, 0.035) 25%, transparent 25%),
-    #ffffff;
+    var(--card);
   background-size: 22px 22px;
 }
 
 .st-inspire-photo-preview.has-image {
-  background: #fbfcff;
+  background: var(--card);
 }
 
 .st-inspire-photo-preview img {
@@ -1601,7 +1601,7 @@
   min-width: 36px;
   border-radius: 7px;
   border: 1px solid var(--inspire-line);
-  background: #ffffff;
+  background: var(--card);
   color: #7b7198;
   display: inline-flex;
   align-items: center;
@@ -1630,7 +1630,7 @@
 .st-inspire-studio .st-inspire-var-item {
   border-radius: 10px;
   border: 1px solid transparent;
-  background: #ffffff;
+  background: var(--card);
   box-shadow: 0 8px 22px rgba(35, 22, 77, 0.045);
 }
 
@@ -1672,7 +1672,7 @@
   top: 1rem;
   padding: 1rem;
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--inspire-line);
   box-shadow: 0 12px 34px rgba(35, 22, 77, 0.055);
 }
@@ -1736,7 +1736,7 @@
   min-height: 34px;
   border-radius: 7px;
   border: 1px solid var(--inspire-line);
-  background: #ffffff;
+  background: var(--card);
   color: #566078;
   font-size: 0.72rem;
   font-weight: 850;
@@ -1757,7 +1757,7 @@
   min-height: 40px;
   border-radius: 8px;
   border: 1px solid var(--inspire-line);
-  background: #ffffff;
+  background: var(--card);
   color: #46506b;
   padding: 0 0.8rem;
   font-size: 0.75rem;
@@ -1786,7 +1786,7 @@
 
 .st-inspire-model-box-head strong {
   color: var(--inspire-purple);
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid rgba(139, 92, 246, 0.14);
   border-radius: 999px;
   padding: 0.18rem 0.48rem;
@@ -1811,7 +1811,7 @@
   min-height: 48px;
   padding: 0.45rem;
   border-radius: 9px;
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid rgba(231, 227, 244, 0.8);
   margin-bottom: 0.5rem;
   text-align: left;
@@ -1921,7 +1921,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--card);
   transition: transform 0.2s;
 }
 
@@ -1997,7 +1997,7 @@
 }
 .st-inspire-textarea-wrapper textarea {
   width: 100%;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(68, 64, 60, 0.112);
   border-radius: 10px;
   padding: 0.85rem;
   font-size: 0.88rem;
@@ -2005,7 +2005,7 @@
   min-height: 80px;
   resize: vertical;
   outline: none;
-  background: #fff;
+  background: var(--card);
   transition: all 0.2s;
 }
 .st-inspire-textarea-wrapper textarea:focus {
@@ -2029,13 +2029,13 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid rgba(0,0,0,0.06);
+  border: 1px solid rgba(68, 64, 60, 0.110);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   color: var(--primary);
-  background: #fff;
+  background: var(--card);
   transition: all 0.2s;
 }
 .st-color-btn:hover {
@@ -2059,12 +2059,12 @@
 }
 .st-style-tag {
   padding: 0.45rem 0.85rem;
-  border: 1px solid rgba(0,0,0,0.06);
+  border: 1px solid rgba(68, 64, 60, 0.110);
   border-radius: 99px;
   font-size: 0.78rem;
   font-weight: 650;
   color: #475569;
-  background: #fff;
+  background: var(--card);
   cursor: pointer;
   transition: var(--transition-lux);
 }
@@ -2109,7 +2109,7 @@
 .st-generate-hint {
   text-align: center;
   font-size: 0.72rem;
-  color: #64748b;
+  color: var(--muted);
   display: flex;
   align-items: center;
   justify-content: center;

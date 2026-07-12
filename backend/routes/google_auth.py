@@ -51,7 +51,8 @@ def reset_days(user):
 
 
 def user_payload(user):
-    return {
+    from plan_tiers import attach_tier_fields
+    return attach_tier_fields({
         "id": user["id"],
         "email": user["email"],
         "role": user["role"],
@@ -65,7 +66,7 @@ def user_payload(user):
         "avatarUrl": user["avatar_url"],
         "emailVerified": bool(user["email_verified"]),
         "lastLoginAt": user["last_login_at"],
-    }
+    })
 
 
 def record_login(conn, user_id, provider):

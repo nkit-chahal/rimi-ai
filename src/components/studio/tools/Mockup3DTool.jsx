@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useMemo, useState } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, mediaUrl } from '../shared/helpers';
+import ProToolLock from '../shared/ProToolLock';
 
 const GarmentPreview3D = lazy(() => import('../../GarmentPreview3D'));
 
@@ -10,7 +11,7 @@ const GARMENT_TYPES = [
     { id: 'totebag', label: 'Tote Bag' },
 ];
 
-export default function Mockup3DTool({ preview, activeProject, controls }) {
+export default function Mockup3DTool({ preview, activeProject, controls, user, setTool }) {
     const [garmentType, setGarmentType] = useState('tshirt');
     const [tileX, setTileX] = useState(controls?.gridSize || 4);
     const [tileY, setTileY] = useState(controls?.gridSize || 4);
@@ -23,7 +24,12 @@ export default function Mockup3DTool({ preview, activeProject, controls }) {
     }, [preview, activeProject?.heroImageUrl]);
 
     return (
-        <div className="st-mockup3d-tool">
+        <div className="st-mockup3d-tool" style={{ position: 'relative' }}>
+            <ProToolLock
+                user={user}
+                featureName="3D Mockup"
+                onOpenBilling={() => typeof setTool === 'function' && setTool('billing')}
+            />
             <div className="st-mockup3d-controls">
                 <div className="st-mockup3d-garment-tabs">
                     {GARMENT_TYPES.map((g) => (

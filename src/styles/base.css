@@ -1342,6 +1342,18 @@ input[type=range]::-moz-range-track {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+.st-nav-pro-badge {
+  margin-left: auto;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #ebe8ff;
+  border: 1px solid rgba(91, 75, 255, 0.22);
+  color: #5b4bff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 .st-nav-item.coming-soon {
   opacity: 0.72;
 }

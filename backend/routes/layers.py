@@ -5,6 +5,7 @@ import base64
 
 from flask import Blueprint, request, jsonify, g
 from middleware import login_required, project_access_from_payload
+from plan_tiers import require_pro_or_error, current_user_plan
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client
 from auth import (
@@ -28,6 +29,10 @@ from security_utils import media_access_token
 import storage
 
 bp = Blueprint('layers', __name__)
+
+
+def _pro_gate(feature="Image Layers (Qwen Studio)"):
+    return require_pro_or_error(current_user_plan(), feature)
 
 
 def _enqueue_layer_job(job_type, tool_key, worker_fn, data, user_id, project_id):
@@ -71,6 +76,10 @@ def image_layers():
     return access_error
 
   user_id = g.current_user['id']
+  ok_pro, pro_body, pro_code = require_pro_or_error(current_user_plan(), 'Qwen Image Layers')
+  if not ok_pro:
+    return pro_body, pro_code
+
   required_credits = credit_requirement('imageLayers', 69)
   ok, remaining, limit, used = check_credits(user_id, required_credits)
   if not ok:
@@ -214,6 +223,9 @@ def edit_layer():
   Expects JSON: { filename | filenames[], prompt, editType, projectId, userId, async?, sessionId?, preserveSilhouette?, referenceFilename? }
   """
   data = request.get_json() or {}
+  ok_pro, pro_body, pro_code = _pro_gate("Layer editing")
+  if not ok_pro:
+    return pro_body, pro_code
   filenames = data.get('filenames') or []
   filename = os.path.basename(data.get('filename', '') or '')
   user_prompt = data.get('prompt', '')
@@ -222,6 +234,10 @@ def edit_layer():
     return access_error
 
   user_id = g.current_user['id']
+  ok_pro, pro_body, pro_code = require_pro_or_error(current_user_plan(), 'Qwen layer edit')
+  if not ok_pro:
+    return pro_body, pro_code
+
   batch_count = len(filenames) if filenames else 1
   required_credits = credit_requirement('imageLayerEdit', 35) * batch_count
   ok, remaining, limit, used = check_credits(user_id, required_credits)
@@ -256,6 +272,9 @@ def inpaint_layer():
   Expects JSON: { filename, prompt, mask, canvasWidth, canvasHeight, transform, projectId, userId, async?, sessionId? }
   """
   data = request.get_json() or {}
+  ok_pro, pro_body, pro_code = _pro_gate("Layer inpaint")
+  if not ok_pro:
+    return pro_body, pro_code
   filename = os.path.basename(data.get('filename', '') or '')
   user_prompt = (data.get('prompt') or '').strip()
   mask_data_url = data.get('mask', '')
@@ -264,6 +283,10 @@ def inpaint_layer():
     return access_error
 
   user_id = g.current_user['id']
+  ok_pro, pro_body, pro_code = require_pro_or_error(current_user_plan(), 'Qwen layer inpaint')
+  if not ok_pro:
+    return pro_body, pro_code
+
   required_credits = credit_requirement('imageLayerEdit', 35)
   ok, remaining, limit, used = check_credits(user_id, required_credits)
   if not ok:

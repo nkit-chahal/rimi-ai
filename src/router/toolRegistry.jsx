@@ -15,6 +15,7 @@ export const TOOL_COMPONENTS = {
   colorways: lazy(() => import('../components/studio/tools/ColorwaysTool')),
   'colorway-manager': lazy(() => import('../components/studio/tools/ColorwayManagerTool')),
   vectorpro: lazy(() => import('../components/studio/tools/VectorProTool')),
+  mockup3d: lazy(() => import('../components/studio/tools/Mockup3DTool')),
   'admin-dashboard': lazy(() => import('../components/studio/admin/AdminDashboard')),
   'admin-users': lazy(() => import('../components/studio/admin/AdminUsers')),
   'admin-projects': lazy(() => import('../components/studio/admin/AdminProjects')),

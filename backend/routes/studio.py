@@ -76,11 +76,12 @@ def get_studio_state(project_id=1, user_id=None):
     except Exception:
         reset_days = 30
 
-    user_payload = {
+    from plan_tiers import attach_tier_fields
+    user_payload = attach_tier_fields({
         "id": user["id"], "email": user.get("email", ""), "role": user.get("role", "user"),
         "name": user["name"], "initials": user["initials"], "plan": user["plan"],
         "creditsUsed": user["credits_used"], "creditsLimit": user["credits_limit"], "resetDays": reset_days,
-    }
+    })
     return {
         "user": user_payload,
         "activeProject": {

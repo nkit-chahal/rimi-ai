@@ -160,7 +160,8 @@ def api_login():
                 except Exception:
                     reset_days = 30
                     
-                user_payload = {
+                from plan_tiers import attach_tier_fields
+                user_payload = attach_tier_fields({
                     "id": user["id"],
                     "email": user["email"],
                     "role": user["role"],
@@ -174,7 +175,7 @@ def api_login():
                     "avatarUrl": user.get("avatar_url"),
                     "emailVerified": bool(user.get("email_verified", 0)),
                     "lastLoginAt": last_login_at,
-                }
+                })
                 token = issue_access_token(user['id'], user['role'])
                 return jsonify({'success': True, 'user': user_payload, 'token': token})
         return jsonify({'success': False, 'error': 'Invalid email or password'}), 401

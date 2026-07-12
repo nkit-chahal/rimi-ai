@@ -11,6 +11,7 @@ import { useLayerHistory } from '../hooks/useLayerHistory';
 import QwenSendToMenu from '../shared/QwenSendToMenu';
 import BeforeAfterSlider from '../shared/BeforeAfterSlider';
 import ModelLoadingBar from '../shared/ModelLoadingBar';
+import ProToolLock from '../shared/ProToolLock';
 
 function bustUrl(url) {
     if (!url) return url;
@@ -1932,9 +1933,21 @@ export default function ImageLayersTool(props) {
 
     return (
         <>
-            {renderCanvasBlock()}
+            <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <ProToolLock
+                    user={user}
+                    featureName="Qwen Image Layers"
+                    onOpenBilling={() => typeof setTool === 'function' && setTool('billing')}
+                />
+                {renderCanvasBlock()}
+            </div>
             {rightPanelEl && createPortal(
-                <div className="st-pl-right st-qwen-controls" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div className="st-pl-right st-qwen-controls" style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                    <ProToolLock
+                        user={user}
+                        featureName="Qwen Image Layers"
+                        onOpenBilling={() => typeof setTool === 'function' && setTool('billing')}
+                    />
                     {renderToolControls()}
                 </div>,
                 rightPanelEl

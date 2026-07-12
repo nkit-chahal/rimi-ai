@@ -47,11 +47,11 @@ const NAV = [
             { id: 'vectorize', label: 'Vectorize', icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z' },
             { id: 'upscale', label: 'Super Resolution', icon: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7' },
             { id: 'removebg', label: 'Remove Background', icon: 'M3 7h18M3 12h18M8 7v10M16 7v10M5 7V5a2 2 0 012-2h10a2 2 0 012 2v2' },
-            { id: 'imagelayers', label: 'Qwen Studio', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' },
+            { id: 'imagelayers', label: 'Qwen Studio', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5', requiresPro: true },
             { id: 'colorways', label: 'Colorways', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z' },
             { id: 'colorway-manager', label: 'Colorway Manager', icon: 'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83' },
             { id: 'vectorpro', label: 'Vector Pro', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485' },
-            { id: 'mockup3d', label: '3D Mockup', icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.3 7l8.7 5 8.7-5M12 22V12', comingSoon: true },
+            { id: 'mockup3d', label: '3D Mockup', icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.3 7l8.7 5 8.7-5M12 22V12', requiresPro: true },
         ],
     },
     {
@@ -275,6 +275,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             creditsUsed: stateUserMatchesCurrent ? (state.user.creditsUsed ?? currentUser.creditsUsed) : currentUser.creditsUsed,
             creditsLimit: stateUserMatchesCurrent ? (state.user.creditsLimit ?? currentUser.creditsLimit) : currentUser.creditsLimit,
             resetDays: stateUserMatchesCurrent ? (state.user.resetDays ?? currentUser.resetDays) : currentUser.resetDays,
+            plan: stateUserMatchesCurrent ? (state.user.plan ?? currentUser.plan) : currentUser.plan,
+            isPro: stateUserMatchesCurrent ? (state.user.isPro ?? currentUser.isPro) : currentUser.isPro,
+            tier: stateUserMatchesCurrent ? (state.user.tier ?? currentUser.tier) : currentUser.tier,
         }
         : state.user;
 
@@ -302,14 +305,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     }, [fetchCreditPricing]);
 
     const updateCreditsFromResponse = (responseData) => {
-        if (responseData && responseData.creditsUsed !== undefined) {
+        if (responseData && (responseData.creditsUsed !== undefined || responseData.plan !== undefined || responseData.isPro !== undefined)) {
             setState(prev => ({
                 ...prev,
                 user: {
                     ...prev.user,
                     id: prev.user?.id ?? currentUser?.id,
-                    creditsUsed: responseData.creditsUsed,
+                    creditsUsed: responseData.creditsUsed ?? prev.user?.creditsUsed ?? currentUser?.creditsUsed,
                     creditsLimit: responseData.creditsLimit ?? prev.user?.creditsLimit ?? currentUser?.creditsLimit,
+                    ...(responseData.plan !== undefined ? { plan: responseData.plan } : {}),
+                    ...(responseData.isPro !== undefined ? { isPro: responseData.isPro } : {}),
+                    ...(responseData.tier !== undefined ? { tier: responseData.tier } : {}),
                 }
             }));
         }
@@ -1064,6 +1070,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                                 <I d={it.icon} s={18} />
                                                 <span>{navLabel(it.id)}</span>
                                                 {it.comingSoon && <span className="st-nav-soon-badge">Soon</span>}
+                                                {it.requiresPro && !user?.isPro && <span className="st-nav-pro-badge">Pro</span>}
                                             </button>
                                         ))}
                                     </div>

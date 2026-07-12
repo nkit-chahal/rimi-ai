@@ -9,16 +9,32 @@ import ImageDropzone from '../shared/ImageDropzone';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
 import ModelLoadingBar from '../shared/ModelLoadingBar';
+import { isProUser } from '../shared/planTiers';
+
+const EXTRACT_CREDIT_KEYS = {
+    'xai/grok-imagine-image': 'extract_grok',
+    'google/nano-banana': 'extract_nano_banana',
+    'google/nano-banana-2': 'extract_nano_banana_2',
+    'bytedance/seedream-4.5': 'extract_seedream',
+    'google/imagen-4-fast': 'extract_imagen_fast',
+    'google/imagen-4-ultra': 'extract_imagen_ultra',
+    'black-forest-labs/flux-schnell': 'extract_flux_schnell',
+    'black-forest-labs/flux-2-pro': 'extract_flux_2_pro',
+    'openai/gpt-image-2': 'extract_gpt_image_2',
+};
 
 // Per-model credits must mirror EXTRACT_MODELS in backend/routes/generation.py
-// and DEFAULT_CREDIT_PRICING in backend/db.py.  At 4 credits per INR 1, the
-// credits below give ~57% gross margin per call.
+// Formula: ceil(usd * 1150). Pro models gated by plan.
 const EXTRACT_MODEL_DEFS = [
-    { id: 'xai/grok-imagine-image', name: 'Grok Imagine', sub: 'xAI', brand: 'xai', logo: 'GR', credits: 23, accent: '#1d9bf0' },
-    { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: 46, accent: '#f59e0b' },
-
-    { id: 'google/nano-banana', name: 'Nano Banana', sub: 'Google', brand: 'google', logo: 'NB', credits: 45, accent: '#34a853' },
-    { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', credits: 78, accent: '#4285f4' },
+    { id: 'black-forest-labs/flux-schnell', name: 'Flux Schnell', sub: 'Black Forest', brand: 'bfl', logo: 'FS', credits: 4, accent: '#a855f7', tier: 'normal' },
+    { id: 'xai/grok-imagine-image', name: 'Grok Imagine', sub: 'xAI', brand: 'xai', logo: 'GR', credits: 23, accent: '#1d9bf0', tier: 'normal' },
+    { id: 'google/imagen-4-fast', name: 'Imagen 4 Fast', sub: 'Google', brand: 'google', logo: 'I4', credits: 23, accent: '#34a853', tier: 'normal' },
+    { id: 'google/nano-banana', name: 'Nano Banana', sub: 'Google', brand: 'google', logo: 'NB', credits: 45, accent: '#34a853', tier: 'normal' },
+    { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: 46, accent: '#f59e0b', tier: 'pro' },
+    { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest', brand: 'bfl', logo: 'F2', credits: 52, accent: '#7c3aed', tier: 'pro' },
+    { id: 'google/imagen-4-ultra', name: 'Imagen 4 Ultra', sub: 'Google', brand: 'google', logo: 'IU', credits: 69, accent: '#0f9d58', tier: 'pro' },
+    { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', credits: 78, accent: '#4285f4', tier: 'pro' },
+    { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'G2', credits: 148, accent: '#111827', tier: 'pro' },
 ];
 
 export default function PatternTool({
@@ -28,12 +44,16 @@ export default function PatternTool({
 }) {
     const handoffSetters = { setTool, setEnhUrl, setSeamlessUrl, setRepeatUrl, setUploads, tool };
     // ===== LOCAL STATE =====
+    const userIsPro = isProUser(user);
     const [extractResults, setExtractResults] = useState(EXTRACT_MODEL_DEFS.map(m => ({ ...m, loading: false, url: null, error: null, duration: 0 })));
-    const [enabledModels, setEnabledModels] = useState(() => EXTRACT_MODEL_DEFS.reduce((acc, m) => ({ ...acc, [m.id]: true }), {}));
-    const activeModels = EXTRACT_MODEL_DEFS.filter(m => enabledModels[m.id]);
+    const [enabledModels, setEnabledModels] = useState(() =>
+        EXTRACT_MODEL_DEFS.reduce((acc, m) => ({ ...acc, [m.id]: m.tier !== 'pro' }), {})
+    );
+    const activeModels = EXTRACT_MODEL_DEFS.filter(m => enabledModels[m.id] && (m.tier !== 'pro' || userIsPro));
     const activeModelCount = activeModels.length;
-    const creditsPerModel = creditPricing?.extract || 148;
-    const modelCreditCost = (model) => model.credits || creditsPerModel;
+    const creditsPerModel = creditPricing?.extract || 45;
+    const modelCreditCost = (model) =>
+        creditPricing?.[EXTRACT_CREDIT_KEYS[model.id]] || model.credits || creditsPerModel;
     const extractCreditCost = activeModels.reduce((sum, model) => sum + modelCreditCost(model), 0);
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
     const hasEnoughExtractCredits = userRemainingCredits >= extractCreditCost;
@@ -62,8 +82,14 @@ export default function PatternTool({
             return;
         }
 
-        const modelsToRun = EXTRACT_MODEL_DEFS.filter(m => enabledModels[m.id]);
+        const modelsToRun = EXTRACT_MODEL_DEFS.filter(m => enabledModels[m.id] && (m.tier !== 'pro' || userIsPro));
         if (modelsToRun.length === 0) return;
+        const lockedPro = EXTRACT_MODEL_DEFS.some(m => enabledModels[m.id] && m.tier === 'pro' && !userIsPro);
+        if (lockedPro) {
+            setError('Pro models selected — upgrade via Billing (Pro or Scale pack) to unlock them.');
+            setTool?.('billing');
+            return;
+        }
         const requiredCredits = modelsToRun.reduce((sum, model) => sum + modelCreditCost(model), 0);
         if (userRemainingCredits < requiredCredits) {
             setError(`Insufficient credits. Pattern extraction needs ${requiredCredits} credits, but you have ${userRemainingCredits} remaining.`);
@@ -241,8 +267,12 @@ export default function PatternTool({
                         </div>
                         <button
                             onClick={() => {
-                                const allOn = EXTRACT_MODEL_DEFS.every(m => enabledModels[m.id]);
-                                const next = EXTRACT_MODEL_DEFS.reduce((acc, m) => ({ ...acc, [m.id]: !allOn }), {});
+                                const selectable = EXTRACT_MODEL_DEFS.filter(m => m.tier !== 'pro' || userIsPro);
+                                const allOn = selectable.every(m => enabledModels[m.id]);
+                                const next = EXTRACT_MODEL_DEFS.reduce((acc, m) => {
+                                    if (m.tier === 'pro' && !userIsPro) return { ...acc, [m.id]: false };
+                                    return { ...acc, [m.id]: !allOn };
+                                }, {});
                                 setEnabledModels(next);
                             }}
                             disabled={anyLoading}
@@ -251,38 +281,51 @@ export default function PatternTool({
                                 fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px',
                             }}
                         >
-                            {EXTRACT_MODEL_DEFS.every(m => enabledModels[m.id]) ? 'Deselect All' : 'Select All'}
+                            {EXTRACT_MODEL_DEFS.filter(m => m.tier !== 'pro' || userIsPro).every(m => enabledModels[m.id]) ? 'Deselect All' : 'Select All'}
                             <I d="M5 13l4 4L19 7" s={14} />
                         </button>
                     </div>
                     <div className="st-pattern-model-grid">
                         {EXTRACT_MODEL_DEFS.map(m => {
                             const on = enabledModels[m.id];
+                            const locked = m.tier === 'pro' && !userIsPro;
                             const descriptions = {
                                 'xai/grok-imagine-image': { desc: 'Fast and creative with strong pattern interpretation.', tag: 'Fast', tagColor: '#1d9bf0' },
-                                'bytedance/seedream-4.5': { desc: 'Strong with texture preservation and soft details.', tag: 'Textured', tagColor: '#f59e0b' },
+                                'bytedance/seedream-4.5': { desc: 'Strong with texture preservation and soft details.', tag: 'Pro', tagColor: '#f59e0b' },
                                 'black-forest-labs/flux-schnell': { desc: 'Ultra fast and budget-friendly generation.', tag: 'Budget', tagColor: '#a855f7' },
+                                'google/imagen-4-fast': { desc: 'Quick Google extract drafts (caption-assisted).', tag: 'Fast', tagColor: '#34a853' },
                                 'google/nano-banana': { desc: 'Balanced quality and cost efficiency.', tag: 'Balanced', tagColor: '#34a853' },
-                                'google/nano-banana-2': { desc: 'Enhanced quality with strong pattern extraction.', tag: 'Quality', tagColor: '#4285f4' },
+                                'google/nano-banana-2': { desc: 'Enhanced quality with strong pattern extraction.', tag: 'Pro', tagColor: '#4285f4' },
+                                'black-forest-labs/flux-2-pro': { desc: 'High-fidelity Flux 2 extract with reference image.', tag: 'Pro', tagColor: '#7c3aed' },
+                                'openai/gpt-image-2': { desc: 'Top prompt adherence — quality=high ($0.128).', tag: 'Pro', tagColor: '#111827' },
+                                'google/imagen-4-ultra': { desc: 'Highest Imagen quality for polished tiles.', tag: 'Pro', tagColor: '#0f9d58' },
                             };
-                            const info = descriptions[m.id] || { desc: '', tag: '', tagColor: '#888' };
+                            const info = descriptions[m.id] || { desc: '', tag: m.tier === 'pro' ? 'Pro' : '', tagColor: '#888' };
                             return (
                                 <div
                                     key={m.id}
-                                    className={`st-pattern-model-select-card ${on ? 'selected' : ''}`}
-                                    onClick={() => !anyLoading && setEnabledModels(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                                    className={`st-pattern-model-select-card ${on && !locked ? 'selected' : ''}`}
+                                    onClick={() => {
+                                        if (anyLoading) return;
+                                        if (locked) {
+                                            setError('That model is Pro-only. Open Billing and choose a Pro or Scale pack.');
+                                            if (typeof setTool === 'function') setTool('billing');
+                                            return;
+                                        }
+                                        setEnabledModels(prev => ({ ...prev, [m.id]: !prev[m.id] }));
+                                    }}
                                     style={{
                                         '--model-accent': m.accent,
                                         cursor: anyLoading ? 'not-allowed' : 'pointer',
-                                        opacity: anyLoading ? 0.6 : 1,
+                                        opacity: anyLoading || locked ? 0.55 : 1,
                                     }}
                                 >
-                                    <div className={`st-pattern-model-check ${on ? 'on' : ''}`}>
-                                        {on && <I d="M5 13l4 4L19 7" s={12} />}
+                                    <div className={`st-pattern-model-check ${on && !locked ? 'on' : ''}`}>
+                                        {on && !locked && <I d="M5 13l4 4L19 7" s={12} />}
                                     </div>
                                     <span className={`st-model-brand st-pattern-model-brand ${m.brand}`}>{m.logo}</span>
-                                    <div className="st-pattern-model-name">{m.name}</div>
-                                    <div className="st-pattern-model-desc">{info.desc}</div>
+                                    <div className="st-pattern-model-name">{m.name}{m.tier === 'pro' ? ' · Pro' : ''}</div>
+                                    <div className="st-pattern-model-desc">{info.desc} · {m.credits} cr</div>
                                     <span
                                         className="st-pattern-model-tag"
                                         style={{

@@ -10,6 +10,7 @@ from flask import Blueprint, g, jsonify, request
 
 from db import db, db_lock
 from middleware import login_required
+from plan_tiers import is_pro_plan, attach_tier_fields
 
 bp = Blueprint("billing", __name__)
 
@@ -29,6 +30,7 @@ BILLING_PLANS = [
     {
         "id": "free",
         "label": "Free",
+        "track": "basic",
         "description": "Trial credits for testing the studio.",
         "credits": 50,
         "amount": 0,
@@ -36,7 +38,7 @@ BILLING_PLANS = [
         "badge": "",
         "features": [
             "50 starting credits",
-            "Try all AI tools",
+            "Normal models only",
             "Recharge anytime",
         ],
         "disabled": True,
@@ -44,6 +46,7 @@ BILLING_PLANS = [
     {
         "id": "starter",
         "label": "Starter",
+        "track": "basic",
         "description": "Small production runs and evaluation.",
         "credits": 3960,
         "amount": 52800,
@@ -51,13 +54,14 @@ BILLING_PLANS = [
         "badge": "",
         "features": [
             "3,960 AI credits",
-            "~88 Pattern Extractions (Nano Banana)",
-            "~59 Mockups / ~68 Seamless runs",
+            "Normal models: Flux Schnell, Grok, Imagen 4 Fast, Nano Banana",
+            "Mappings (Nano Banana 2), Seamless, Repeat, Colorways, Vectorize",
         ],
     },
     {
         "id": "creator",
         "label": "Creator",
+        "track": "basic",
         "description": "Best value for active textile workflows.",
         "credits": 14520,
         "amount": 193600,
@@ -65,35 +69,38 @@ BILLING_PLANS = [
         "badge": "Popular",
         "features": [
             "14,520 AI credits",
-            "~33 full design workflows",
+            "Normal models + Mappings mockups",
             "Recommended for active studios",
         ],
     },
     {
         "id": "pro",
         "label": "Pro",
-        "description": "For frequent studio use and client work.",
+        "track": "pro",
+        "description": "Unlock Pro models and Pro-only studio tools.",
         "credits": 65340,
         "amount": 871200,
         "currency": "INR",
         "badge": "",
         "features": [
             "65,340 AI credits",
-            "~150 full design workflows",
-            "All AI tools unlocked",
+            "GPT Image 2, Imagen 4 Ultra, Flux 2 Pro",
+            "Nano Banana 2 + Seedream 4.5 (Inspire/Extract)",
+            "Qwen Studio, 3D Mockup",
         ],
     },
     {
         "id": "scale",
         "label": "Scale",
-        "description": "For agencies and high-volume teams.",
+        "track": "pro",
+        "description": "For agencies and high-volume Pro teams.",
         "credits": 197340,
         "amount": 2631200,
         "currency": "INR",
         "badge": "",
         "features": [
             "197,340 AI credits",
-            "~454 full design workflows",
+            "All Pro models + tools unlocked",
             "Priority support",
         ],
     },
@@ -348,6 +355,8 @@ def billing_overview():
         "plans": [_public_plan(plan) for plan in BILLING_PLANS],
         "usage": {
             "plan": user["plan"] if user else "Free Trial",
+            "isPro": is_pro_plan(user["plan"]) if user else False,
+            "tier": "pro" if (user and is_pro_plan(user["plan"])) else "normal",
             "creditsUsed": credits_used,
             "creditsLimit": credits_limit,
             "creditsRemaining": max(0, credits_limit - credits_used),
@@ -501,7 +510,7 @@ def verify_payment():
             updated_user = None
             if payment["user_id"]:
                 updated_user = conn.execute(
-                    "SELECT credits_used, credits_limit FROM users WHERE id = ?",
+                    "SELECT plan, credits_used, credits_limit FROM users WHERE id = ?",
                     (payment["user_id"],)
                 ).fetchone()
         finally:
@@ -509,10 +518,11 @@ def verify_payment():
 
     credits_payload = {}
     if updated_user:
-        credits_payload = {
+        credits_payload = attach_tier_fields({
             "creditsUsed": updated_user["credits_used"],
             "creditsLimit": updated_user["credits_limit"],
-        }
+            "plan": updated_user["plan"],
+        })
 
     return jsonify({
         "success": True,

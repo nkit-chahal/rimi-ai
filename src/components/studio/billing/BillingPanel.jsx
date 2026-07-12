@@ -7,6 +7,7 @@ import { trackEvent } from '../../../observability';
 export default function BillingPanel({ user, userRemainingCredits, currentToken, updateCreditsFromResponse, loadStudioState, activeProject }) {
     const [paymentStatus, setPaymentStatus] = useState({ loadingPackId: null, message: '', error: '' });
     const [razorpayKeyId, setRazorpayKeyId] = useState(import.meta.env.VITE_RAZORPAY_KEY_ID || '');
+    const [billingTrack, setBillingTrack] = useState(() => (user?.isPro ? 'pro' : 'basic'));
     const [billingOverview, setBillingOverview] = useState({
         loading: false,
         plans: [],
@@ -165,12 +166,18 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
 
     const usage = billingOverview.usage || {
         plan: user.plan || 'Free Trial',
+        isPro: Boolean(user.isPro),
+        tier: user.tier || (user.isPro ? 'pro' : 'normal'),
         creditsUsed: user.creditsUsed || 0,
         creditsLimit: user.creditsLimit || 0,
         creditsRemaining: userRemainingCredits,
         usagePct: user.creditsLimit ? Math.min(100, Math.round(((user.creditsUsed || 0) / user.creditsLimit) * 100)) : 0,
     };
-    const plans = billingOverview.plans || [];
+    const plans = (billingOverview.plans || []).filter((pack) => {
+        if (pack.id === 'free') return false;
+        const track = (pack.track || (['pro', 'scale'].includes(pack.id) ? 'pro' : 'basic'));
+        return track === billingTrack;
+    });
     const currentPlanName = (usage.plan || user.plan || 'Free').toLowerCase();
     const formatDate = (value) => {
         if (!value) return 'Pending';
@@ -217,6 +224,7 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                     <div>
                         <span>Current plan</span>
                         <strong>{usage.plan || 'Free Trial'}</strong>
+                        <em className="st-billing-tier-pill">{usage.isPro || user?.isPro ? 'Pro tier' : 'Basic tier'}</em>
                     </div>
                     <div className={`st-billing-status ${billingOverview.razorpayConfigured ? 'ready' : 'missing'}`}>
                         <I d={billingOverview.razorpayConfigured ? 'M20 6L9 17l-5-5' : 'M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z'} s={14} />
@@ -236,11 +244,33 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                     <span>INR</span>
                     <strong>India billing</strong>
                 </div>
-                <div className="st-billing-cycle">
-                    <button className="active">Credit packs</button>
-                    <button disabled>Monthly</button>
+                <div className="st-billing-cycle st-billing-track" role="tablist" aria-label="Billing track">
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={billingTrack === 'basic'}
+                        className={billingTrack === 'basic' ? 'active' : ''}
+                        onClick={() => setBillingTrack('basic')}
+                    >
+                        Basic
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={billingTrack === 'pro'}
+                        className={billingTrack === 'pro' ? 'active' : ''}
+                        onClick={() => setBillingTrack('pro')}
+                    >
+                        Pro
+                    </button>
                 </div>
             </div>
+
+            {billingTrack === 'pro' && (
+                <p className="st-billing-track-copy">
+                    Pro unlocks GPT Image 2, Imagen 4 Ultra, Flux 2 Pro, Nano Banana 2, Seedream, Qwen Studio, and 3D Mockup.
+                </p>
+            )}
 
             <div className="st-billing-plans">
                 {billingOverview.loading && plans.length === 0 ? (
@@ -253,7 +283,7 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                     const isCurrent = currentPlanName.includes((pack.label || '').toLowerCase());
                     const priceLabel = pack.priceLabel || (amount ? `₹${(amount / 100).toLocaleString('en-IN')}` : '₹0');
                     return (
-                        <article key={pack.id} className={`st-billing-plan ${pack.badge ? 'highlighted' : ''}`}>
+                        <article key={pack.id} className={`st-billing-plan ${pack.badge ? 'highlighted' : ''} ${pack.track === 'pro' ? 'pro-track' : ''}`}>
                             <div className="st-billing-plan-top">
                                 <div>
                                     <h3>{pack.label}</h3>
@@ -266,7 +296,7 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                                 <span>{amount ? 'one-time' : 'trial'}</span>
                             </div>
                             <button
-                                className={`st-billing-pay ${pack.badge ? 'primary' : ''}`}
+                                className={`st-billing-pay ${pack.badge || pack.track === 'pro' ? 'primary' : ''}`}
                                 type="button"
                                 onClick={() => startRazorpayCheckout(pack)}
                                 disabled={isLoading || !pack.checkoutEnabled || !billingOverview.razorpayConfigured}

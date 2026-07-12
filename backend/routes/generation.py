@@ -26,6 +26,7 @@ import storage
 from jobs import enqueue_or_run
 from workers import run_generation_job
 from rate_limits import expensive_generation_rate_limit, generation_rate_limit
+from plan_tiers import require_model_or_error, current_user_plan, flux2_pro_credits
 
 bp = Blueprint('generation', __name__)
 
@@ -185,6 +186,7 @@ EXTRACT_PROMPT = (
 )
 
 EXTRACT_MODELS = [
+    # --- Normal tier ---
     {
         'id': 'xai/grok-imagine-image',
         'name': 'Grok Imagine',
@@ -194,16 +196,7 @@ EXTRACT_MODELS = [
         'supports_image': True,
         'cost_per_image': 0.02,
         'credits': 23,
-    },
-    {
-        'id': 'bytedance/seedream-4.5',
-        'name': 'Seedream 4.5',
-        'prompt': EXTRACT_PROMPT,
-        'input_key': 'image_input',
-        'input_list': True,
-        'supports_image': True,
-        'cost_per_image': 0.04,
-        'credits': 46,
+        'tier': 'normal',
     },
     {
         'id': 'google/nano-banana',
@@ -214,6 +207,41 @@ EXTRACT_MODELS = [
         'supports_image': True,
         'cost_per_image': 0.039,
         'credits': 45,
+        'tier': 'normal',
+    },
+    {
+        'id': 'google/imagen-4-fast',
+        'name': 'Imagen 4 Fast',
+        'prompt': EXTRACT_PROMPT,
+        'input_key': None,
+        'input_list': False,
+        'supports_image': False,  # text-only on Replicate; uses Groq caption
+        'cost_per_image': 0.02,
+        'credits': 23,
+        'tier': 'normal',
+    },
+    {
+        'id': 'black-forest-labs/flux-schnell',
+        'name': 'Flux Schnell',
+        'prompt': EXTRACT_PROMPT,
+        'input_key': None,
+        'input_list': False,
+        'supports_image': False,  # text-only on Replicate; uses Groq caption
+        'cost_per_image': 0.003,
+        'credits': 4,
+        'tier': 'normal',
+    },
+    # --- Pro tier ---
+    {
+        'id': 'bytedance/seedream-4.5',
+        'name': 'Seedream 4.5',
+        'prompt': EXTRACT_PROMPT,
+        'input_key': 'image_input',
+        'input_list': True,
+        'supports_image': True,
+        'cost_per_image': 0.04,
+        'credits': 46,
+        'tier': 'pro',
     },
     {
         'id': 'google/nano-banana-2',
@@ -224,6 +252,45 @@ EXTRACT_MODELS = [
         'supports_image': True,
         'cost_per_image': 0.067,
         'credits': 78,
+        'tier': 'pro',
+    },
+    {
+        # Replicate 2026-07-12: quality=high $0.128 → ceil(0.128*1150)=148
+        'id': 'openai/gpt-image-2',
+        'name': 'GPT Image 2',
+        'prompt': EXTRACT_PROMPT,
+        'input_key': 'input_images',
+        'input_list': True,
+        'supports_image': True,
+        'cost_per_image': 0.128,
+        'credits': 148,
+        'tier': 'pro',
+        'extra_input': {'quality': 'high', 'output_format': 'png'},
+    },
+    {
+        # Replicate 2026-07-12: $0.06 flat → 69 (text-only; caption → T2I)
+        'id': 'google/imagen-4-ultra',
+        'name': 'Imagen 4 Ultra',
+        'prompt': EXTRACT_PROMPT,
+        'input_key': None,
+        'input_list': False,
+        'supports_image': False,
+        'cost_per_image': 0.06,
+        'credits': 69,
+        'tier': 'pro',
+    },
+    {
+        # Replicate 2026-07-12: $0.015 run + $0.015 in + $0.015 out = $0.045 → 52
+        'id': 'black-forest-labs/flux-2-pro',
+        'name': 'Flux 2 Pro',
+        'prompt': EXTRACT_PROMPT,
+        'input_key': 'input_images',
+        'input_list': True,
+        'supports_image': True,
+        'cost_per_image': 0.045,
+        'credits': 52,
+        'tier': 'pro',
+        'extra_input': {'resolution': '1 MP', 'output_format': 'png'},
     },
 ]
 
@@ -232,19 +299,16 @@ EXTRACT_MODELS = [
 # Replaces the old flat `credit_requirement('inspire', 310)`.
 # ---------------------------------------------------------------------------
 MODEL_TO_CREDITS = {
-
-
-
     'google/imagen-4-fast':            23,
+    'google/imagen-4-ultra':           69,   # $0.06 → 69 (2026-07-12)
     'google/nano-banana':              45,
     'google/nano-banana-2':            78,
-
     'google/upscaler':                 23,
     'bytedance/seedream-4.5':          46,
     'black-forest-labs/flux-schnell':  4,
+    'black-forest-labs/flux-2-pro':    35,   # text-only 1MP; +ref billed 52 at call site
     'black-forest-labs/flux-fill-pro': 58,
-
-
+    'openai/gpt-image-2':              148,  # quality=high $0.128
     'qwen/qwen-image-edit':            35,
     'qwen/qwen-image-layered':         69,
     'recraft-ai/recraft-vectorize':    12,
@@ -301,6 +365,8 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
                 replicate_input[model_cfg['input_key']] = data_uri
             if 'seedream' in model_id:
                 replicate_input["size"] = "2K"
+            extra = model_cfg.get('extra_input') or {}
+            replicate_input.update(extra)
         else:
             # Text-only fallback — caption → T2I (weaker; avoid for extract models)
             desc = image_description or "detailed fabric pattern"
@@ -380,9 +446,20 @@ def extract_design_multi():
     if access_error:
         return access_error
     user_id = g.current_user['id']
+    plan = current_user_plan()
+    allowed_models = [
+        m for m in EXTRACT_MODELS
+        if require_model_or_error(plan, m['id'], 'extract')[0]
+    ]
+    if not allowed_models:
+        return jsonify({
+            'success': False,
+            'error': 'No extract models available for your plan. Upgrade to Pro for premium models.',
+            'requiresPro': True,
+        }), 403
 
-    required_credits = sum(int(m.get('credits') or credit_requirement('extract', 148)) for m in EXTRACT_MODELS)
-    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', len(EXTRACT_MODELS))
+    required_credits = sum(int(m.get('credits') or credit_requirement('extract', 148)) for m in allowed_models)
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', len(allowed_models))
     if not ok:
         return jsonify(err), 403
 
@@ -393,22 +470,22 @@ def extract_design_multi():
         mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"
         data_uri = f"data:{mime_type};base64,{encoded_string}"
 
-    print(f"  [Extract Multi] Launching 4 models in parallel for {filename}...")
+    print(f"  [Extract Multi] Launching {len(allowed_models)} models in parallel for {filename}...")
 
     # Describe the image once for text-only models
-    has_text_only = any(not m['supports_image'] for m in EXTRACT_MODELS)
+    has_text_only = any(not m['supports_image'] for m in allowed_models)
     image_description = None
     if has_text_only:
         print("  [Extract Multi] Describing image for text-only models...")
         image_description = _describe_image_for_extraction(data_uri)
 
-    # Run all 4 models in parallel
+    # Run allowed models in parallel
     results = []
     total_credits = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(allowed_models))) as executor:
         futures = {
             executor.submit(_run_single_extract, m, data_uri, project_id, filename, image_description): m
-            for m in EXTRACT_MODELS
+            for m in allowed_models
         }
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
@@ -420,7 +497,7 @@ def extract_design_multi():
     results.sort(key=lambda r: model_order.get(r['modelId'], 99))
 
     successful = sum(1 for r in results if r['resultUrl'])
-    print(f"  [Extract Multi] Complete! {successful}/4 models succeeded. Total credits: {total_credits}")
+    print(f"  [Extract Multi] Complete! {successful}/{len(allowed_models)} models succeeded. Total credits: {total_credits}")
 
     adjust_reserved_credits(user_id, project_id, required_credits, total_credits, note='Extract multi partial refund')
 
@@ -476,6 +553,10 @@ def extract_design_single():
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), None)
     if not model_cfg:
         return jsonify({'error': f'Unknown model: {model_id}'}), 400
+
+    ok_tier, tier_body, tier_code = require_model_or_error(current_user_plan(), model_id, 'extract')
+    if not ok_tier:
+        return tier_body, tier_code
 
     required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 148))
     ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
@@ -536,6 +617,10 @@ def extract_edit():
         return jsonify({'error': 'Image URL is required'}), 400
 
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
+    ok_tier, tier_body, tier_code = require_model_or_error(current_user_plan(), model_id, 'extract')
+    if not ok_tier:
+        return tier_body, tier_code
+
     required_credits = int(model_cfg.get('credits') or credit_requirement('extract', 78))
     ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
     if not ok:
@@ -680,12 +765,24 @@ def generate_inspirations():
         return access_error
     user_id = g.current_user['id']
     requested_models = data.get('models') or ['google/nano-banana']
+    plan = current_user_plan()
+    for mid in requested_models:
+        ok_tier, tier_body, tier_code = require_model_or_error(plan, mid, 'inspire')
+        if not ok_tier:
+            return tier_body, tier_code
+
     requested_model_count = 1 if use_seamless else max(1, len(requested_models))
+    has_ref = bool(data_uri)
+    def _inspire_model_credits(mid):
+        if mid == 'black-forest-labs/flux-2-pro':
+            return flux2_pro_credits(has_reference=has_ref)
+        return MODEL_TO_CREDITS.get(mid, DEFAULT_INSPIRE_CREDITS)
+
     # Up-front credit check uses the most expensive selected model so the user
     # is never undercharged.  Per-call deduction inside the loop uses the
-    # actual model via MODEL_TO_CREDITS.
+    # actual model via MODEL_TO_CREDITS / flux2 helper.
     _max_model_credits = max(
-        (MODEL_TO_CREDITS.get(m, DEFAULT_INSPIRE_CREDITS) for m in requested_models),
+        (_inspire_model_credits(m) for m in requested_models),
         default=DEFAULT_INSPIRE_CREDITS,
     )
     required_credits = _max_model_credits * count * requested_model_count
@@ -746,7 +843,13 @@ def generate_inspirations():
                     replicate_input["aspect_ratio"] = aspect_ratio
                     
                     # Resolution - model-specific handling
-                    if 'flux' in model_id:
+                    if model_id == 'black-forest-labs/flux-2-pro':
+                        replicate_input["resolution"] = "1 MP"
+                        replicate_input["output_format"] = "png"
+                    elif model_id == 'openai/gpt-image-2':
+                        replicate_input["quality"] = "high"
+                        replicate_input["output_format"] = "png"
+                    elif 'flux' in model_id:
                         replicate_input["width"] = width
                         replicate_input["height"] = height
                     elif 'seedream' in model_id:
@@ -754,8 +857,10 @@ def generate_inspirations():
                     
                     # Reference image
                     if data_uri:
-                        if 'nano-banana' in model_id:
+                        if 'nano-banana' in model_id or 'seedream' in model_id:
                             replicate_input["image_input"] = [data_uri]
+                        elif model_id in ('openai/gpt-image-2', 'black-forest-labs/flux-2-pro'):
+                            replicate_input["input_images"] = [data_uri]
                         else:
                             replicate_input["image"] = data_uri
                         
@@ -766,18 +871,17 @@ def generate_inspirations():
                     # Exact Per-Image Costs from Replicate Invoice JSON
                     # These models are billed per-image, not per-second!
                     per_image_costs = {
-
                         'xai/grok-imagine-image': 0.02,
                         'google/imagen-4-fast': 0.02,
-
+                        'google/imagen-4-ultra': 0.06,
                         'google/nano-banana': 0.039,
                         'google/nano-banana-2': 0.067,
-
                         'bytedance/seedream-4.5': 0.04,
                         'black-forest-labs/flux-schnell': 0.003,
+                        'black-forest-labs/flux-2-pro': 0.045 if has_ref else 0.03,
                         'black-forest-labs/flux-fill-pro': 0.05,
-                        'qwen/qwen-image-layered': 0.04, # 0.01 + 0.03 run cost
-
+                        'openai/gpt-image-2': 0.128,
+                        'qwen/qwen-image-layered': 0.04,
                     }
                     
                     # Determine cost
@@ -789,7 +893,7 @@ def generate_inspirations():
                         # like fofr/style-transfer (L40S) or seamless-texture (H100)
                         cost_usd = duration * 0.001525 
                     
-                    credits_used = MODEL_TO_CREDITS.get(model_id, DEFAULT_INSPIRE_CREDITS)
+                    credits_used = _inspire_model_credits(model_id)
                     
                     # Log actual cost to vendor, but deduct retail credits from user
                     log_replicate_call(project_id, model_id, duration, credits_used, cost_usd)
