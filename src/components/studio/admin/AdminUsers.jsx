@@ -205,6 +205,28 @@ const AdminUsers = ({
             .finally(() => setBusyUserId(null));
     };
 
+    const handleExtendExpiry = (user) => {
+        if (!window.confirm(`Extend expiry for "${user.name}" by 30 days?`)) return;
+        setBusyUserId(user.id);
+        fetch(`${API}/api/admin/extend-expiry`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${currentToken}` },
+            body: JSON.stringify({ userId: user.id }),
+        })
+            .then((r) => r.json())
+            .then((d) => {
+                if (d.success) {
+                    const daysLabel = d.resetDays != null ? ` (${d.resetDays}d left)` : '';
+                    showFeedback(`✓ Extended expiry for ${user.name}${daysLabel}`);
+                    fetchAdminUsers();
+                } else {
+                    showFeedback('✗ ' + (d.error || 'Failed to extend expiry'));
+                }
+            })
+            .catch(() => showFeedback('✗ Failed to extend expiry'))
+            .finally(() => setBusyUserId(null));
+    };
+
     const renderUserFormFields = (form, setForm, { passwordRequired }) => (
         <>
             {[
@@ -375,6 +397,15 @@ const AdminUsers = ({
                                             <td>
                                                 <div className="admin-user-actions">
                                                     <button type="button" className="admin-action-btn edit" disabled={busy} onClick={() => openEdit(u)}>Edit</button>
+                                                    <button
+                                                        type="button"
+                                                        className="admin-action-btn extend"
+                                                        disabled={busy}
+                                                        onClick={() => handleExtendExpiry(u)}
+                                                        title="Extend credit expiry by 30 days"
+                                                    >
+                                                        Extend
+                                                    </button>
                                                     <button
                                                         type="button"
                                                         className={`admin-action-btn ${suspended ? 'unblock' : 'block'}`}

@@ -1271,27 +1271,74 @@
 
 .st-inspire-model-top-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(200px, 1fr));
   gap: 0.5rem;
 }
 
 .st-inspire-model-top .st-inspire-model-row {
   min-height: 42px;
   margin-bottom: 0;
-  grid-template-columns: 24px minmax(0, 1fr) 30px;
+  grid-template-columns: 24px minmax(0, 1fr) auto 30px;
+  gap: 0.4rem;
 }
 
-.st-inspire-model-top .st-inspire-model-row span {
+.st-inspire-model-top .st-inspire-model-row .st-model-brand {
   width: 24px;
   height: 24px;
 }
 
-.st-inspire-model-top .st-inspire-model-row small {
-  display: none;
-}
-
 .st-inspire-model-top .st-inspire-model-row strong {
   font-size: 0.7rem;
+}
+
+/* Credit coin chip — matches Pattern Extraction visual language, slightly smaller for compact rows */
+.st-inspire-model-top .st-inspire-model-credit.st-credit-coin {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 2px 6px 2px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(166, 124, 58, 0.28);
+  background: linear-gradient(180deg, #fffaf2 0%, #f4ead8 100%);
+  color: #7a5a2a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 1px 2px rgba(92, 64, 28, 0.06);
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+  justify-self: end;
+}
+
+.st-inspire-model-top .st-credit-coin-icon {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  color: #b8893a;
+  filter: drop-shadow(0 0.5px 0 rgba(255, 248, 235, 0.8));
+}
+
+.st-inspire-model-top .st-credit-coin-value {
+  font-size: 0.64rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  color: #5c411f;
+  font-variant-numeric: tabular-nums;
+}
+
+.st-inspire-model-top .st-credit-coin-unit {
+  font-size: 0.52rem;
+  font-weight: 650;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  color: rgba(92, 65, 31, 0.62);
+}
+
+.st-inspire-model-top .st-inspire-model-row:hover .st-inspire-model-credit.st-credit-coin,
+.st-inspire-model-top .st-inspire-model-row:has(i.active) .st-inspire-model-credit.st-credit-coin {
+  border-color: rgba(166, 124, 58, 0.38);
+  background: linear-gradient(180deg, #fffdf8 0%, #f0e2c8 100%);
 }
 
 .st-inspire-model-top .st-inspire-model-row i {
@@ -1825,7 +1872,7 @@
   box-shadow: 0 8px 16px rgba(35, 22, 77, 0.04);
 }
 
-.st-inspire-model-row span {
+.st-inspire-model-row .st-model-brand {
   width: 28px;
   height: 28px;
   border-radius: 8px;

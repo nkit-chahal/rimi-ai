@@ -326,7 +326,27 @@ export default function InspireTool({
                                         >
                                             <span className={`st-model-brand ${m.brand}`}>{m.logo}</span>
                                             <strong>{m.name}{m.tier === 'pro' ? ' · Pro' : ''}</strong>
-                                            <small>{m.credits} cr · {m.sub}</small>
+                                            <span
+                                                className="st-inspire-model-credit st-credit-coin"
+                                                title={`${m.credits} credits`}
+                                                aria-label={`${m.credits} credits`}
+                                            >
+                                                <svg
+                                                    className="st-credit-coin-icon"
+                                                    viewBox="0 0 16 16"
+                                                    width="12"
+                                                    height="12"
+                                                    aria-hidden="true"
+                                                    focusable="false"
+                                                >
+                                                    <circle cx="8" cy="8" r="7" fill="currentColor" opacity="0.18" />
+                                                    <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.35" />
+                                                    <circle cx="8" cy="8" r="4.75" fill="none" stroke="currentColor" strokeWidth="1.1" opacity="0.75" />
+                                                    <circle cx="8" cy="8" r="1.65" fill="currentColor" />
+                                                </svg>
+                                                <span className="st-credit-coin-value">{m.credits}</span>
+                                                <span className="st-credit-coin-unit">cr</span>
+                                            </span>
                                             <i className={active && !locked ? 'active' : ''} />
                                         </button>
                                     );

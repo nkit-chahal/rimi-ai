@@ -11,7 +11,7 @@ from datetime import datetime, timezone, timedelta
 
 import bcrypt
 
-from auth import credit_expiry_reset_at, extend_credit_expiry
+from auth import CREDIT_EXPIRY_DAYS, _parse_reset_at, credit_expiry_reset_at, extend_credit_expiry
 from db import DEFAULT_CREDIT_PRICING, db, rows_to_dicts
 from jwt_tokens import issue_access_token
 from middleware import admin_required, login_required
@@ -34,6 +34,15 @@ def _safe_int(value, default=0):
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _compute_reset_days(reset_at_raw, default=30):
+    """Days until reset_at (UTC date). Uses _parse_reset_at so Z/+00:00 strings parse correctly."""
+    reset_at = _parse_reset_at(reset_at_raw)
+    if reset_at is None:
+        return default
+    today = datetime.now(timezone.utc).replace(tzinfo=None).date()
+    return max(0, (reset_at.date() - today).days)
 
 
 def _is_unique_violation(exc):
@@ -154,13 +163,8 @@ def api_login():
             if pw_ok:
                 last_login_at = _record_login_event(conn, user["id"], "email")
                 conn.commit()
-                # Resolve resetDays
-                try:
-                    reset_at = datetime.fromisoformat(user["reset_at"])
-                    reset_days = max(0, (reset_at.date() - datetime.now(timezone.utc).replace(tzinfo=None).date()).days)
-                except Exception:
-                    reset_days = 30
-                    
+                reset_days = _compute_reset_days(user.get("reset_at"))
+
                 from plan_tiers import attach_tier_fields
                 user_payload = attach_tier_fields({
                     "id": user["id"],
@@ -543,11 +547,7 @@ def admin_users():
         users = []
         for row in users_rows:
             u = dict(row)
-            try:
-                reset_at = datetime.fromisoformat(u["reset_at"])
-                reset_days = max(0, (reset_at.date() - datetime.now(timezone.utc).replace(tzinfo=None).date()).days)
-            except Exception:
-                reset_days = 30
+            reset_days = _compute_reset_days(u.get("reset_at"))
             users.append({
                 "id": u["id"],
                 "email": u["email"],
@@ -621,6 +621,58 @@ def admin_adjust_credits():
         return jsonify({'success': True, 'message': 'Credits limit updated successfully'})
     except Exception as e:
         print(f"Error adjusting credits: {e}")
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
+    finally:
+        conn.close()
+
+
+@bp.route('/api/admin/extend-expiry', methods=['POST'])
+@admin_required
+def admin_extend_expiry():
+    data = request.get_json() or {}
+    user_id = data.get('userId')
+    if user_id is None:
+        return jsonify({'success': False, 'error': 'userId is required'}), 400
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'userId must be an integer'}), 400
+
+    conn = db()
+    try:
+        existing = conn.execute(
+            "SELECT id, reset_at FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if not existing:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+
+        previous_reset_at = existing["reset_at"]
+        new_reset_at = extend_credit_expiry(user_id, conn=conn)
+        if not new_reset_at:
+            return jsonify({'success': False, 'error': 'Failed to extend expiry'}), 500
+
+        reset_days = _compute_reset_days(new_reset_at)
+        _record_admin_audit(
+            conn,
+            "credits.extend_expiry",
+            target_user_id=user_id,
+            details={
+                "previousResetAt": previous_reset_at,
+                "resetAt": new_reset_at,
+                "resetDays": reset_days,
+                "extendedByDays": CREDIT_EXPIRY_DAYS,
+            },
+        )
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': f'Credit expiry extended by {CREDIT_EXPIRY_DAYS} days',
+            'resetAt': new_reset_at,
+            'resetDays': reset_days,
+        })
+    except Exception as e:
+        print(f"Error extending credit expiry: {e}")
         return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
     finally:
         conn.close()

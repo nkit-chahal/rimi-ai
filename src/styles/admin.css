@@ -347,6 +347,12 @@
   background: #eef2ff;
 }
 
+.admin-action-btn.extend {
+  border-color: #bae6fd;
+  color: #0369a1;
+  background: #f0f9ff;
+}
+
 .admin-action-btn.block {
   border-color: #fde68a;
   color: #b45309;
