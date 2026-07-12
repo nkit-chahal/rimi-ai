@@ -6,8 +6,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from db import db, db_lock
+from redis_client import get_redis_url, redis_from_url
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = get_redis_url()
 QUEUE_NAME = os.getenv("RQ_QUEUE_NAME", "rimi-ai")
 RQ_MAX_RETRIES = int(os.getenv("RQ_MAX_RETRIES", "3"))
 RQ_RETRY_INTERVALS = [10, 30, 60]
@@ -18,11 +19,10 @@ IDEMPOTENCY_WINDOW_SEC = int(os.getenv("JOB_IDEMPOTENCY_WINDOW_SEC", "60"))
 
 def get_queue():
     try:
-        from redis import Redis
         from rq import Queue
+        redis_conn = redis_from_url(REDIS_URL)
     except ImportError:
         return None, None
-    redis_conn = Redis.from_url(REDIS_URL)
     return Queue(QUEUE_NAME, connection=redis_conn), redis_conn
 
 

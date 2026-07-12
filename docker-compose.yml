@@ -7,8 +7,9 @@ services:
       FLASK_ENV: production
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET for production}
       DATABASE_URL: postgresql://rimi:${POSTGRES_PASSWORD:-rimi}@postgres:5432/rimi
-      REDIS_URL: redis://redis:6379/0
-      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+      # protocol=2 keeps redis-py on RESP2 (Redis 5+ compatible)
+      REDIS_URL: redis://redis:6379/0?protocol=2
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1?protocol=2
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       PORT: 3001
     volumes:
@@ -23,11 +24,11 @@ services:
 
   worker:
     build: .
-    command: rq worker --url redis://redis:6379/0 rimi-ai
+    command: rq worker -c rqsettings rimi-ai
     working_dir: /app/backend
     environment:
       FLASK_ENV: production
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://redis:6379/0?protocol=2
       PYTHONPATH: /app/backend
       DATABASE_URL: postgresql://rimi:${POSTGRES_PASSWORD:-rimi}@postgres:5432/rimi
     depends_on:

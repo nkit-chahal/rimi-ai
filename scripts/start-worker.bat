@@ -23,7 +23,8 @@ if errorlevel 1 (
     exit /b 1
 )
 
-set "REDIS_URL=redis://localhost:6379/0"
+:: protocol=2 (RESP2) required for local Redis 5.x; also fine on Redis 6/7/8
+set "REDIS_URL=redis://localhost:6379/0?protocol=2"
 set "RQ_QUEUE_NAME=rimi-ai"
 
 echo Running RQ SimpleWorker (no conda activate — uses ankit env directly)
@@ -33,14 +34,17 @@ echo Queue:  %RQ_QUEUE_NAME%
 echo.
 
 if exist "%RQ_EXE%" (
-    "%RQ_EXE%" worker --url %REDIS_URL% --worker-class rq.worker.SimpleWorker %RQ_QUEUE_NAME%
+    "%RQ_EXE%" worker -c rqsettings --worker-class rq.worker.SimpleWorker %RQ_QUEUE_NAME%
 ) else (
-    "%PY%" -m rq.cli.cli worker --url %REDIS_URL% --worker-class rq.worker.SimpleWorker %RQ_QUEUE_NAME%
+    "%PY%" -m rq.cli.cli worker -c rqsettings --worker-class rq.worker.SimpleWorker %RQ_QUEUE_NAME%
 )
+
 
 if errorlevel 1 (
     echo.
     echo Worker exited with an error. Is Redis running on localhost:6379?
-    echo Start it with:  docker run -d --name rimi-redis -p 6379:6379 --restart unless-stopped redis:7-alpine
+    echo Start Redis with start.bat, or:
+    echo   Redis-x64-5.0.14.1\redis-server.exe
     pause
 )
+

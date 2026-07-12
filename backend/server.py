@@ -22,11 +22,15 @@ def _is_production():
 
 def _rate_limit_storage_uri():
     """Pick a rate-limit backend; production requires working Redis."""
+    from redis_client import ensure_redis_protocol
+
     uri = os.getenv("RATELIMIT_STORAGE_URI") or os.getenv("REDIS_URL") or "memory://"
     if not uri.startswith(("redis://", "rediss://")):
         if _is_production():
             raise RuntimeError("Redis rate-limit storage (REDIS_URL) is required in production")
         return uri
+    # Force RESP2 so local Redis 5 and Railway Redis 8 both work with redis-py 5+.
+    uri = ensure_redis_protocol(uri)
     try:
         import redis  # noqa: F401
         from limits.storage import storage_from_string
@@ -45,13 +49,19 @@ def _rate_limit_storage_uri():
 
 def _init_rate_limiter(app):
     """Create Flask-Limiter; production fails if Redis storage cannot init."""
+    from redis_client import REDIS_PROTOCOL
+
     storage_uri = _rate_limit_storage_uri()
+    storage_options = {}
+    if storage_uri.startswith(("redis://", "rediss://")):
+        storage_options["protocol"] = REDIS_PROTOCOL
     try:
         return Limiter(
             get_remote_address,
             app=app,
             default_limits=["200 per minute"],
             storage_uri=storage_uri,
+            storage_options=storage_options,
         )
     except Exception as exc:
         if _is_production():

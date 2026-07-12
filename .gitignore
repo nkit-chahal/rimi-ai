@@ -43,3 +43,11 @@ backend/_test_temp*/
 backend/bin/test.*
 backend/download*
 scratch/
+
+# Local Redis for Windows (binary + runtime dumps)
+Redis-x64-5.0.14.1/
+Redis-x64*.zip
+dump.rdb
+appendonly.aof
+*.rdb
+

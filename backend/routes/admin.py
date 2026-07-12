@@ -1031,8 +1031,8 @@ def health_ready():
     redis_url = os.getenv('REDIS_URL') or os.getenv('RATELIMIT_STORAGE_URI', '')
     if redis_url.startswith(('redis://', 'rediss://')):
         try:
-            from redis import Redis
-            client = Redis.from_url(redis_url, socket_connect_timeout=2)
+            from redis_client import redis_from_url
+            client = redis_from_url(redis_url, socket_connect_timeout=2)
             client.ping()
             checks['redis'] = 'ok'
         except Exception as exc:
