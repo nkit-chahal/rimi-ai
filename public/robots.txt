@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /share/
+Disallow: /studio
+Disallow: /studio/
+
+Sitemap: https://rimiai.pro/sitemap.xml

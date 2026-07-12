@@ -298,3 +298,240 @@
   transition: transform 0.08s ease;
 }
 
+/* User management */
+.admin-status-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.admin-status-pill.active {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.admin-status-pill.suspended {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.admin-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-action-btn {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+}
+
+.admin-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.admin-action-btn.edit {
+  border-color: #c7d2fe;
+  color: #4338ca;
+  background: #eef2ff;
+}
+
+.admin-action-btn.block {
+  border-color: #fde68a;
+  color: #b45309;
+  background: #fffbeb;
+}
+
+.admin-action-btn.unblock {
+  border-color: #a7f3d0;
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.admin-action-btn.delete {
+  border-color: #fecaca;
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.admin-user-row-suspended {
+  opacity: 0.72;
+}
+
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.admin-modal-card {
+  width: min(440px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 24px;
+}
+
+/* Charts */
+.admin-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 960px) {
+  .admin-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-chart-card {
+  padding: 16px 18px;
+}
+
+.admin-chart-card h4 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.admin-chart-sub {
+  margin: 0 0 14px;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.admin-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 140px;
+  padding-top: 8px;
+}
+
+.admin-bar-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.admin-bar-fill {
+  width: 100%;
+  max-width: 28px;
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, #818cf8 0%, #6366f1 100%);
+  min-height: 2px;
+}
+
+.admin-bar-fill.spend {
+  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+}
+
+.admin-bar-fill.login {
+  background: linear-gradient(180deg, #34d399 0%, #10b981 100%);
+}
+
+.admin-bar-label {
+  font-size: 0.62rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.admin-hbar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-hbar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.78rem;
+}
+
+.admin-hbar-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #334155;
+  font-weight: 600;
+}
+
+.admin-hbar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  overflow: hidden;
+}
+
+.admin-hbar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #6366f1;
+}
+
+.admin-hbar-value {
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.admin-log-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.admin-log-tabs button {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.admin-log-tabs button.active {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.admin-empty-chart {
+  padding: 36px 12px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+

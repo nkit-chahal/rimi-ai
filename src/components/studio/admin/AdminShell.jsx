@@ -4,7 +4,7 @@ import { resolveToolComponent } from '../../../router/toolRegistry';
 
 const ReactSuspense = Suspense;
 
-export default function AdminShell({ tool, setTool, currentToken, renderBudgetBanner, budgetData }) {
+export default function AdminShell({ tool, setTool, currentToken, renderBudgetBanner, budgetData, currentUserId = null }) {
     const [adminUsers, setAdminUsers] = useState([]);
     const [adminUsersLoading, setAdminUsersLoading] = useState(false);
     const [adminSelectedUserId, setAdminSelectedUserId] = useState(null);
@@ -22,6 +22,8 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
     const [adminProjects, setAdminProjects] = useState([]);
     const [adminProjectsLoading, setAdminProjectsLoading] = useState(false);
     const [adminStats, setAdminStats] = useState({ totalUsers: 0, totalProjects: 0, recentLogs: [] });
+    const [adminAnalytics, setAdminAnalytics] = useState(null);
+    const [adminAnalyticsLoading, setAdminAnalyticsLoading] = useState(false);
 
     const fetchAdminUsers = useCallback(() => {
         setAdminUsersLoading(true);
@@ -69,6 +71,17 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
             .finally(() => setAdminPricingLoading(false));
     }, [currentToken]);
 
+    const fetchAdminAnalytics = useCallback(() => {
+        setAdminAnalyticsLoading(true);
+        fetch(`${API}/api/admin/analytics?days=30`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) setAdminAnalytics(d);
+            })
+            .catch(err => console.error('Failed to fetch admin analytics:', err))
+            .finally(() => setAdminAnalyticsLoading(false));
+    }, [currentToken]);
+
     useEffect(() => {
         if (tool === 'admin-users' || tool === 'admin-credits') fetchAdminUsers();
     }, [tool, fetchAdminUsers]);
@@ -79,6 +92,7 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
 
     useEffect(() => {
         if (tool === 'admin-dashboard') {
+            fetchAdminAnalytics();
             Promise.all([
                 fetch(`${API}/api/admin/users`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
                 fetch(`${API}/api/admin/projects`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
@@ -92,7 +106,7 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
                 if (usersData.success) setAdminUsers(usersData.users);
             }).catch(() => { });
         }
-    }, [tool, currentToken]);
+    }, [tool, currentToken, fetchAdminAnalytics]);
 
     useEffect(() => {
         if (tool === 'admin-projects') {
@@ -127,8 +141,24 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
     }, [tool, currentToken]);
 
     const adminProps = {
-        'admin-dashboard': { adminStats, budgetData, adminUsers, setTool, renderBudgetBanner },
-        'admin-users': { renderBudgetBanner, adminUsersLoading, adminUsers, currentToken, fetchAdminUsers },
+        'admin-dashboard': {
+            adminStats,
+            budgetData,
+            adminUsers,
+            adminBilling,
+            adminAnalytics,
+            adminAnalyticsLoading,
+            setTool,
+            renderBudgetBanner,
+        },
+        'admin-users': {
+            renderBudgetBanner,
+            adminUsersLoading,
+            adminUsers,
+            currentToken,
+            fetchAdminUsers,
+            currentUserId,
+        },
         'admin-projects': { renderBudgetBanner, adminProjectsLoading, adminProjects },
         'admin-logs': { renderBudgetBanner, replicateLogsLoading, replicateLogs, loginEvents, adminAuditEvents },
         'admin-credits': {
@@ -142,6 +172,8 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
             adminPricing,
             adminPricingLoading,
             fetchAdminPricing,
+            adminBilling,
+            adminBillingLoading,
         },
     }[tool];
 

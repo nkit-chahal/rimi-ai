@@ -13,6 +13,8 @@ const AdminCredits = ({
     adminPricing = [],
     adminPricingLoading = false,
     fetchAdminPricing,
+    adminBilling = { payments: [], transactions: [], summary: {} },
+    adminBillingLoading = false,
 }) => {
     const [creditAdjustmentAmount, setCreditAdjustmentAmount] = useState(5000);
     const [creditFeedback, setCreditFeedback] = useState('');
@@ -213,6 +215,83 @@ const AdminCredits = ({
                                 <button type="button" className="admin-btn-primary" onClick={() => handlePricingUpdate(row)}>Save</button>
                             </div>
                         ))}
+                    </div>
+                )}
+            </div>
+
+            <div className="admin-card glassmorphism-card">
+                <div className="admin-card-header">
+                    <I d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" s={20} />
+                    <h3>Recent Payments</h3>
+                    {adminBillingLoading && <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>Refreshing…</span>}
+                </div>
+                {!adminBilling?.payments?.length ? (
+                    <div className="st-error" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', textAlign: 'center', padding: '24px 0' }}>No payment records yet.</div>
+                ) : (
+                    <div className="admin-table-container">
+                        <table className="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Pack</th>
+                                    <th>Credits</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                    <th>When</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {adminBilling.payments.slice(0, 25).map((p) => (
+                                    <tr key={p.id}>
+                                        <td style={{ fontSize: '12px' }}>{p.user_name || p.user_email || p.user_id || '—'}</td>
+                                        <td><span className="model-tag">{p.pack_id || '—'}</span></td>
+                                        <td>{Number(p.credits || 0).toLocaleString()}</td>
+                                        <td>₹{(Number(p.amount || 0) / 100).toLocaleString('en-IN')}</td>
+                                        <td>
+                                            <span className={`admin-status-pill ${p.status === 'paid' ? 'active' : 'suspended'}`}>
+                                                {p.status === 'created' ? 'Incomplete' : (p.status || '—')}
+                                            </span>
+                                        </td>
+                                        <td className="time-tag">{p.paid_at || p.created_at || '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            <div className="admin-card glassmorphism-card">
+                <div className="admin-card-header">
+                    <I d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" s={20} />
+                    <h3>Recent Credit Transactions</h3>
+                </div>
+                {!adminBilling?.transactions?.length ? (
+                    <div className="st-error" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', textAlign: 'center', padding: '24px 0' }}>No credit transactions yet.</div>
+                ) : (
+                    <div className="admin-table-container">
+                        <table className="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Type</th>
+                                    <th>Credits</th>
+                                    <th>Note</th>
+                                    <th>When</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {adminBilling.transactions.slice(0, 30).map((tx) => (
+                                    <tr key={tx.id}>
+                                        <td style={{ fontSize: '12px' }}>{tx.user_name || tx.user_email || tx.user_id || '—'}</td>
+                                        <td><span className="model-tag">{tx.transaction_type || '—'}</span></td>
+                                        <td className="strong">{Number(tx.credits || 0).toLocaleString()}</td>
+                                        <td className="time-tag" style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.note || '—'}</td>
+                                        <td className="time-tag">{tx.created_at || '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
             </div>

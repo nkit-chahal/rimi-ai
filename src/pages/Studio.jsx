@@ -100,25 +100,54 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         if (isAdmin) import('../styles/admin.css');
     }, [isAdmin]);
 
-    const readToolFromHash = useCallback(() => {
-        const hash = window.location.hash.replace(/^#\/?/, '');
-        const parts = hash.split(/[/?#]/).filter(Boolean);
+    useEffect(() => {
+        const robots = document.querySelector('meta[name="robots"]') || document.createElement('meta');
+        robots.setAttribute('name', 'robots');
+        const previous = robots.getAttribute('content');
+        robots.setAttribute('content', 'noindex, nofollow');
+        if (!robots.parentNode) document.head.appendChild(robots);
+        return () => {
+            if (previous) robots.setAttribute('content', previous);
+            else robots.setAttribute('content', 'index, follow');
+        };
+    }, []);
+
+    const readToolFromPath = useCallback(() => {
+        const parts = window.location.pathname.split('/').filter(Boolean);
         return parts[0] === 'studio' ? parts[1] : parts[0];
     }, []);
 
     const [tool, _setTool] = useState(() => {
-        const hash = readToolFromHash();
+        const fromPath = readToolFromPath();
         const allowed = isAdmin ? adminTools : userTools;
-        if (allowed.includes(hash)) return hash;
+        if (allowed.includes(fromPath)) return fromPath;
         return isAdmin ? 'admin-dashboard' : 'pattern';
     });
+
+    useEffect(() => {
+        const allowed = isAdmin ? adminTools : userTools;
+        const current = readToolFromPath();
+        if (!allowed.includes(current)) {
+            window.history.replaceState(null, '', `/studio/${tool}`);
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps — sync once on mount
 
     const setTool = useCallback((t) => {
         const allowed = isAdmin ? adminTools : userTools;
         if (!allowed.includes(t)) t = isAdmin ? 'admin-dashboard' : 'pattern';
         _setTool(t);
-        window.history.replaceState(null, '', `#/studio/${t}`);
+        window.history.replaceState(null, '', `/studio/${t}`);
     }, [isAdmin]);
+
+    useEffect(() => {
+        const onPopState = () => {
+            const fromPath = readToolFromPath();
+            const allowed = isAdmin ? adminTools : userTools;
+            if (allowed.includes(fromPath)) _setTool(fromPath);
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, [isAdmin, readToolFromPath]);
 
     const [state, setState] = useState(emptyState);
     const [activeProjectId, setActiveProjectId] = useState(1);
@@ -927,6 +956,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                         currentToken={currentToken}
                         renderBudgetBanner={renderBudgetBanner}
                         budgetData={budgetData}
+                        currentUserId={currentUser?.id ?? null}
                     />
                 </ReactSuspense>
             );

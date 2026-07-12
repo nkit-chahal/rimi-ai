@@ -1,11 +1,21 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import Studio from './pages/Studio';
 import { normalizeToken } from './components/studio/shared/helpers';
 import { AuthProvider } from './contexts/AuthContext';
 
 const Login = lazy(() => import('./pages/Login'));
 const SharePage = lazy(() => import('./pages/SharePage'));
+
+/** One-time migrate legacy hash URLs (#/login, #/studio/…) to path URLs. */
+function migrateLegacyHashRoute() {
+  const raw = window.location.hash.replace(/^#/, '');
+  if (!raw.startsWith('/')) return;
+  const next = `${raw}${window.location.search || ''}`;
+  window.history.replaceState(null, '', next);
+}
+
+migrateLegacyHashRoute();
 
 function readSavedUser() {
   try {
@@ -42,9 +52,9 @@ function readInitialSession() {
   return { user, token };
 }
 
-function App() {
+function AppRoutes() {
+  const navigate = useNavigate();
   const [initialSession] = useState(() => readInitialSession());
-  const [view, setView] = useState(() => (initialSession.user ? 'studio' : 'login'));
   const [currentUser, setCurrentUser] = useState(() => initialSession.user);
   const [currentToken, setCurrentToken] = useState(() => initialSession.token);
   const [isBootEntry, setIsBootEntry] = useState(() => Boolean(initialSession.user && initialSession.token));
@@ -56,7 +66,7 @@ function App() {
       setCurrentToken(null);
       localStorage.removeItem('rim_user');
       localStorage.removeItem('rim_token');
-      setView('login');
+      navigate('/login', { replace: true });
       return;
     }
     setCurrentUser(user);
@@ -64,58 +74,63 @@ function App() {
     localStorage.setItem('rim_token', cleanToken);
     localStorage.setItem('rim_user', JSON.stringify(user));
     setIsBootEntry(true);
-    setView('studio');
-    window.location.hash = '#/studio';
-  }, []);
+    navigate('/studio', { replace: true });
+  }, [navigate]);
 
   const handleBootComplete = useCallback(() => {
     setIsBootEntry(false);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     setCurrentUser(null);
     setCurrentToken(null);
     localStorage.removeItem('rim_user');
     localStorage.removeItem('rim_token');
-    window.location.hash = '#/login';
-    setView('login');
-  };
+    navigate('/login', { replace: true });
+  }, [navigate]);
 
   useEffect(() => {
     const onSessionExpired = () => handleLogout();
     window.addEventListener('rim:session-expired', onSessionExpired);
     return () => window.removeEventListener('rim:session-expired', onSessionExpired);
-  }, []);
+  }, [handleLogout]);
 
   return (
     <AuthProvider user={currentUser} token={currentToken} onLogin={handleLogin} onLogout={handleLogout}>
-      <HashRouter>
-        <Routes>
-          <Route
-            path="/studio/*"
-            element={
-              currentUser ? (
-                <Studio
-                  currentUser={currentUser}
-                  currentToken={currentToken}
-                  onLogout={handleLogout}
-                  isBootEntry={isBootEntry}
-                  onBootComplete={handleBootComplete}
-                />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          />
-          <Route path="/share/:token" element={<Suspense fallback={null}><SharePage /></Suspense>} />
-          <Route
-            path="/login"
-            element={currentUser ? <Navigate to="/studio" replace /> : <Suspense fallback={null}><Login onLogin={handleLogin} /></Suspense>}
-          />
-          <Route path="*" element={<Navigate to={currentUser ? '/studio' : '/login'} replace />} />
-        </Routes>
-      </HashRouter>
+      <Routes>
+        <Route
+          path="/studio/*"
+          element={
+            currentUser ? (
+              <Studio
+                currentUser={currentUser}
+                currentToken={currentToken}
+                onLogout={handleLogout}
+                isBootEntry={isBootEntry}
+                onBootComplete={handleBootComplete}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route path="/share/:token" element={<Suspense fallback={null}><SharePage /></Suspense>} />
+        <Route
+          path="/login"
+          element={currentUser ? <Navigate to="/studio" replace /> : <Suspense fallback={null}><Login onLogin={handleLogin} /></Suspense>}
+        />
+        <Route path="/" element={<Navigate to={currentUser ? '/studio' : '/login'} replace />} />
+        <Route path="*" element={<Navigate to={currentUser ? '/studio' : '/login'} replace />} />
+      </Routes>
     </AuthProvider>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
   );
 }
 

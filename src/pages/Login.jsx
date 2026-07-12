@@ -17,7 +17,7 @@ function readGooglePhaseFromUrl() {
 }
 
 function clearAuthQueryParams() {
-  window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+  window.history.replaceState(null, '', window.location.pathname);
 }
 
 function usePrefersReducedMotion() {

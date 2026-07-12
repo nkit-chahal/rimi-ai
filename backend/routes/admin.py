@@ -1004,6 +1004,146 @@ def admin_unsuspend_user(user_id):
         conn.close()
 
 
+def _parse_day(value):
+    if not value:
+        return None
+    try:
+        text = str(value).replace("Z", "")
+        return datetime.fromisoformat(text).date().isoformat()
+    except Exception:
+        try:
+            return str(value)[:10]
+        except Exception:
+            return None
+
+
+@bp.route('/api/admin/analytics', methods=['GET'])
+@admin_required
+def admin_analytics():
+    """Chart-ready aggregates for the supervisor dashboard (last N days)."""
+    try:
+        days = max(1, min(90, int(request.args.get('days', 30))))
+    except (TypeError, ValueError):
+        days = 30
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    start_iso = start.isoformat()
+    day_labels = [(start + timedelta(days=i)).date().isoformat() for i in range(days)]
+
+    def empty_day_map():
+        return {d: 0 for d in day_labels}
+
+    feature_by_day = empty_day_map()
+    feature_totals = {}
+    spend_by_day = empty_day_map()
+    calls_by_day = empty_day_map()
+    cost_by_model = {}
+    logins_by_day = empty_day_map()
+    revenue_by_day = empty_day_map()
+    paid_orders = 0
+    paid_amount = 0
+    paid_credits = 0
+
+    conn = db()
+    try:
+        export_rows = conn.execute(
+            "SELECT tool_type, created_at FROM exports WHERE created_at >= ? ORDER BY id DESC",
+            (start_iso,),
+        ).fetchall()
+        for row in export_rows:
+            day = _parse_day(row["created_at"])
+            tool = (row["tool_type"] or "Unknown").strip() or "Unknown"
+            feature_totals[tool] = feature_totals.get(tool, 0) + 1
+            if day in feature_by_day:
+                feature_by_day[day] += 1
+
+        replicate_rows = conn.execute(
+            """
+            SELECT model_name, cost_usd, credits, created_at
+            FROM replicate_logs
+            WHERE created_at >= ?
+            ORDER BY id DESC
+            """,
+            (start_iso,),
+        ).fetchall()
+        for row in replicate_rows:
+            day = _parse_day(row["created_at"])
+            cost = float(row["cost_usd"] or 0)
+            model = (row["model_name"] or "unknown").strip() or "unknown"
+            cost_by_model[model] = cost_by_model.get(model, 0.0) + cost
+            if day in spend_by_day:
+                spend_by_day[day] += cost
+                calls_by_day[day] += 1
+
+        login_rows = conn.execute(
+            "SELECT created_at FROM login_events WHERE created_at >= ? ORDER BY id DESC",
+            (start_iso,),
+        ).fetchall()
+        for row in login_rows:
+            day = _parse_day(row["created_at"])
+            if day in logins_by_day:
+                logins_by_day[day] += 1
+
+        payment_rows = conn.execute(
+            """
+            SELECT amount, credits, paid_at, created_at
+            FROM payments
+            WHERE status = 'paid'
+              AND COALESCE(paid_at, created_at) >= ?
+            ORDER BY id DESC
+            """,
+            (start_iso,),
+        ).fetchall()
+        for row in payment_rows:
+            day = _parse_day(row["paid_at"] or row["created_at"])
+            amount = int(row["amount"] or 0)
+            credits = int(row["credits"] or 0)
+            paid_orders += 1
+            paid_amount += amount
+            paid_credits += credits
+            if day in revenue_by_day:
+                revenue_by_day[day] += amount
+    except Exception as e:
+        print(f"Error building admin analytics: {e}")
+        return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
+    finally:
+        conn.close()
+
+    top_features = sorted(
+        [{"tool": k, "count": v} for k, v in feature_totals.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )[:12]
+    top_models = sorted(
+        [{"model": k, "costUsd": round(v, 6)} for k, v in cost_by_model.items()],
+        key=lambda x: x["costUsd"],
+        reverse=True,
+    )[:12]
+
+    return jsonify({
+        'success': True,
+        'days': days,
+        'labels': day_labels,
+        'featureUsageByDay': [feature_by_day[d] for d in day_labels],
+        'featureUsageByTool': top_features,
+        'apiSpendByDay': [round(spend_by_day[d], 6) for d in day_labels],
+        'apiCallsByDay': [calls_by_day[d] for d in day_labels],
+        'costByModel': top_models,
+        'loginsByDay': [logins_by_day[d] for d in day_labels],
+        'revenueByDay': [revenue_by_day[d] for d in day_labels],
+        'summary': {
+            'featureExports': sum(feature_by_day.values()),
+            'apiCalls': sum(calls_by_day.values()),
+            'apiSpendUsd': round(sum(spend_by_day.values()), 6),
+            'logins': sum(logins_by_day.values()),
+            'paidOrders': paid_orders,
+            'paidAmountPaise': paid_amount,
+            'paidCredits': paid_credits,
+        },
+    })
+
+
 # --------------- Health checks ---------------
 @bp.route('/api/health')
 def health():

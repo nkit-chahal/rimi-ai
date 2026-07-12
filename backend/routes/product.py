@@ -6,7 +6,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, Response, g, jsonify, redirect, request
 
 from auth import check_credits, credit_requirement
 from color_utils import extract_palette
@@ -16,6 +16,20 @@ from middleware import login_required, project_access_from_payload, assert_proje
 from schemas import ApiKeyCreateRequest, ShareLinkRequest, TeamInviteRequest
 
 bp = Blueprint("product", __name__)
+
+
+def _frontend_url():
+    return os.getenv("FRONTEND_URL", "https://rimiai.pro").rstrip("/")
+
+
+def _public_api_base():
+    explicit = (os.getenv("PUBLIC_API_URL") or os.getenv("API_PUBLIC_URL") or "").rstrip("/")
+    if explicit:
+        return explicit
+    try:
+        return request.url_root.rstrip("/")
+    except Exception:
+        return "https://api.rimiai.pro"
 
 
 @bp.route("/api/onboarding/status", methods=["GET"])
@@ -93,15 +107,120 @@ def create_share_link():
             (token, g.current_user["id"], payload.project_id, payload.export_filename, expires_at, now),
         )
         conn.commit()
-        frontend_url = os.getenv("FRONTEND_URL", "https://rimiai.pro").rstrip("/")
+        api_base = _public_api_base()
         return jsonify({
             "success": True,
             "token": token,
-            "shareUrl": f"{frontend_url}/#/share/{token}",
+            "shareUrl": f"{api_base}/share/{token}",
+            "appUrl": f"{_frontend_url()}/share/{token}",
             "expiresAt": expires_at,
         })
     finally:
         conn.close()
+
+
+@bp.route("/share/<token>", methods=["GET"])
+def share_og_landing(token):
+    """Crawler-friendly HTML with Open Graph tags; humans redirect to the SPA."""
+    from html import escape
+
+    conn = db()
+    try:
+        row = conn.execute(
+            """
+            SELECT s.*, p.name AS project_name, u.plan AS owner_plan
+            FROM share_links s
+            LEFT JOIN projects p ON p.id = s.project_id
+            LEFT JOIN users u ON u.id = s.user_id
+            WHERE s.token = ?
+            """,
+            (token,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    frontend = _frontend_url()
+    app_url = f"{frontend}/share/{token}"
+    api_base = _public_api_base()
+
+    if not row:
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Share link unavailable · RIMI AI</title>
+  <meta name="robots" content="noindex" />
+  <meta http-equiv="refresh" content="0;url={escape(frontend)}/login" />
+</head>
+<body><p><a href="{escape(frontend)}/login">Open RIMI AI</a></p></body>
+</html>"""
+        return Response(html, status=404, mimetype="text/html; charset=utf-8")
+
+    link = dict(row)
+    expired = link["expires_at"] < datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    if expired:
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Share link expired · RIMI AI</title>
+  <meta name="robots" content="noindex" />
+  <meta http-equiv="refresh" content="0;url={escape(app_url)}" />
+</head>
+<body><p><a href="{escape(app_url)}">Open share page</a></p></body>
+</html>"""
+        return Response(html, status=410, mimetype="text/html; charset=utf-8")
+
+    project_name = (link.get("project_name") or "RIMI AI Design").strip() or "RIMI AI Design"
+    title = f"{project_name} · Made with RIMI AI"
+    description = f"View this textile design shared from RIMI AI Studio — {project_name}."
+    image_url = f"{api_base}/api/share/{token}/preview"
+    ua = (request.headers.get("User-Agent") or "").lower()
+    bot_markers = (
+        "facebookexternalhit",
+        "facebot",
+        "twitterbot",
+        "linkedinbot",
+        "slackbot",
+        "whatsapp",
+        "discordbot",
+        "telegrambot",
+        "bingpreview",
+        "googlebot",
+        "embedly",
+        "quora link preview",
+        "pinterest",
+        "redditbot",
+    )
+    is_bot = any(marker in ua for marker in bot_markers)
+
+    if not is_bot and request.args.get("og") != "1":
+        return redirect(app_url, code=302)
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{escape(title)}</title>
+  <meta name="description" content="{escape(description)}" />
+  <link rel="canonical" href="{escape(app_url)}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="RIMI AI" />
+  <meta property="og:url" content="{escape(app_url)}" />
+  <meta property="og:title" content="{escape(title)}" />
+  <meta property="og:description" content="{escape(description)}" />
+  <meta property="og:image" content="{escape(image_url)}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="{escape(title)}" />
+  <meta name="twitter:description" content="{escape(description)}" />
+  <meta name="twitter:image" content="{escape(image_url)}" />
+  <meta http-equiv="refresh" content="0;url={escape(app_url)}" />
+</head>
+<body>
+  <p>Opening design… <a href="{escape(app_url)}">Continue to RIMI AI</a></p>
+</body>
+</html>"""
+    return Response(html, mimetype="text/html; charset=utf-8")
 
 
 @bp.route("/api/share/<token>", methods=["GET"])
