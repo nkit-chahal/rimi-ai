@@ -36,6 +36,21 @@ function PreviewFallback({ message = 'Could not load pattern for 3D preview.' })
   );
 }
 
+/** Probe that an image URL is loadable before handing it to Three.js TextureLoader. */
+function probeImageUrl(url) {
+  return new Promise((resolve, reject) => {
+    if (!url) {
+      reject(new Error('empty url'));
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(url);
+    img.onerror = () => reject(new Error(`Could not load ${url}`));
+    img.src = url;
+  });
+}
+
 /* ── Garment Shape: T-Shirt ── */
 function TShirt({ texture }) {
   return (
@@ -118,9 +133,10 @@ function ToteBag({ texture }) {
 /* ── Auto-rotate wrapper ── */
 function AutoRotate({ enabled, children }) {
   const ref = useRef();
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (enabled && ref.current) {
       ref.current.rotation.y += delta * 0.5;
+      state.invalidate();
     }
   });
   return <group ref={ref}>{children}</group>;
@@ -159,27 +175,40 @@ export default function GarmentPreview3D({
   const [resolvedUrl, setResolvedUrl] = useState(null);
   const [resolveFailed, setResolveFailed] = useState(false);
   const [contextLost, setContextLost] = useState(false);
+  const contextLostRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     setResolvedUrl(null);
     setResolveFailed(false);
-    setContextLost(false);
+    // Do not clear contextLost here — remounting after a lost context thrashs the GPU.
+    // Only reset when the pattern URL / token actually changes and context was not lost.
+    if (!contextLostRef.current) {
+      setContextLost(false);
+    }
 
     if (!patternUrl) return undefined;
+    if (contextLostRef.current) return undefined;
 
     (async () => {
       try {
         const url = await resolveMediaUrl(patternUrl, token);
         if (cancelled) return;
-        if (mediaPathNeedsAuth(patternUrl) && url && !url.includes('access_token=')) {
+        if (!url) {
           setResolveFailed(true);
           return;
         }
-        setResolvedUrl(url || null);
-        if (!url) setResolveFailed(true);
+        if (mediaPathNeedsAuth(patternUrl) && !url.includes('access_token=')) {
+          setResolveFailed(true);
+          return;
+        }
+        // Verify the image loads in the browser before Three.js TextureLoader sees it.
+        // Avoids uncaught TextureLoader rejections for 404 / CORS / auth failures.
+        await probeImageUrl(url);
+        if (cancelled) return;
+        setResolvedUrl(url);
       } catch (err) {
-        console.warn('Failed to resolve 3D pattern URL:', err);
+        console.warn('Failed to resolve 3D pattern URL:', err?.message || err);
         if (!cancelled) setResolveFailed(true);
       }
     })();
@@ -209,16 +238,18 @@ export default function GarmentPreview3D({
       fallback={<PreviewFallback />}
     >
       <Canvas
-        frameloop="always"
-        dpr={[1, 1.5]}
+        frameloop={autoRotate ? 'always' : 'demand'}
+        dpr={[1, 1.25]}
         camera={{ position: [0, 0.5, 4], fov: 40 }}
-        gl={{ antialias: true, alpha: true }}
+        gl={{ antialias: true, alpha: true, powerPreference: 'default' }}
         style={{ width: '100%', height: '100%', borderRadius: '12px' }}
         onCreated={({ gl }) => {
           const canvas = gl.domElement;
           const onLost = (e) => {
             e.preventDefault();
+            contextLostRef.current = true;
             setContextLost(true);
+            setResolvedUrl(null);
           };
           canvas.addEventListener('webglcontextlost', onLost, false);
         }}

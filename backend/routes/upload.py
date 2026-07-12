@@ -50,7 +50,17 @@ def _source_export_filename(filename):
 
 
 def _lookup_file_owner(filename):
+    """Resolve owning user_id for a results/uploads basename.
+
+    Checks user_uploads, exports (falling back to the parent project's owner when
+    exports.user_id is NULL), then project hero/thumbnail and pattern_variations.
+    """
     lookup_name = _source_export_filename(filename)
+    if not lookup_name:
+        return None
+    results_path = f"/results/{lookup_name}"
+    uploads_path = f"/uploads/{lookup_name}"
+    like = f"%/{lookup_name}"
     conn = db()
     try:
         row = conn.execute(
@@ -59,9 +69,47 @@ def _lookup_file_owner(filename):
         ).fetchone()
         if row and row["user_id"] is not None:
             return int(row["user_id"])
+
+        # Prefer exports.user_id; if legacy rows left it NULL, use project owner.
         row = conn.execute(
-            "SELECT user_id FROM exports WHERE filename = ?",
+            """
+            SELECT COALESCE(e.user_id, p.user_id) AS user_id
+            FROM exports e
+            LEFT JOIN projects p ON p.id = e.project_id
+            WHERE e.filename = ?
+            LIMIT 1
+            """,
             (lookup_name,),
+        ).fetchone()
+        if row and row["user_id"] is not None:
+            return int(row["user_id"])
+
+        # Hero / thumbnail set by tools (e.g. seamless_tile_*.png) without a usable export row.
+        row = conn.execute(
+            """
+            SELECT user_id FROM projects
+            WHERE hero_image_url IN (?, ?)
+               OR thumbnail_url IN (?, ?)
+               OR hero_image_url LIKE ?
+               OR thumbnail_url LIKE ?
+            LIMIT 1
+            """,
+            (results_path, uploads_path, results_path, uploads_path, like, like),
+        ).fetchone()
+        if row and row["user_id"] is not None:
+            return int(row["user_id"])
+
+        row = conn.execute(
+            """
+            SELECT p.user_id
+            FROM pattern_variations v
+            JOIN projects p ON p.id = v.project_id
+            WHERE v.export_filename = ?
+               OR v.image_url IN (?, ?)
+               OR v.image_url LIKE ?
+            LIMIT 1
+            """,
+            (lookup_name, results_path, uploads_path, like),
         ).fetchone()
         if row and row["user_id"] is not None:
             return int(row["user_id"])

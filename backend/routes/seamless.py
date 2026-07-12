@@ -2,6 +2,7 @@
 import os
 import uuid
 import base64
+import json
 import time
 import numpy as np
 import requests as http_requests
@@ -172,8 +173,20 @@ def generate_seamless():
             conn.close()
             best_filename = best_url.split('/')[-1]
             input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
-            log_export(project_id, best_filename, input_fn, "Seamless Fix",
-                       {"prompt": designer_prompt, "creativity": creativity, "input_image": input_fn or image_url})
+            log_export(
+                project_id, best_filename, input_fn, "Seamless Fix",
+                {"prompt": designer_prompt, "creativity": creativity, "input_image": input_fn or image_url},
+                user_id=user_id,
+            )
+            # Ensure every generated tile is ACL-resolvable (not only the best).
+            for tile in results:
+                tile_name = (tile.get('url') or '').split('/')[-1]
+                if tile_name and tile_name != best_filename:
+                    log_export(
+                        project_id, tile_name, input_fn, "Seamless Fix",
+                        {"prompt": designer_prompt, "creativity": creativity, "input_image": input_fn or image_url},
+                        user_id=user_id,
+                    )
         if not results:
             refund_credits(user_id, project_id, required_credits, note='Generate seamless produced no tiles')
         updated_credits = get_updated_credits(user_id)

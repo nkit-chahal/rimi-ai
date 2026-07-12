@@ -118,9 +118,12 @@ export function mediaUrl(path, accessToken = null) {
     if (API && relative.startsWith(API)) relative = relative.slice(API.length);
     if (!relative.startsWith('/')) relative = `/${relative}`;
 
-    const base = `${API}${relative.split('?')[0]}`;
-    if (!mediaPathNeedsAuth(relative)) return base;
+    const cleanPath = relative.split('?')[0];
+    // Public frontend assets (/demo_*.png, etc.) must stay same-origin.
+    // Only /results/ and /uploads/ are served by the API host.
+    if (!mediaPathNeedsAuth(relative)) return cleanPath;
 
+    const base = `${API}${cleanPath}`;
     const filename = mediaFilenameFromPath(relative);
     const token = accessToken || cachedTokenForFilename(filename);
     if (!token) return base;
