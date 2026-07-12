@@ -486,6 +486,8 @@ def admin_qwen_burn():
             'fofr/style-transfer',
         )
         placeholders = ','.join('?' for _ in qwen_models)
+        # Prefer PostgreSQL-compatible date math; SQLite still accepts this ISO compare.
+        since_7d = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)).isoformat()
         row = conn.execute(
             f"""
             SELECT
@@ -494,7 +496,7 @@ def admin_qwen_burn():
                 COALESCE(SUM(credits), 0) AS total_credits,
                 COALESCE(SUM(output_bytes), 0) AS total_output_bytes
             FROM replicate_logs
-            WHERE model IN ({placeholders})
+            WHERE model_name IN ({placeholders})
                OR session_id IS NOT NULL
             """,
             qwen_models,
@@ -509,11 +511,14 @@ def admin_qwen_burn():
             f"""
             SELECT COALESCE(SUM(cost_usd), 0) AS burn_7d
             FROM replicate_logs
-            WHERE (model IN ({placeholders}) OR session_id IS NOT NULL)
-              AND created_at >= datetime('now', '-7 days')
+            WHERE (model_name IN ({placeholders}) OR session_id IS NOT NULL)
+              AND created_at >= ?
             """,
-            qwen_models,
+            (*qwen_models, since_7d),
         ).fetchone()
+    except Exception as e:
+        print(f"Error fetching qwen burn: {e}")
+        return jsonify({'success': False, 'error': 'Unable to load Qwen burn stats'}), 500
     finally:
         conn.close()
 
