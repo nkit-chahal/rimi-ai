@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import requests
 from flask import Blueprint, g, jsonify, request
 
+from auth import credit_expiry_reset_at, expire_credits_if_needed, _parse_reset_at
 from db import db, db_lock
 from middleware import login_required
 from plan_tiers import is_pro_plan, attach_tier_fields
@@ -309,11 +310,12 @@ def create_custom_order():
 @login_required
 def billing_overview():
     user_id = g.current_user["id"]
+    expire_credits_if_needed(user_id)
     with db_lock:
         conn = db()
         try:
             user = conn.execute(
-                "SELECT id, plan, credits_used, credits_limit FROM users WHERE id = ?",
+                "SELECT id, plan, credits_used, credits_limit, reset_at FROM users WHERE id = ?",
                 (user_id,)
             ).fetchone()
             payment_rows = conn.execute(
@@ -331,6 +333,16 @@ def billing_overview():
 
     credits_used = int(user["credits_used"] if user else 0)
     credits_limit = int(user["credits_limit"] if user else 0)
+    reset_at_raw = user["reset_at"] if user else None
+    reset_at = _parse_reset_at(reset_at_raw)
+    today = datetime.now(timezone.utc).replace(tzinfo=None).date()
+    if reset_at is None:
+        reset_days = None
+        credits_expired = False
+    else:
+        delta_days = (reset_at.date() - today).days
+        credits_expired = delta_days < 0
+        reset_days = max(0, delta_days)
     payments = []
     plan_lookup = _billing_plan_map()
     for row in payment_rows:
@@ -361,6 +373,9 @@ def billing_overview():
             "creditsLimit": credits_limit,
             "creditsRemaining": max(0, credits_limit - credits_used),
             "usagePct": min(100, round((credits_used / credits_limit) * 100, 1)) if credits_limit else 0,
+            "resetAt": reset_at_raw,
+            "resetDays": max(0, reset_days) if reset_days is not None else None,
+            "creditsExpired": bool(credits_expired),
         },
         "payments": payments,
     })
@@ -395,9 +410,15 @@ def _grant_payment_credits(conn, payment, paid_at, provider_payment_id=None):
         plan_label = plan["label"] if plan else (
             "Custom Top-up" if payment["pack_id"] == "custom" else "Paid Credits"
         )
+        reset_at = credit_expiry_reset_at()
+        try:
+            if paid_at:
+                reset_at = credit_expiry_reset_at(datetime.fromisoformat(str(paid_at).replace("Z", "")))
+        except Exception:
+            reset_at = credit_expiry_reset_at()
         conn.execute(
-            "UPDATE users SET credits_limit = credits_limit + ?, plan = ? WHERE id = ?",
-            (payment["credits"], plan_label, payment["user_id"]),
+            "UPDATE users SET credits_limit = credits_limit + ?, plan = ?, reset_at = ? WHERE id = ?",
+            (payment["credits"], plan_label, reset_at, payment["user_id"]),
         )
         conn.execute(
             """

@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 
 import bcrypt
 
+from auth import credit_expiry_reset_at
 from db import DEFAULT_CREDIT_PRICING, db, rows_to_dicts
 from jwt_tokens import issue_access_token
 from middleware import admin_required, login_required
@@ -297,7 +298,7 @@ def signup_verify_otp():
             return jsonify({'success': False, 'error': 'An account with this email already exists'}), 409
 
         now = datetime.now(timezone.utc).replace(tzinfo=None)
-        reset_at = (now + timedelta(days=30)).isoformat()
+        reset_at = credit_expiry_reset_at(now)
         initials = _initials_from_name(pending["name"])
         cur = conn.execute(
             """
@@ -820,7 +821,7 @@ def admin_create_user():
         return jsonify({'success': False, 'error': 'Credit limit cannot be negative'}), 400
 
     initials = _initials_from_name(name)
-    reset_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30)).isoformat()
+    reset_at = credit_expiry_reset_at()
 
     conn = db()
     try:

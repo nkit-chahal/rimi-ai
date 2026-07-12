@@ -8,6 +8,7 @@ import bcrypt
 import requests
 from flask import Blueprint, jsonify, make_response, redirect, request
 
+from auth import credit_expiry_reset_at
 from db import db
 from jwt_tokens import issue_access_token
 
@@ -168,7 +169,7 @@ def google_callback():
     name = (profile.get("name") or email.split("@")[0]).strip()
     avatar_url = profile.get("picture")
     now = utc_now()
-    reset_at = (now + timedelta(days=30)).isoformat()
+    reset_at = credit_expiry_reset_at(now)
 
     conn = db()
     try:
@@ -201,7 +202,7 @@ def google_callback():
                     (user_id,),
                 )
         else:
-            reset_at = (now + timedelta(days=30)).isoformat()
+            reset_at = credit_expiry_reset_at(now)
             password_hash = bcrypt.hashpw(
                 secrets.token_urlsafe(32).encode("utf-8"),
                 bcrypt.gensalt(),
@@ -313,7 +314,7 @@ def google_complete_signup():
             return jsonify({"success": False, "error": "An account with this Google email already exists"}), 409
 
         now = utc_now()
-        reset_at = (now + timedelta(days=30)).isoformat()
+        reset_at = credit_expiry_reset_at(now)
         password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         cur = conn.execute(
             """

@@ -15,6 +15,11 @@ bp = Blueprint('studio', __name__)
 
 
 def get_studio_state(project_id=1, user_id=None):
+    from auth import expire_credits_if_needed
+
+    if user_id is not None:
+        expire_credits_if_needed(user_id)
+
     conn = db()
     if user_id is not None:
         user_row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -74,7 +79,7 @@ def get_studio_state(project_id=1, user_id=None):
         reset_at = datetime.fromisoformat(user["reset_at"])
         reset_days = max(0, (reset_at.date() - datetime.now(timezone.utc).replace(tzinfo=None).date()).days)
     except Exception:
-        reset_days = 30
+        reset_days = 60
 
     from plan_tiers import attach_tier_fields
     user_payload = attach_tier_fields({

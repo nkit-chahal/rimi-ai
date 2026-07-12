@@ -7,13 +7,14 @@ import { trackEvent } from '../../../observability';
 export default function BillingPanel({ user, userRemainingCredits, currentToken, updateCreditsFromResponse, loadStudioState, activeProject }) {
     const [paymentStatus, setPaymentStatus] = useState({ loadingPackId: null, message: '', error: '' });
     const [razorpayKeyId, setRazorpayKeyId] = useState(import.meta.env.VITE_RAZORPAY_KEY_ID || '');
-    const [billingTrack, setBillingTrack] = useState(() => (user?.isPro ? 'pro' : 'basic'));
+    const [razorpayConfigured, setRazorpayConfigured] = useState(null); // null = unknown, true/false after config fetch
+    const [razorpayScriptReady, setRazorpayScriptReady] = useState(() => typeof window !== 'undefined' && Boolean(window.Razorpay));
+    const [razorpayBooting, setRazorpayBooting] = useState(true);
     const [billingOverview, setBillingOverview] = useState({
         loading: false,
         plans: [],
         usage: null,
         payments: [],
-        razorpayConfigured: false,
     });
 
     const fetchBillingOverview = useCallback(() => {
@@ -30,8 +31,10 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                         plans: d.plans || [],
                         usage: d.usage || null,
                         payments: d.payments || [],
-                        razorpayConfigured: Boolean(d.razorpayConfigured),
                     });
+                    if (typeof d.razorpayConfigured === 'boolean') {
+                        setRazorpayConfigured(d.razorpayConfigured);
+                    }
                     if (d.usage) {
                         updateCreditsFromResponse({
                             creditsUsed: d.usage.creditsUsed,
@@ -51,32 +54,67 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
     useEffect(() => {
         if (!currentToken) return;
         fetchBillingOverview();
-        loadRazorpay().catch(() => {});
+
+        let cancelled = false;
+        setRazorpayBooting(true);
+        loadRazorpay()
+            .then(() => {
+                if (!cancelled) setRazorpayScriptReady(true);
+            })
+            .catch(() => {
+                if (!cancelled) setRazorpayScriptReady(false);
+            })
+            .finally(() => {
+                if (!cancelled) setRazorpayBooting(false);
+            });
+
         fetch(`${API}/api/billing/razorpay-config`, {
             headers: { 'Authorization': `Bearer ${currentToken}` },
         })
             .then(r => r.json())
             .then(d => {
-                if (d.success && d.keyId) {
-                    setRazorpayKeyId(d.keyId);
-                } else if (d.success && !d.configured) {
+                if (!d.success) return;
+                setRazorpayConfigured(Boolean(d.configured));
+                if (d.keyId) setRazorpayKeyId(d.keyId);
+                if (!d.configured) {
                     setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay is not configured on the backend.' });
                 }
             })
-            .catch(() => setPaymentStatus({ loadingPackId: null, message: '', error: 'Unable to load Razorpay configuration.' }));
+            .catch(() => {
+                setPaymentStatus({ loadingPackId: null, message: '', error: 'Unable to load Razorpay configuration.' });
+            });
+
+        return () => { cancelled = true; };
     }, [currentToken, fetchBillingOverview]);
 
+    const canPay = razorpayConfigured === true && Boolean(razorpayKeyId);
+
+    const razorpayStatusLabel = () => {
+        if (razorpayConfigured === false) return 'Razorpay not configured';
+        if (razorpayBooting || razorpayConfigured === null || !razorpayKeyId) return 'Loading Razorpay…';
+        if (!razorpayScriptReady) return 'Loading Razorpay…';
+        return 'Razorpay ready';
+    };
+
+    const razorpayStatusClass = () => {
+        if (razorpayConfigured === false) return 'missing';
+        if (canPay && razorpayScriptReady) return 'ready';
+        return 'loading';
+    };
+
     const startRazorpayCheckout = async (pack) => {
-        setPaymentStatus({ loadingPackId: pack.id, message: '', error: '' });
+        setPaymentStatus({ loadingPackId: pack.id, message: 'Opening checkout…', error: '' });
         trackEvent('billing_checkout_started', { packId: pack.id, credits: pack.credits, amount: pack.amount });
 
-        if (!razorpayKeyId) {
-            setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay key id is not configured.' });
+        if (razorpayConfigured === false) {
+            setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay is not configured on the backend.' });
             return;
         }
 
         try {
             const Razorpay = await loadRazorpay();
+            setRazorpayScriptReady(true);
+
             const orderRes = await fetch(`${API}/api/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentToken}` },
@@ -90,8 +128,15 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                 throw new Error(orderData.error || 'Unable to create payment order.');
             }
 
+            const checkoutKey = orderData.key_id || razorpayKeyId;
+            if (!checkoutKey) {
+                setPaymentStatus({ loadingPackId: null, message: '', error: 'Razorpay is not configured on the backend.' });
+                return;
+            }
+            if (orderData.key_id) setRazorpayKeyId(orderData.key_id);
+
             const checkout = new Razorpay({
-                key: orderData.key_id || razorpayKeyId,
+                key: checkoutKey,
                 amount: orderData.amount,
                 currency: orderData.currency,
                 name: 'RIMI AI',
@@ -155,6 +200,7 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
             });
 
             checkout.open();
+            setPaymentStatus({ loadingPackId: pack.id, message: 'Opening checkout…', error: '' });
         } catch (err) {
             setPaymentStatus({
                 loadingPackId: null,
@@ -172,12 +218,11 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
         creditsLimit: user.creditsLimit || 0,
         creditsRemaining: userRemainingCredits,
         usagePct: user.creditsLimit ? Math.min(100, Math.round(((user.creditsUsed || 0) / user.creditsLimit) * 100)) : 0,
+        resetAt: null,
+        resetDays: user.resetDays ?? null,
+        creditsExpired: false,
     };
-    const plans = (billingOverview.plans || []).filter((pack) => {
-        if (pack.id === 'free') return false;
-        const track = (pack.track || (['pro', 'scale'].includes(pack.id) ? 'pro' : 'basic'));
-        return track === billingTrack;
-    });
+    const plans = (billingOverview.plans || []).filter((pack) => pack.id !== 'free');
     const currentPlanName = (usage.plan || user.plan || 'Free').toLowerCase();
     const formatDate = (value) => {
         if (!value) return 'Pending';
@@ -185,24 +230,30 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
         return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
+    const expiryCopy = (() => {
+        if (usage.creditsExpired) return 'Credits expired';
+        const days = usage.resetDays;
+        if (days == null) return null;
+        if (days <= 0) return 'Credits expired';
+        if (days === 1) return 'Credits expire in 1 day';
+        return `Credits expire in ${days} days`;
+    })();
+
+    const statusLabel = razorpayStatusLabel();
+    const statusClass = razorpayStatusClass();
+
     return (
         <div className="st-billing-page">
             <div className="st-billing-header">
                 <div>
                     <div className="st-billing-kicker">Subscription</div>
                     <h2>Credits and Billing</h2>
-                    <p>Recharge AI credits through Razorpay Standard Checkout. Credits are added to your available limit after payment verification.</p>
+                    <p>Recharge AI credits through Razorpay Standard Checkout. Credits are added to your available limit after payment verification and remain valid for 2 months.</p>
                 </div>
                 <button className="st-billing-refresh" onClick={fetchBillingOverview} disabled={billingOverview.loading}>
                     <I d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" s={16} />
                     {billingOverview.loading ? 'Refreshing' : 'Refresh'}
                 </button>
-            </div>
-
-            <div className="st-billing-tabs" aria-label="Billing sections">
-                <button className="active">RIMI Studio</button>
-                <button disabled>API</button>
-                <button disabled>Enterprise</button>
             </div>
 
             <div className="st-billing-summary-grid">
@@ -218,6 +269,11 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                         <span>{Number(usage.creditsRemaining || 0).toLocaleString()} credits remaining</span>
                         <span>{usage.usagePct || 0}% used</span>
                     </div>
+                    {expiryCopy && (
+                        <div className={`st-billing-expiry ${usage.creditsExpired || (usage.resetDays != null && usage.resetDays <= 0) ? 'expired' : ''}`}>
+                            {expiryCopy}
+                        </div>
+                    )}
                 </section>
 
                 <section className="st-billing-current-card">
@@ -226,9 +282,13 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                         <strong>{usage.plan || 'Free Trial'}</strong>
                         <em className="st-billing-tier-pill">{usage.isPro || user?.isPro ? 'Pro tier' : 'Basic tier'}</em>
                     </div>
-                    <div className={`st-billing-status ${billingOverview.razorpayConfigured ? 'ready' : 'missing'}`}>
-                        <I d={billingOverview.razorpayConfigured ? 'M20 6L9 17l-5-5' : 'M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z'} s={14} />
-                        {billingOverview.razorpayConfigured ? 'Razorpay ready' : 'Razorpay not configured'}
+                    <div className={`st-billing-status ${statusClass}`}>
+                        {(statusClass === 'loading' || razorpayBooting) ? (
+                            <span className="st-billing-spinner" aria-hidden="true" />
+                        ) : (
+                            <I d={statusClass === 'ready' ? 'M20 6L9 17l-5-5' : 'M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z'} s={14} />
+                        )}
+                        {statusLabel}
                     </div>
                 </section>
             </div>
@@ -244,33 +304,11 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                     <span>INR</span>
                     <strong>India billing</strong>
                 </div>
-                <div className="st-billing-cycle st-billing-track" role="tablist" aria-label="Billing track">
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected={billingTrack === 'basic'}
-                        className={billingTrack === 'basic' ? 'active' : ''}
-                        onClick={() => setBillingTrack('basic')}
-                    >
-                        Basic
-                    </button>
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected={billingTrack === 'pro'}
-                        className={billingTrack === 'pro' ? 'active' : ''}
-                        onClick={() => setBillingTrack('pro')}
-                    >
-                        Pro
-                    </button>
-                </div>
             </div>
 
-            {billingTrack === 'pro' && (
-                <p className="st-billing-track-copy">
-                    Pro unlocks GPT Image 2, Imagen 4 Ultra, Flux 2 Pro, Nano Banana 2, Seedream, Qwen Studio, and 3D Mockup.
-                </p>
-            )}
+            <p className="st-billing-track-copy">
+                Basic packs cover normal models. Pro packs unlock premium models, Qwen Studio, and 3D Mockup.
+            </p>
 
             <div className="st-billing-plans">
                 {billingOverview.loading && plans.length === 0 ? (
@@ -282,10 +320,13 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                     const amount = Number(pack.amount || 0);
                     const isCurrent = currentPlanName.includes((pack.label || '').toLowerCase());
                     const priceLabel = pack.priceLabel || (amount ? `₹${(amount / 100).toLocaleString('en-IN')}` : '₹0');
+                    const track = pack.track || (['pro', 'scale'].includes(pack.id) ? 'pro' : 'basic');
+                    const payDisabled = isLoading || !pack.checkoutEnabled || razorpayConfigured === false || razorpayConfigured === null;
                     return (
-                        <article key={pack.id} className={`st-billing-plan ${pack.badge ? 'highlighted' : ''} ${pack.track === 'pro' ? 'pro-track' : ''}`}>
+                        <article key={pack.id} className={`st-billing-plan ${pack.badge ? 'highlighted' : ''} ${track === 'pro' ? 'pro-track' : 'basic-track'}`}>
                             <div className="st-billing-plan-top">
                                 <div>
+                                    <div className="st-billing-plan-track-label">{track === 'pro' ? 'Pro' : 'Basic'}</div>
                                     <h3>{pack.label}</h3>
                                     <p>{pack.description}</p>
                                 </div>
@@ -293,15 +334,20 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                             </div>
                             <div className="st-billing-price">
                                 <strong>{priceLabel}</strong>
-                                <span>{amount ? 'one-time' : 'trial'}</span>
+                                <span>{amount ? 'one-time · 2 months' : 'trial'}</span>
                             </div>
                             <button
-                                className={`st-billing-pay ${pack.badge || pack.track === 'pro' ? 'primary' : ''}`}
+                                className={`st-billing-pay ${pack.badge || track === 'pro' ? 'primary' : ''}`}
                                 type="button"
                                 onClick={() => startRazorpayCheckout(pack)}
-                                disabled={isLoading || !pack.checkoutEnabled || !billingOverview.razorpayConfigured}
+                                disabled={payDisabled}
                             >
-                                {isLoading ? 'Processing...' : isCurrent && !pack.checkoutEnabled ? 'Current plan' : pack.checkoutEnabled ? 'Pay with Razorpay' : 'Included'}
+                                {isLoading ? (
+                                    <>
+                                        <span className="st-billing-spinner" aria-hidden="true" />
+                                        Opening checkout…
+                                    </>
+                                ) : isCurrent && !pack.checkoutEnabled ? 'Current plan' : pack.checkoutEnabled ? 'Pay with Razorpay' : 'Included'}
                             </button>
                             <div className="st-billing-credit-line">
                                 <strong>{Number(pack.credits || 0).toLocaleString()}</strong>

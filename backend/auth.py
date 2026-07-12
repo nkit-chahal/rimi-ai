@@ -7,12 +7,97 @@ import io
 import json
 import base64
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import request
 
 from db import db, db_lock
 from jwt_tokens import decode_access_token
+
+CREDIT_EXPIRY_DAYS = 60
+
+
+def _parse_reset_at(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", ""))
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
+    except Exception:
+        return None
+
+
+def credit_expiry_reset_at(from_dt=None):
+    """Return ISO timestamp for credits expiry (60 days from now or from_dt)."""
+    base = from_dt or datetime.now(timezone.utc).replace(tzinfo=None)
+    return (base + timedelta(days=CREDIT_EXPIRY_DAYS)).isoformat()
+
+
+def expire_credits_if_needed(user_id, conn=None):
+    """
+    If reset_at is past and the user still has remaining credits, zero remaining
+    by setting credits_used = credits_limit. Returns True when an expiry was applied.
+    """
+    user_id = resolve_user_id(user_id)
+    if not user_id:
+        return False
+
+    owns_conn = conn is None
+    if owns_conn:
+        conn = db()
+
+    try:
+        user = conn.execute(
+            "SELECT id, credits_used, credits_limit, reset_at FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if not user:
+            return False
+
+        reset_at = _parse_reset_at(user["reset_at"])
+        if reset_at is None:
+            return False
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if reset_at.date() >= now.date():
+            return False
+
+        credits_used = int(user["credits_used"] or 0)
+        credits_limit = int(user["credits_limit"] or 0)
+        remaining = credits_limit - credits_used
+        if remaining <= 0:
+            return False
+
+        now_iso = now.isoformat()
+        conn.execute(
+            "UPDATE users SET credits_used = credits_limit WHERE id = ?",
+            (user_id,),
+        )
+        conn.execute(
+            """
+            INSERT INTO credit_transactions
+            (user_id, transaction_type, credits, note, created_at)
+            VALUES (?, 'adjustment', ?, ?, ?)
+            """,
+            (user_id, remaining, "2-month credit expiry", now_iso),
+        )
+        if owns_conn:
+            conn.commit()
+        return True
+    except Exception as exc:
+        if owns_conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        print(f"Error expiring credits for user {user_id}: {exc}")
+        return False
+    finally:
+        if owns_conn:
+            conn.close()
+
 
 
 def resolve_user_id(user_id=None):
@@ -103,6 +188,7 @@ def check_credits(user_id, required_credits=1):
     user_id = resolve_user_id(user_id)
     if not user_id:
         return False, 0, 0, 0
+    expire_credits_if_needed(user_id)
     try:
         required_credits = max(1, int(required_credits))
     except (TypeError, ValueError):
@@ -123,6 +209,7 @@ def get_updated_credits(user_id):
     user_id = resolve_user_id(user_id)
     if not user_id:
         return {}
+    expire_credits_if_needed(user_id)
     conn = db()
     try:
         user = conn.execute("SELECT credits_used, credits_limit FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -131,6 +218,7 @@ def get_updated_credits(user_id):
         return {}
     finally:
         conn.close()
+
 
 
 def get_credit_price(tool_key, default=0):
@@ -282,6 +370,7 @@ def reserve_credits(user_id, project_id, credits, activity_type='generation', co
 
 def reserve_credits_or_error(user_id, project_id, credits, activity_type='generation', count=1):
     """Reserve credits; return (True, None) or (False, credit_error_payload dict)."""
+    expire_credits_if_needed(user_id)
     try:
         reserve_credits(user_id, project_id, credits, activity_type, count)
         return True, None
