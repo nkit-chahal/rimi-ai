@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 
 import '../../../styles/tools/repeat.css';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
+import { calcExportGrid, calcRepeatLayoutMetrics } from '../shared/repeatLayout';
 
 export default function RepeatTool(props) {
     const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, controls, updateControls, repeatUrl, setRepeatUrl, isRepeat, setIsRepeat, rightPanelEl, handlePreUpload, onUploadInvalid, onUploadPaste, uploadStatus, tool, state, setState, setUploads, currentToken, setTool, setQwenLaunch } = props;
@@ -34,80 +35,17 @@ export default function RepeatTool(props) {
     const dpi = Number(controls.exportDpi) || 300;
     const FABRIC_PREVIEW_PX = 960;
 
-    const calcExportGrid = useCallback((fw, tw) => {
-        if (tw > fw) return 2;
-        return Math.max(2, Math.min(8, Math.ceil(fw / Math.max(tw, 0.5))));
-    }, []);
-
-    const layoutMetrics = useMemo(() => {
-        const repeatsAcross = fabW / Math.max(rptW, 0.5);
-        const fullRepeatsAcross = Math.floor(repeatsAcross);
-        const tileWiderThanFabric = rptW > fabW;
-        const coverage = tileWiderThanFabric
-            ? 100
-            : (fullRepeatsAcross * rptW) / Math.max(fabW, 1) * 100;
-        const exportGrid = calcExportGrid(fabW, rptW);
-        const tilesAcrossCeil = Math.ceil(repeatsAcross);
-        const maxPreviewCols = rptW <= 2 ? 36 : rptW <= 4 ? 24 : rptW <= 8 ? 18 : 12;
-
-        const previewCols = tileWiderThanFabric
-            ? 1
-            : Math.min(maxPreviewCols, Math.max(2, tilesAcrossCeil));
-        const previewRows = tileWiderThanFabric
-            ? 2
-            : Math.min(8, Math.max(3, Math.ceil(previewCols / 4)));
-        const tileDisplayW = tileWiderThanFabric
-            ? FABRIC_PREVIEW_PX
-            : FABRIC_PREVIEW_PX / repeatsAcross;
-        const tileDisplayH = tileDisplayW * (rptH / Math.max(rptW, 0.5));
-        const canvasPxW = Math.round(tileDisplayW * previewCols);
-        const canvasPxH = Math.round(tileDisplayH * previewRows);
-
-        const tilePxW = Math.round(rptW * dpi);
-        const tilePxH = Math.round(rptH * dpi);
-        const sheetPxW = tilePxW * exportGrid;
-        const sheetPxH = tilePxH * exportGrid;
-        const sheetInW = (exportGrid * rptW).toFixed(1);
-        const sheetInH = (exportGrid * rptH).toFixed(1);
-
-        const repeatsLabel = tileWiderThanFabric
-            ? `Partial (${repeatsAcross.toFixed(2)} tile fits)`
-            : Math.abs(repeatsAcross - Math.round(repeatsAcross)) < 0.01
-                ? `${Math.round(repeatsAcross)} across fabric`
-                : `${fullRepeatsAcross} full (${repeatsAcross.toFixed(2)} across)`;
-        const gridLabel = `${previewCols}×${previewRows} on canvas`;
-        const gridNote = !tileWiderThanFabric && previewCols < tilesAcrossCeil
-            ? `Full fabric width = ${tilesAcrossCeil} tiles`
-            : !tileWiderThanFabric
-                ? `Matches ${tilesAcrossCeil} tiles across ${fabW}″`
-                : '';
-
-        return {
-            repeatsAcross,
-            fullRepeatsAcross,
-            tileWiderThanFabric,
-            coverage,
-            exportGrid,
-            previewCols,
-            previewRows,
-            tileDisplayW,
-            tileDisplayH,
-            canvasPxW,
-            canvasPxH,
-            tilePxW,
-            tilePxH,
-            sheetPxW,
-            sheetPxH,
-            sheetInW,
-            sheetInH,
-            repeatsLabel,
-            gridLabel,
-            gridNote,
-        };
-    }, [fabW, rptW, rptH, dpi, calcExportGrid]);
+    const layoutMetrics = useMemo(() => calcRepeatLayoutMetrics({
+        fabricWidth: fabW,
+        tileWidth: rptW,
+        tileHeight: rptH,
+        dpi,
+        fabricPreviewPx: FABRIC_PREVIEW_PX,
+    }), [fabW, rptW, rptH, dpi]);
 
     const {
         tileWiderThanFabric,
+        fabricLockedPreview,
         coverage,
         exportGrid,
         previewCols,
@@ -137,7 +75,7 @@ export default function RepeatTool(props) {
             fabricWidth: patch.fabricWidth ?? nextFab,
             gridSize: calcExportGrid(nextFab, nextW),
         });
-    }, [updateControls, rptW, rptH, fabW, calcExportGrid]);
+    }, [updateControls, rptW, rptH, fabW]);
     const createRepeat = async () => {
         if (!uploaded && !preview) {
             setError('Upload an image first to export a repeat set.');
@@ -222,7 +160,9 @@ export default function RepeatTool(props) {
         const tileH = Math.max(24, Math.round(tileDisplayH));
 
         const drawPattern = (img) => {
-            c.width = tileW * cols;
+            // Fabric-locked engineered preview uses fabric-width canvas so a
+            // fractional remainder peeks as a clipped strip — not a full extra column.
+            c.width = fabricLockedPreview ? FABRIC_PREVIEW_PX : tileW * cols;
             c.height = tileH * rows;
             ctx.fillStyle = '#fbfaf7';
             ctx.fillRect(0, 0, c.width, c.height);
@@ -236,6 +176,10 @@ export default function RepeatTool(props) {
             const insetX = (tileW - drawW) / 2;
             const insetY = (tileH - drawH) / 2;
             const expand = 2;
+            // Draw enough columns to fill fabric when canvas is fabric-locked.
+            const drawCols = fabricLockedPreview
+                ? Math.max(cols + 1, Math.ceil(c.width / tileW) + 1)
+                : cols;
 
             const drawTile = (col, row, x, y) => {
                 ctx.drawImage(img, x + insetX, y + insetY, drawW, drawH);
@@ -244,12 +188,12 @@ export default function RepeatTool(props) {
             if (controls.repeatType === 'half_brick') {
                 for (let r = -expand; r < rows + expand; r += 1) {
                     const offset = Math.abs(r) % 2 ? Math.floor(tileW / 2) : 0;
-                    for (let col = -expand; col <= cols + expand; col += 1) {
+                    for (let col = -expand; col <= drawCols + expand; col += 1) {
                         drawTile(col, r, col * tileW + offset, r * tileH);
                     }
                 }
             } else if (controls.repeatType === 'half_drop') {
-                for (let col = -expand; col < cols + expand; col += 1) {
+                for (let col = -expand; col < drawCols + expand; col += 1) {
                     const offset = Math.abs(col) % 2 ? Math.floor(tileH / 2) : 0;
                     for (let r = -expand; r <= rows + expand; r += 1) {
                         drawTile(col, r, col * tileW, r * tileH + offset);
@@ -257,7 +201,7 @@ export default function RepeatTool(props) {
                 }
             } else if (controls.repeatType === 'mirror') {
                 for (let r = -expand; r < rows + expand; r += 1) {
-                    for (let col = -expand; col < cols + expand; col += 1) {
+                    for (let col = -expand; col < drawCols + expand; col += 1) {
                         ctx.save();
                         ctx.translate(
                             col * tileW + insetX + (Math.abs(col) % 2 ? drawW : 0),
@@ -270,10 +214,17 @@ export default function RepeatTool(props) {
                 }
             } else {
                 for (let r = -expand; r < rows + expand; r += 1) {
-                    for (let col = -expand; col < cols + expand; col += 1) {
+                    for (let col = -expand; col < drawCols + expand; col += 1) {
                         drawTile(col, r, col * tileW, r * tileH);
                     }
                 }
+            }
+
+            // Dim anything past the fabric-width guide so ceil padding never
+            // reads as "you selected a 2-across product."
+            if (!tileWiderThanFabric && c.width > FABRIC_PREVIEW_PX) {
+                ctx.fillStyle = 'rgba(251, 250, 247, 0.72)';
+                ctx.fillRect(FABRIC_PREVIEW_PX, 0, c.width - FABRIC_PREVIEW_PX, c.height);
             }
 
             if (showTileBoundary) {
@@ -281,13 +232,18 @@ export default function RepeatTool(props) {
                 ctx.lineWidth = 1;
                 for (let r = 0; r < rows; r += 1) {
                     for (let col = 0; col < cols; col += 1) {
-                        ctx.strokeRect(col * tileW + 0.5, r * tileH + 0.5, tileW - 1, tileH - 1);
+                        const x = col * tileW;
+                        if (x >= FABRIC_PREVIEW_PX && !tileWiderThanFabric) continue;
+                        const w = tileWiderThanFabric
+                            ? tileW - 1
+                            : Math.min(tileW, FABRIC_PREVIEW_PX - x) - 1;
+                        if (w > 0) ctx.strokeRect(x + 0.5, r * tileH + 0.5, w, tileH - 1);
                     }
                 }
                 if (!tileWiderThanFabric) {
                     ctx.strokeStyle = 'rgba(16, 185, 129, 0.75)';
                     ctx.setLineDash([6, 4]);
-                    ctx.strokeRect(0.5, 0.5, FABRIC_PREVIEW_PX - 1, rows * tileH - 1);
+                    ctx.strokeRect(0.5, 0.5, FABRIC_PREVIEW_PX - 1, c.height - 1);
                     ctx.setLineDash([]);
                 }
             }
@@ -374,6 +330,7 @@ export default function RepeatTool(props) {
         tileDisplayW,
         tileDisplayH,
         tileWiderThanFabric,
+        fabricLockedPreview,
         rptW,
         rptH,
         fabW,
@@ -621,12 +578,15 @@ export default function RepeatTool(props) {
                         </div>
                         <div style={{ height: '1px', background: 'rgba(0,0,0,0.04)', margin: '2px 0' }} />
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                            <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Canvas preview</span>
-                            <span style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 700, textAlign: 'right' }}>
-                                {gridLabel}
-                                {gridNote && (
-                                    <span style={{ display: 'block', fontSize: '0.68rem', color: '#94a3b8', fontWeight: 500, marginTop: '2px' }}>{gridNote}</span>
-                                )}
+                            <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Export sheet</span>
+                            <span style={{ fontSize: '0.78rem', color: '#4f46e5', fontWeight: 800, textAlign: 'right' }}>
+                                {exportGrid}×{exportGrid} tiles<br />
+                                <span style={{ display: 'block', fontSize: '0.68rem', color: '#94a3b8', fontWeight: 500, marginTop: '2px' }}>
+                                    {sheetPxW.toLocaleString()}×{sheetPxH.toLocaleString()} px ({sheetInW}″ × {sheetInH}″)
+                                    {!tileWiderThanFabric && Number(sheetInW) < fabW - 0.01 && (
+                                        <> · fits in {fabW}″</>
+                                    )}
+                                </span>
                             </span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -634,12 +594,12 @@ export default function RepeatTool(props) {
                             <span style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 700 }}>{tilePxW.toLocaleString()}×{tilePxH.toLocaleString()} px</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                            <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Export sheet</span>
+                            <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Canvas preview</span>
                             <span style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 700, textAlign: 'right' }}>
-                                {exportGrid}×{exportGrid} tiles<br />
-                                <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 500 }}>
-                                    {sheetPxW.toLocaleString()}×{sheetPxH.toLocaleString()} px ({sheetInW}″ × {sheetInH}″)
-                                </span>
+                                {gridLabel}
+                                {gridNote && (
+                                    <span style={{ display: 'block', fontSize: '0.68rem', color: '#94a3b8', fontWeight: 500, marginTop: '2px' }}>{gridNote}</span>
+                                )}
                             </span>
                         </div>
                     </div>

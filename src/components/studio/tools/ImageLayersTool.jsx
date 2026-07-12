@@ -158,42 +158,27 @@ export default function ImageLayersTool(props) {
     const [recursiveLayerCount, setRecursiveLayerCount] = useState(4);
     const [isProcessingAI, setIsProcessingAI] = useState(false);
     const [aiProcessingText, setAiProcessingText] = useState('');
+    // Empty-state capability hints — short labels only (no prompt/keyword walls)
     const qwenLayerDemoActions = [
         {
-            label: 'Edit Text',
+            label: 'Edit text',
             type: 'revise',
-            prompt: 'Change the selected text to "Qwen-Image"',
             icon: 'M4 7V4h16v3M9 20h6M12 4v16',
-        },
-        {
-            label: 'Replace',
-            type: 'replace',
-            prompt: 'Replace the selected object with a friendly dog',
-            icon: 'M7 7h10v10H7zM3 12h4M17 12h4M12 3v4M12 17v4',
         },
         {
             label: 'Recolor',
             type: 'recolor',
-            prompt: 'Recolor the selected layer to cyan and violet',
             icon: 'M12 22a7 7 0 007-7c0-5-7-13-7-13S5 10 5 15a7 7 0 007 7z',
         },
         {
-            label: 'Remove',
-            type: 'remove',
-            prompt: '',
-            icon: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
+            label: 'Replace',
+            type: 'replace',
+            icon: 'M7 7h10v10H7zM3 12h4M17 12h4M12 3v4M12 17v4',
         },
         {
             label: 'Decompose',
             type: 'decompose',
-            prompt: '',
             icon: 'M12 2L2 7l10 5 10-5-10-5zM2 12l10 5 10-5M2 17l10 5 10-5',
-        },
-        {
-            label: 'Inpaint',
-            type: 'inpaint',
-            prompt: 'Change only the painted area',
-            icon: 'M3 21v-4l11-11 4 4L7 21H3zM14 6l2-2a2 2 0 012.8 0l1.2 1.2a2 2 0 010 2.8l-2 2',
         },
     ];
 
@@ -1492,17 +1477,16 @@ export default function ImageLayersTool(props) {
         setSelectedLayerId(id);
     };
 
-    const renderShowcaseDemoCard = (demo, size = 15) => (
+    const renderShowcaseDemoCard = (demo, size = 14) => (
         <button
             key={demo.label}
             type="button"
             className="st-qwen-demo-card showcase"
             aria-disabled="true"
-            title={`${demo.label} showcase`}
+            title={demo.label}
         >
             <I d={demo.icon} s={size} />
-            <span>{demo.label}</span>
-            {demo.prompt ? <small>{demo.prompt}</small> : null}
+            <span className="st-qwen-demo-label">{demo.label}</span>
         </button>
     );
 
@@ -1515,8 +1499,8 @@ export default function ImageLayersTool(props) {
                         <div className="st-qwen-layer-hero">
                             <div>
                                 <div className="st-qwen-eyebrow">Qwen-Image-Layered</div>
-                                <h2>Editable RGBA layers with physical isolation</h2>
-                                <p>Decompose, recolor, revise, replace, resize, reposition, delete, and recursively split any selected layer.</p>
+                                <h2>Editable RGBA layers</h2>
+                                <p>Select a layer, then edit, recolor, replace, or decompose it again.</p>
                             </div>
                             <button
                                 className="st-layer-fullscreen-btn"
@@ -1529,10 +1513,6 @@ export default function ImageLayersTool(props) {
                             <div className="st-qwen-depth-preview" aria-hidden="true">
                                 {[0, 1, 2, 3, 4].map(i => <span key={i} style={{ '--i': i }} />)}
                             </div>
-                        </div>
-
-                        <div className="st-qwen-demo-strip">
-                            {qwenLayerDemoActions.map((demo) => renderShowcaseDemoCard(demo))}
                         </div>
 
                         <div className="st-layer-toolbar">
@@ -1857,8 +1837,8 @@ export default function ImageLayersTool(props) {
                         {isImageLayering ? (
                             <>
                                 <div className="st-spinner" style={{ width: 32, height: 32, borderTopColor: '#67e8f9' }} />
-                                <div>Qwen is decomposing image into {imageLayersNumLayers} RGBA layers...</div>
-                                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>The resulting layers can be isolated, edited, moved, resized, deleted, and decomposed again.</div>
+                                <div>Decomposing into {imageLayersNumLayers} layers…</div>
+                                <div className="st-qwen-empty-sub">You can edit, move, and re-split layers when this finishes.</div>
                             </>
                         ) : (
                             <>
@@ -1867,7 +1847,7 @@ export default function ImageLayersTool(props) {
                                     {[0, 1, 2, 3].map(i => <div key={i} className="st-qwen-empty-card layer" style={{ '--i': i }} />)}
                                 </div>
                                 <div className="st-qwen-empty-title">Qwen-Image-Layered</div>
-                                <div>Upload an image, choose a layer count, then decompose it into editable RGBA layers.</div>
+                                <div>Upload an image, set layer count, then decompose.</div>
                                 <div
                                     {...rootProps}
                                     className={`st-qwen-upload-drop ${isDrag ? 'dragging' : ''} ${preview ? 'has-preview' : ''}`}
@@ -1894,14 +1874,8 @@ export default function ImageLayersTool(props) {
                                         {preview ? 'Replace' : 'Choose file'}
                                     </button>
                                 </div>
-                                <div className="st-qwen-demo-grid">
+                                <div className="st-qwen-demo-grid" aria-label="What you can do after decompose">
                                     {qwenLayerDemoActions.map((demo) => renderShowcaseDemoCard(demo))}
-                                </div>
-                                <div className="st-qwen-feature-row">
-                                    <span>Physical isolation</span>
-                                    <span>Natural-language edits</span>
-                                    <span>Recursive depth</span>
-                                    <span>Layer composition</span>
                                 </div>
                             </>
                         )}
@@ -1921,7 +1895,7 @@ export default function ImageLayersTool(props) {
                     <label className="st-label">Number of Layers</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <input type="range" min="2" max="10" value={imageLayersNumLayers} onChange={(e) => setImageLayersNumLayers(+e.target.value)} className="st-range" style={{ flex: 1 }} />
-                        <span style={{ fontWeight: 600, fontSize: '1rem', color: '#6366f1', minWidth: '24px', textAlign: 'center' }}>{imageLayersNumLayers}</span>
+                        <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--primary)', minWidth: '24px', textAlign: 'center' }}>{imageLayersNumLayers}</span>
                     </div>
                     <div className="st-range-labels"><span>2 layers</span><span>10 layers</span></div>
                 </div>
@@ -1932,26 +1906,20 @@ export default function ImageLayersTool(props) {
                         value={imageLayersDescription}
                         onChange={(e) => setImageLayersDescription(e.target.value)}
                         placeholder="'auto' for AI caption, or describe the image"
-                        style={{ width: '100%', padding: '0.5rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontFamily: 'inherit', background: '#f8fafc' }}
+                        className="st-qwen-desc-input"
                     />
-                    <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.25rem' }}>Use "auto" to let AI describe the image, or provide your own description for better results.</p>
-                </div>
-                <div className="st-qwen-side-features">
-                    <span><I d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" s={13} /> Variable layer count</span>
-                    <span><I d="M4 4h16v16H4zM9 9h6v6H9z" s={13} /> Recursive decomposition</span>
-                    <span><I d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" s={13} /> Recolor, revise, replace</span>
-                    <span><I d="M5 9l7-7 7 7M5 15l7 7 7-7" s={13} /> Move and resize layers</span>
+                    <p className="st-qwen-desc-hint">Use "auto" or add a short description for better splits.</p>
                 </div>
                 <button
-                    className={`st-export-btn ${!hasEnoughImageLayersCredits ? 'insufficient-credits' : ''}`}
+                    className={`st-export-btn st-qwen-primary-cta ${!hasEnoughImageLayersCredits ? 'insufficient-credits' : ''}`}
                     onClick={generateImageLayers}
                     disabled={isImageLayering || !uploaded || !hasEnoughImageLayersCredits}
                     title={!hasEnoughImageLayersCredits ? `Need ${imageLayersCreditCost} credits. You have ${userRemainingCredits} remaining.` : 'Decompose image into layers'}
                     style={{ marginTop: '1rem' }}
                 >
-                    {isImageLayering ? 'Qwen Decomposing...' : hasEnoughImageLayersCredits ? `Qwen Decompose into ${imageLayersNumLayers} Layers` : `Need ${imageLayersCreditCost} credits`}
+                    {isImageLayering ? 'Decomposing...' : hasEnoughImageLayersCredits ? `Decompose into ${imageLayersNumLayers} Layers` : `Need ${imageLayersCreditCost} credits`}
                 </button>
-                <p className="st-generate-hint"><I d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" s={12} /> Uses ~{imageLayersCreditCost} credits</p>
+                <p className="st-generate-hint st-qwen-credit-hint"><I d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" s={12} /> Uses ~{imageLayersCreditCost} credits</p>
                 {!hasEnoughImageLayersCredits && (
                     <div className="st-credit-shortage">
                         {userRemainingCredits.toLocaleString()} credits remaining. Recharge to use Image Layers.
@@ -1966,7 +1934,7 @@ export default function ImageLayersTool(props) {
         <>
             {renderCanvasBlock()}
             {rightPanelEl && createPortal(
-                <div className="st-pl-right" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div className="st-pl-right st-qwen-controls" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {renderToolControls()}
                 </div>,
                 rightPanelEl

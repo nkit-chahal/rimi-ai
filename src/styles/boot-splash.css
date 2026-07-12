@@ -1,0 +1,128 @@
+/* Studio boot splash — textile atelier language (matches login.css) */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+.rim-boot-splash {
+  --boot-ink: #14201c;
+  --boot-mute: #5b6a63;
+  --boot-paper: #eef1ee;
+  --boot-accent: #0f5c4d;
+  --boot-display: 'Fraunces', Georgia, serif;
+  --boot-sans: 'Manrope', system-ui, sans-serif;
+
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  place-items: center;
+  background: var(--boot-paper);
+  color: var(--boot-ink);
+  font-family: var(--boot-sans);
+  animation: rim-boot-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rim-boot-splash.is-exiting {
+  animation: rim-boot-exit 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes rim-boot-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rim-boot-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.rim-boot-pattern {
+  position: absolute;
+  inset: -6%;
+  pointer-events: none;
+  background-color: #dfe5e0;
+  background-image:
+    radial-gradient(circle at 18% 28%, rgba(15, 92, 77, 0.13) 0 17%, transparent 18%),
+    radial-gradient(circle at 78% 24%, rgba(20, 32, 28, 0.09) 0 11%, transparent 12%),
+    radial-gradient(circle at 62% 72%, rgba(15, 92, 77, 0.11) 0 15%, transparent 16%),
+    repeating-linear-gradient(0deg, transparent 0 24px, rgba(20, 32, 28, 0.04) 24px 25px),
+    repeating-linear-gradient(90deg, transparent 0 24px, rgba(20, 32, 28, 0.04) 24px 25px);
+  background-size: 190px 190px, 230px 230px, 210px 210px, 50px 50px, 50px 50px;
+  animation: rim-boot-drift 40s linear infinite;
+  opacity: 0.9;
+}
+
+.rim-boot-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.65rem;
+  padding: 1.5rem;
+  animation: rim-boot-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.rim-boot-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--boot-accent);
+}
+
+.rim-boot-title {
+  margin: 0;
+  font-family: var(--boot-display);
+  font-size: clamp(3rem, 8vw, 4.5rem);
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  color: var(--boot-ink);
+  background: none;
+  -webkit-background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+}
+
+.rim-boot-subtitle {
+  margin: 0.15rem 0 0;
+  min-height: 1.25rem;
+  color: var(--boot-mute);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.rim-boot-progress-track {
+  width: min(240px, 68vw);
+  height: 2px;
+  margin-top: 1rem;
+  border-radius: 0;
+  background: rgba(20, 32, 28, 0.12);
+  overflow: hidden;
+}
+
+.rim-boot-progress-bar {
+  height: 100%;
+  border-radius: 0;
+  background: var(--boot-accent);
+  transition: width 0.22s linear;
+}
+
+@keyframes rim-boot-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-40px, -24px, 0); }
+}
+
+@keyframes rim-boot-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rim-boot-pattern,
+  .rim-boot-content,
+  .rim-boot-splash,
+  .rim-boot-splash.is-exiting {
+    animation: none !important;
+  }
+}

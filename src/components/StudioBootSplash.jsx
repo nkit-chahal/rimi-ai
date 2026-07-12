@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+import '../styles/boot-splash.css';
 
 const BOOT_STEPS = [
-    'Preparing your studio',
+    'Opening your workspace',
     'Loading projects',
-    'Syncing AI tools',
+    'Preparing design tools',
     'Almost ready',
 ];
 
@@ -31,7 +32,7 @@ export default function StudioBootSplash({ visible, dataReady = false, minDurati
             setMounted(false);
             setExiting(false);
             onHidden?.();
-        }, 480);
+        }, 420);
 
         return () => window.clearTimeout(exitTimer);
     }, [visible, mounted, onHidden]);
@@ -41,7 +42,7 @@ export default function StudioBootSplash({ visible, dataReady = false, minDurati
 
         const stepTimer = window.setInterval(() => {
             setStepIndex((prev) => (prev + 1) % BOOT_STEPS.length);
-        }, 680);
+        }, 720);
 
         const progressTimer = window.setInterval(() => {
             const elapsed = Date.now() - startedAtRef.current;
@@ -64,21 +65,12 @@ export default function StudioBootSplash({ visible, dataReady = false, minDurati
 
     return (
         <div className={`rim-boot-splash ${exiting ? 'is-exiting' : ''}`} role="status" aria-live="polite">
-            <div className="rim-boot-bg">
-                <div className="rim-boot-blob rim-boot-blob-1" />
-                <div className="rim-boot-blob rim-boot-blob-2" />
-                <div className="rim-boot-grid" />
-            </div>
-
+            <div className="rim-boot-pattern" aria-hidden="true" />
             <div className="rim-boot-content">
-                <div className="rim-boot-logo-wrap">
-                    <div className="rim-boot-logo-ring" />
-                    <div className="rim-boot-logo-ring rim-boot-logo-ring-2" />
-                    <span className="rim-boot-logo-badge">RI</span>
-                </div>
-                <h1 className="rim-boot-title">RIMI AI</h1>
+                <p className="rim-boot-kicker">Pattern studio</p>
+                <h1 className="rim-boot-title">RIMI</h1>
                 <p className="rim-boot-subtitle">{BOOT_STEPS[stepIndex]}</p>
-                <div className="rim-boot-progress-track">
+                <div className="rim-boot-progress-track" aria-hidden="true">
                     <div className="rim-boot-progress-bar" style={{ width: `${progress}%` }} />
                 </div>
             </div>

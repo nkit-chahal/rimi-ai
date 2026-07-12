@@ -86,10 +86,21 @@ def create_repeat_set():
         return access_error
     user_id = g.current_user['id']
 
+    def _export_grid(fw, tw):
+        """Full tiles that fit across fabric — never ceil past fabric width."""
+        tw = max(float(tw), 0.5)
+        fw = float(fw)
+        if tw > fw:
+            return 2
+        full = math.floor(fw / tw)
+        if full >= 2:
+            return min(8, full)
+        return max(1, full)
+
     grid_size = data.get('gridSize')
     if grid_size is None:
-        grid_size = max(2, min(8, math.ceil(fabric_width / max(repeat_width, 0.5))))
-    grid_size = max(2, min(8, int(grid_size)))
+        grid_size = _export_grid(fabric_width, repeat_width)
+    grid_size = max(1, min(8, int(grid_size)))
 
     required_credits = credit_requirement('repeat', 5)
     credits_reserved = False

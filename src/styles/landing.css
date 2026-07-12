@@ -501,7 +501,9 @@
 }
 
 
-/* ===== LOGIN PORTAL DESIGN ===== */
+/* ===== LOGIN PORTAL DESIGN (OBSOLETE) =====
+   Active login UI uses src/styles/login.css + Login.jsx atelier markup.
+   Do not import these rules — they are the old purple glass SaaS look. */
 .login-portal {
   min-height: 100vh;
   position: relative;
