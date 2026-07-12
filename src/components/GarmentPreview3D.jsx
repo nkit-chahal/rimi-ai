@@ -1,7 +1,40 @@
-import React, { Suspense, useEffect, useRef } from 'react';
+import React, { Component, Suspense, useEffect, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, useTexture, Environment } from '@react-three/drei';
+import { OrbitControls, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
+import { resolveMediaUrl, mediaPathNeedsAuth } from './studio/shared/helpers';
+
+/* ── Local boundary so texture/WebGL failures don't kill Studio ── */
+class TextureErrorBoundary extends Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.warn('3D preview failed:', error?.message || error);
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false });
+    }
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+function PreviewFallback({ message = 'Could not load pattern for 3D preview.' }) {
+  return (
+    <div className="st-empty-canvas" style={{ minHeight: 420, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: '#94a3b8', textAlign: 'center', padding: '1rem' }}>{message}</p>
+    </div>
+  );
+}
 
 /* ── Garment Shape: T-Shirt ── */
 function TShirt({ texture }) {
@@ -101,6 +134,7 @@ function TexturedGarment({ patternUrl, garmentType, tileX, tileY, autoRotate }) 
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(tileX, tileY);
+    texture.colorSpace = THREE.SRGBColorSpace;
     texture.needsUpdate = true;
   }, [texture, tileX, tileY]);
 
@@ -114,40 +148,105 @@ function TexturedGarment({ patternUrl, garmentType, tileX, tileY, autoRotate }) 
 }
 
 /* ── Main Export ── */
-export default function GarmentPreview3D({ patternUrl, garmentType = 'tshirt', tileX = 4, tileY = 4, autoRotate = true }) {
+export default function GarmentPreview3D({
+  patternUrl,
+  garmentType = 'tshirt',
+  tileX = 4,
+  tileY = 4,
+  autoRotate = true,
+  token = null,
+}) {
+  const [resolvedUrl, setResolvedUrl] = useState(null);
+  const [resolveFailed, setResolveFailed] = useState(false);
+  const [contextLost, setContextLost] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setResolvedUrl(null);
+    setResolveFailed(false);
+    setContextLost(false);
+
+    if (!patternUrl) return undefined;
+
+    (async () => {
+      try {
+        const url = await resolveMediaUrl(patternUrl, token);
+        if (cancelled) return;
+        if (mediaPathNeedsAuth(patternUrl) && url && !url.includes('access_token=')) {
+          setResolveFailed(true);
+          return;
+        }
+        setResolvedUrl(url || null);
+        if (!url) setResolveFailed(true);
+      } catch (err) {
+        console.warn('Failed to resolve 3D pattern URL:', err);
+        if (!cancelled) setResolveFailed(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [patternUrl, token]);
+
   if (!patternUrl) return null;
+  if (resolveFailed || contextLost) {
+    return (
+      <PreviewFallback
+        message={contextLost
+          ? '3D preview paused (graphics context lost). Try switching tools or refreshing.'
+          : 'Could not load pattern for 3D preview.'}
+      />
+    );
+  }
+  if (!resolvedUrl) {
+    return <div className="tool-loading">Loading 3D preview…</div>;
+  }
 
   return (
-    <Canvas
-      frameloop="always"
-      dpr={[1, 1.5]}
-      camera={{ position: [0, 0.5, 4], fov: 40 }}
-      gl={{ antialias: true, alpha: true }}
-      style={{ width: '100%', height: '100%', borderRadius: '12px' }}
+    <TextureErrorBoundary
+      resetKey={resolvedUrl}
+      fallback={<PreviewFallback />}
     >
-      <color attach="background" args={['#1a1a2e']} />
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[5, 5, 5]} intensity={1.2} />
-      <directionalLight position={[-3, 3, -3]} intensity={0.4} />
+      <Canvas
+        frameloop="always"
+        dpr={[1, 1.5]}
+        camera={{ position: [0, 0.5, 4], fov: 40 }}
+        gl={{ antialias: true, alpha: true }}
+        style={{ width: '100%', height: '100%', borderRadius: '12px' }}
+        onCreated={({ gl }) => {
+          const canvas = gl.domElement;
+          const onLost = (e) => {
+            e.preventDefault();
+            setContextLost(true);
+          };
+          canvas.addEventListener('webglcontextlost', onLost, false);
+        }}
+      >
+        <color attach="background" args={['#1a1a2e']} />
+        <ambientLight intensity={0.6} />
+        <directionalLight position={[5, 5, 5]} intensity={1.2} />
+        <directionalLight position={[-3, 3, -3]} intensity={0.4} />
 
-      <Suspense fallback={null}>
-        <TexturedGarment
-          patternUrl={patternUrl}
-          garmentType={garmentType}
-          tileX={tileX}
-          tileY={tileY}
-          autoRotate={autoRotate}
+        <Suspense fallback={null}>
+          <TexturedGarment
+            patternUrl={resolvedUrl}
+            garmentType={garmentType}
+            tileX={tileX}
+            tileY={tileY}
+            autoRotate={autoRotate}
+          />
+        </Suspense>
+
+        <OrbitControls
+          enableZoom={true}
+          enablePan={false}
+          minDistance={2.5}
+          maxDistance={6}
+          minPolarAngle={Math.PI / 6}
+          maxPolarAngle={Math.PI / 1.5}
         />
-      </Suspense>
-
-      <OrbitControls
-        enableZoom={true}
-        enablePan={false}
-        minDistance={2.5}
-        maxDistance={6}
-        minPolarAngle={Math.PI / 6}
-        maxPolarAngle={Math.PI / 1.5}
-      />
-    </Canvas>
+      </Canvas>
+    </TextureErrorBoundary>
   );
 }

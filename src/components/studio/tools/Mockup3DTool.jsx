@@ -1,6 +1,5 @@
 import React, { Suspense, lazy, useMemo, useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, mediaUrl } from '../shared/helpers';
 import ProToolLock from '../shared/ProToolLock';
 
 const GarmentPreview3D = lazy(() => import('../../GarmentPreview3D'));
@@ -11,16 +10,15 @@ const GARMENT_TYPES = [
     { id: 'totebag', label: 'Tote Bag' },
 ];
 
-export default function Mockup3DTool({ preview, activeProject, controls, user, setTool }) {
+export default function Mockup3DTool({ preview, activeProject, controls, user, setTool, currentToken }) {
     const [garmentType, setGarmentType] = useState('tshirt');
     const [tileX, setTileX] = useState(controls?.gridSize || 4);
     const [tileY, setTileY] = useState(controls?.gridSize || 4);
 
+    // Pass raw /results/ paths — GarmentPreview3D resolves file access tokens.
     const patternUrl = useMemo(() => {
         if (preview) return preview;
-        const hero = activeProject?.heroImageUrl;
-        if (!hero) return null;
-        return hero.startsWith('/') ? mediaUrl(hero) : hero;
+        return activeProject?.heroImageUrl || null;
     }, [preview, activeProject?.heroImageUrl]);
 
     return (
@@ -71,6 +69,7 @@ export default function Mockup3DTool({ preview, activeProject, controls, user, s
                             tileX={tileX}
                             tileY={tileY}
                             autoRotate
+                            token={currentToken}
                         />
                     </Suspense>
                 )}

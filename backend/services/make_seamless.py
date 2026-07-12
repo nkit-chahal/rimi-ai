@@ -21,7 +21,7 @@ from auth import (
     refund_credits,
     reserve_credits_or_error,
 )
-from security_utils import safe_fetch_url
+from security_utils import media_access_token, safe_fetch_url
 from config import RESULTS_DIR, UPLOAD_DIR, groq_client
 from db import db
 
@@ -247,6 +247,7 @@ def execute_make_seamless(data, on_progress=None):
         credits = get_updated_credits(user_id)
         return {
             "resultUrl": new_url,
+            "fileAccessToken": media_access_token(result_name, user_id),
             "health": {
                 "score": score_pct,
                 "label": label,

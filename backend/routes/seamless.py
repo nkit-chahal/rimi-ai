@@ -18,7 +18,7 @@ from auth import (
     get_updated_credits, log_export, log_replicate_call,
     refund_credits, reserve_credits_or_error,
 )
-from security_utils import safe_fetch_url
+from security_utils import media_access_token, safe_fetch_url
 from rate_limits import expensive_generation_rate_limit
 from jobs import enqueue_or_run
 from services.make_seamless import execute_make_seamless
@@ -140,7 +140,13 @@ def generate_seamless():
             img.save(result_path, 'PNG')
             storage.sync_to_s3(result_path)
             local_url = f'/results/{result_name}'
-            results.append({'url': local_url, 'remoteUrl': url_str, 'score': round(score, 3), 'index': idx})
+            results.append({
+                'url': local_url,
+                'remoteUrl': url_str,
+                'score': round(score, 3),
+                'index': idx,
+                'fileAccessToken': media_access_token(result_name, user_id),
+            })
             if score > best_score:
                 best_score = score
                 best_url = local_url
