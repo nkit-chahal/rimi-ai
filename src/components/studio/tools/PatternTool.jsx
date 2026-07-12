@@ -309,6 +309,7 @@ export default function PatternTool({
                                 'google/imagen-4-ultra': { desc: 'Highest Imagen quality for polished tiles.', tag: 'Pro', tagColor: '#0f9d58' },
                             };
                             const info = descriptions[m.id] || { desc: '', tag: m.tier === 'pro' ? 'Pro' : '', tagColor: '#888' };
+                            const cost = modelCreditCost(m);
                             return (
                                 <div
                                     key={m.id}
@@ -332,17 +333,42 @@ export default function PatternTool({
                                     </div>
                                     <span className={`st-model-brand st-pattern-model-brand ${m.brand}`}>{m.logo}</span>
                                     <div className="st-pattern-model-name">{m.name}{m.tier === 'pro' ? ' · Pro' : ''}</div>
-                                    <div className="st-pattern-model-desc">{info.desc} · {m.credits} cr</div>
-                                    <span
-                                        className="st-pattern-model-tag"
-                                        style={{
-                                            background: `${info.tagColor}12`,
-                                            color: info.tagColor,
-                                            borderColor: `${info.tagColor}25`,
-                                        }}
-                                    >
-                                        {info.tag}
-                                    </span>
+                                    <div className="st-pattern-model-desc">{info.desc}</div>
+                                    <div className="st-pattern-model-meta">
+                                        <span
+                                            className="st-pattern-model-credit st-credit-coin"
+                                            title={`${cost} credits`}
+                                            aria-label={`${cost} credits`}
+                                        >
+                                            <svg
+                                                className="st-credit-coin-icon"
+                                                viewBox="0 0 16 16"
+                                                width="14"
+                                                height="14"
+                                                aria-hidden="true"
+                                                focusable="false"
+                                            >
+                                                <circle cx="8" cy="8" r="7" fill="currentColor" opacity="0.18" />
+                                                <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.35" />
+                                                <circle cx="8" cy="8" r="4.75" fill="none" stroke="currentColor" strokeWidth="1.1" opacity="0.75" />
+                                                <circle cx="8" cy="8" r="1.65" fill="currentColor" />
+                                            </svg>
+                                            <span className="st-credit-coin-value">{cost}</span>
+                                            <span className="st-credit-coin-unit">cr</span>
+                                        </span>
+                                        {info.tag ? (
+                                            <span
+                                                className="st-pattern-model-tag"
+                                                style={{
+                                                    background: `${info.tagColor}12`,
+                                                    color: info.tagColor,
+                                                    borderColor: `${info.tagColor}25`,
+                                                }}
+                                            >
+                                                {info.tag}
+                                            </span>
+                                        ) : null}
+                                    </div>
                                 </div>
                             );
                         })}

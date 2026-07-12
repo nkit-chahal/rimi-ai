@@ -973,14 +973,24 @@
   flex: 1;
 }
 
-.st-pattern-model-tag {
+.st-pattern-model-meta {
   margin-top: auto;
-  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.st-pattern-model-tag {
+  margin-top: 0;
+  align-self: auto;
   font-size: 0.65rem;
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 6px;
   border: 1px solid transparent;
+  flex-shrink: 0;
 }
 
 .st-extract-model-brand {
