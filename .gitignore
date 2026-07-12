@@ -34,6 +34,10 @@ backend/uploads/
 backend/results/
 backend/*.sqlite3
 backend/*.sqlite3-journal
+*.sqlite3
+*.sqlite3-journal
+rimi_ai.sqlite3
+_redis_check.txt
 backend/__pycache__/
 **/__pycache__/
 *.pyc
