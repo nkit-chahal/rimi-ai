@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import Studio from './pages/Studio';
 import { normalizeToken } from './components/studio/shared/helpers';
 import { AuthProvider } from './contexts/AuthContext';
@@ -16,6 +16,12 @@ function migrateLegacyHashRoute() {
 }
 
 migrateLegacyHashRoute();
+
+/** Preserve OAuth query params when sending unauthenticated users to /login. */
+function LoginRedirect() {
+  const location = useLocation();
+  return <Navigate to={{ pathname: '/login', search: location.search }} replace />;
+}
 
 function readSavedUser() {
   try {
@@ -119,8 +125,8 @@ function AppRoutes() {
           path="/login"
           element={currentUser ? <Navigate to="/studio" replace /> : <Suspense fallback={null}><Login onLogin={handleLogin} /></Suspense>}
         />
-        <Route path="/" element={<Navigate to={currentUser ? '/studio' : '/login'} replace />} />
-        <Route path="*" element={<Navigate to={currentUser ? '/studio' : '/login'} replace />} />
+        <Route path="/" element={currentUser ? <Navigate to="/studio" replace /> : <LoginRedirect />} />
+        <Route path="*" element={currentUser ? <Navigate to="/studio" replace /> : <LoginRedirect />} />
       </Routes>
     </AuthProvider>
   );

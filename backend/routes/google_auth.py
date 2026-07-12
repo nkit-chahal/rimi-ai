@@ -27,12 +27,20 @@ def frontend_url():
     return os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
 
 
+def frontend_login_url(query=None):
+    """Login lives at /login (BrowserRouter). Keep OAuth query params on that path."""
+    base = f"{frontend_url()}/login"
+    if not query:
+        return base
+    return f"{base}?{urlencode(query)}"
+
+
 def callback_url():
     return os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3001/api/auth/google/callback")
 
 
 def redirect_with_error(message):
-    return redirect(f"{frontend_url()}?{urlencode({'google_error': message})}")
+    return redirect(frontend_login_url({"google_error": message}))
 
 
 def initials_from_name(name, email):
@@ -244,7 +252,7 @@ def google_callback():
     finally:
         conn.close()
 
-    response = make_response(redirect(f"{frontend_url()}?{urlencode({'google_login_token': login_token})}"))
+    response = make_response(redirect(frontend_login_url({"google_login_token": login_token})))
     response.delete_cookie("google_oauth_state")
     return response
 

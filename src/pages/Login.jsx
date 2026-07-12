@@ -152,7 +152,12 @@ export default function Login({ onLogin }) {
     setError('');
     setGooglePhase('redirecting');
     window.setTimeout(() => {
-      window.location.href = `${API}/api/auth/google/start`;
+      try {
+        window.location.assign(`${API}/api/auth/google/start`);
+      } catch {
+        setGooglePhase(null);
+        setError('Unable to start Google sign-in. Please try again.');
+      }
     }, 80);
   };
 
