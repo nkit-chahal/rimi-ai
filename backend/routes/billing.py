@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import requests
 from flask import Blueprint, g, jsonify, request
 
-from auth import credit_expiry_reset_at, expire_credits_if_needed, _parse_reset_at
+from auth import expire_credits_if_needed, extend_credit_expiry, _parse_reset_at
 from db import db, db_lock
 from middleware import login_required
 from plan_tiers import is_pro_plan, attach_tier_fields
@@ -410,16 +410,17 @@ def _grant_payment_credits(conn, payment, paid_at, provider_payment_id=None):
         plan_label = plan["label"] if plan else (
             "Custom Top-up" if payment["pack_id"] == "custom" else "Paid Credits"
         )
-        reset_at = credit_expiry_reset_at()
+        paid_dt = None
         try:
             if paid_at:
-                reset_at = credit_expiry_reset_at(datetime.fromisoformat(str(paid_at).replace("Z", "")))
+                paid_dt = datetime.fromisoformat(str(paid_at).replace("Z", ""))
         except Exception:
-            reset_at = credit_expiry_reset_at()
+            paid_dt = None
         conn.execute(
-            "UPDATE users SET credits_limit = credits_limit + ?, plan = ?, reset_at = ? WHERE id = ?",
-            (payment["credits"], plan_label, reset_at, payment["user_id"]),
+            "UPDATE users SET credits_limit = credits_limit + ?, plan = ? WHERE id = ?",
+            (payment["credits"], plan_label, payment["user_id"]),
         )
+        extend_credit_expiry(payment["user_id"], conn=conn, from_dt=paid_dt)
         conn.execute(
             """
             INSERT INTO credit_transactions

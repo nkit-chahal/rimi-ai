@@ -14,7 +14,7 @@ from flask import request
 from db import db, db_lock
 from jwt_tokens import decode_access_token
 
-CREDIT_EXPIRY_DAYS = 60
+CREDIT_EXPIRY_DAYS = 30
 
 
 def _parse_reset_at(value):
@@ -30,9 +30,66 @@ def _parse_reset_at(value):
 
 
 def credit_expiry_reset_at(from_dt=None):
-    """Return ISO timestamp for credits expiry (60 days from now or from_dt)."""
+    """Return ISO timestamp for credits expiry (30 days from now or from_dt)."""
     base = from_dt or datetime.now(timezone.utc).replace(tzinfo=None)
     return (base + timedelta(days=CREDIT_EXPIRY_DAYS)).isoformat()
+
+
+def extend_credit_expiry(user_id, conn=None, from_dt=None):
+    """
+    Extend credits expiry by CREDIT_EXPIRY_DAYS from max(now, current reset_at).
+    If reset_at is missing or already past, start from now (or from_dt).
+    Returns the new reset_at ISO string, or None if user not found.
+    """
+    user_id = resolve_user_id(user_id) if conn is None else user_id
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return None
+    if not user_id:
+        return None
+
+    owns_conn = conn is None
+    if owns_conn:
+        conn = db()
+
+    try:
+        user = conn.execute(
+            "SELECT id, reset_at FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if not user:
+            return None
+
+        now = from_dt or datetime.now(timezone.utc).replace(tzinfo=None)
+        if getattr(now, "tzinfo", None) is not None:
+            now = now.astimezone(timezone.utc).replace(tzinfo=None)
+
+        current = _parse_reset_at(user["reset_at"])
+        if current is not None and current > now:
+            base = current
+        else:
+            base = now
+
+        new_reset_at = (base + timedelta(days=CREDIT_EXPIRY_DAYS)).isoformat()
+        conn.execute(
+            "UPDATE users SET reset_at = ? WHERE id = ?",
+            (new_reset_at, user_id),
+        )
+        if owns_conn:
+            conn.commit()
+        return new_reset_at
+    except Exception as exc:
+        if owns_conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        print(f"Error extending credit expiry for user {user_id}: {exc}")
+        return None
+    finally:
+        if owns_conn:
+            conn.close()
 
 
 def expire_credits_if_needed(user_id, conn=None):
@@ -81,7 +138,7 @@ def expire_credits_if_needed(user_id, conn=None):
             (user_id, transaction_type, credits, note, created_at)
             VALUES (?, 'adjustment', ?, ?, ?)
             """,
-            (user_id, remaining, "2-month credit expiry", now_iso),
+            (user_id, remaining, "1-month credit expiry", now_iso),
         )
         if owns_conn:
             conn.commit()

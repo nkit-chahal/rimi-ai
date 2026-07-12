@@ -256,7 +256,7 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                 <div>
                     <div className="st-billing-kicker">Subscription</div>
                     <h2>Credits and Billing</h2>
-                    <p>Recharge AI credits through Razorpay Standard Checkout. Credits are added to your available limit after payment verification and remain valid for 2 months.</p>
+                    <p>Recharge AI credits through Razorpay Standard Checkout. Credits are added to your available limit after payment verification and remain valid for 1 month.</p>
                 </div>
                 <button className="st-billing-refresh" onClick={fetchBillingOverview} disabled={billingOverview.loading}>
                     <I d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" s={16} />
@@ -342,7 +342,7 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                             </div>
                             <div className="st-billing-price">
                                 <strong>{priceLabel}</strong>
-                                <span>{amount ? 'one-time · 2 months' : 'trial'}</span>
+                                <span>{amount ? 'one-time · 1 month' : 'trial'}</span>
                             </div>
                             <button
                                 className={`st-billing-pay ${pack.badge || track === 'pro' ? 'primary' : ''}`}

@@ -11,7 +11,7 @@ from datetime import datetime, timezone, timedelta
 
 import bcrypt
 
-from auth import credit_expiry_reset_at
+from auth import credit_expiry_reset_at, extend_credit_expiry
 from db import DEFAULT_CREDIT_PRICING, db, rows_to_dicts
 from jwt_tokens import issue_access_token
 from middleware import admin_required, login_required
@@ -558,6 +558,7 @@ def admin_users():
                 "creditsUsed": u["credits_used"],
                 "creditsLimit": u["credits_limit"],
                 "resetDays": reset_days,
+                "resetAt": u.get("reset_at"),
                 "loginProvider": u.get("login_provider", "email"),
                 "googleSub": u.get("google_sub"),
                 "avatarUrl": u.get("avatar_url"),
@@ -606,6 +607,8 @@ def admin_adjust_credits():
                 """,
                 (user_id, delta, "Admin credit limit adjustment", created_at)
             )
+            if previous_limit is not None and credits_limit > previous_limit:
+                extend_credit_expiry(user_id, conn=conn)
             _record_admin_audit(
                 conn,
                 "credits.adjust",

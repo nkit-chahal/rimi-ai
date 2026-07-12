@@ -324,6 +324,7 @@ const AdminUsers = ({
                                     <th>Plan</th>
                                     <th>Status</th>
                                     <th>Credits</th>
+                                    <th>Expires</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -332,6 +333,20 @@ const AdminUsers = ({
                                     const status = u.status || 'active';
                                     const suspended = status === 'suspended';
                                     const busy = busyUserId === u.id;
+                                    const resetDays = Number(u.resetDays) || 0;
+                                    const expired = resetDays <= 0;
+                                    let expiryDate = '';
+                                    if (u.resetAt) {
+                                        try {
+                                            expiryDate = new Date(u.resetAt).toLocaleDateString(undefined, {
+                                                year: 'numeric',
+                                                month: 'short',
+                                                day: 'numeric',
+                                            });
+                                        } catch {
+                                            expiryDate = '';
+                                        }
+                                    }
                                     return (
                                         <tr key={u.id} className={suspended ? 'admin-user-row-suspended' : ''}>
                                             <td>
@@ -349,6 +364,14 @@ const AdminUsers = ({
                                                 </span>
                                             </td>
                                             <td style={{ fontSize: '12px' }}>{u.creditsUsed?.toLocaleString()} / {u.creditsLimit?.toLocaleString()}</td>
+                                            <td style={{ fontSize: '12px' }}>
+                                                <span className={`admin-status-pill ${expired ? 'suspended' : 'active'}`}>
+                                                    {expired ? 'Expired' : `${resetDays}d left`}
+                                                </span>
+                                                {expiryDate ? (
+                                                    <div style={{ marginTop: 4, opacity: 0.7, fontSize: 11 }}>{expiryDate}</div>
+                                                ) : null}
+                                            </td>
                                             <td>
                                                 <div className="admin-user-actions">
                                                     <button type="button" className="admin-action-btn edit" disabled={busy} onClick={() => openEdit(u)}>Edit</button>

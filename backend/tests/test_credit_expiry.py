@@ -3,7 +3,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from auth import check_credits, expire_credits_if_needed, reserve_credits_or_error
+from auth import (
+    CREDIT_EXPIRY_DAYS,
+    check_credits,
+    expire_credits_if_needed,
+    extend_credit_expiry,
+    reserve_credits_or_error,
+)
 from db import db
 
 
@@ -76,7 +82,7 @@ def test_expire_credits_if_needed_zeroes_remaining(expired_user):
     conn = db()
     try:
         row = conn.execute(
-            "SELECT note FROM credit_transactions WHERE user_id = 1 AND note = '2-month credit expiry'"
+            "SELECT note FROM credit_transactions WHERE user_id = 1 AND note = '1-month credit expiry'"
         ).fetchone()
         assert row is not None
     finally:
@@ -99,3 +105,34 @@ def test_reserve_rejects_after_expiry(expired_user):
     assert ok is False
     assert err is not None
     assert err['creditsRemaining'] == 0
+
+
+def test_extend_credit_expiry_stacks_from_future_reset(active_user):
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    future = now + timedelta(days=10)
+    conn = db()
+    try:
+        conn.execute(
+            "UPDATE users SET reset_at = ? WHERE id = 1",
+            (future.isoformat(),),
+        )
+        conn.commit()
+        new_reset = extend_credit_expiry(1, conn=conn, from_dt=now)
+        conn.commit()
+        assert new_reset is not None
+        parsed = datetime.fromisoformat(new_reset)
+        expected = future + timedelta(days=CREDIT_EXPIRY_DAYS)
+        assert abs((parsed - expected).total_seconds()) < 2
+        # Must be later than now + 30 (stacked leftover days)
+        assert parsed > now + timedelta(days=CREDIT_EXPIRY_DAYS)
+    finally:
+        conn.close()
+
+
+def test_extend_credit_expiry_from_now_when_expired(expired_user):
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    new_reset = extend_credit_expiry(1, from_dt=now)
+    assert new_reset is not None
+    parsed = datetime.fromisoformat(new_reset)
+    expected = now + timedelta(days=CREDIT_EXPIRY_DAYS)
+    assert abs((parsed - expected).total_seconds()) < 2
