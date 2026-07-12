@@ -8,6 +8,7 @@ import { useImageDropzone } from '../shared/useImageDropzone';
 import ModelLoadingBar from '../shared/ModelLoadingBar';
 import { getModelTiming } from '../shared/modelTimings';
 import { isProUser, isProModel } from '../shared/planTiers';
+import ProUpgradeModal from '../shared/ProUpgradeModal';
 import '../../../styles/tools/inspire.css';
 
 export default function InspireTool({
@@ -43,6 +44,7 @@ export default function InspireTool({
     const [isGen, setIsGen] = useState(false);
     const [analysis, setAnalysis] = useState(null);
     const [showModelModal, setShowModelModal] = useState(false);
+    const [proGateModel, setProGateModel] = useState(null);
 
     const { rootProps, pasteProps, inputProps, isDrag } = useImageDropzone({
         onFile: handlePreUpload,
@@ -72,8 +74,8 @@ export default function InspireTool({
     const toggleInspireModel = (modelId) => {
         const proLocked = isProModel(modelId, 'inspire') && !userIsPro;
         if (proLocked) {
-            setError('That model is Pro-only. Open Billing and choose a Pro or Scale pack.');
-            if (typeof setTool === 'function') setTool('billing');
+            const model = allAvailableModels.find((m) => m.id === modelId);
+            setProGateModel(model?.name || 'This model');
             return;
         }
         setInspireModels((prev) => {
@@ -203,6 +205,12 @@ export default function InspireTool({
 
     return (
         <div {...pasteProps} className="st-inspire-main st-inspire-studio">
+            <ProUpgradeModal
+                open={Boolean(proGateModel)}
+                modelName={proGateModel}
+                onClose={() => setProGateModel(null)}
+                onViewPlans={() => typeof setTool === 'function' && setTool('billing')}
+            />
             {/* Modal for AI Preferences */}
             {showModelModal && (
                 <div className="st-model-modal-overlay" onClick={() => setShowModelModal(false)}>

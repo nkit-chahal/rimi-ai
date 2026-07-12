@@ -230,6 +230,14 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
         return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
+    // "created" = Razorpay order opened but not paid (abandoned checkout). Not a shared/global list.
+    const formatPaymentStatus = (status) => {
+        const key = String(status || '').toLowerCase();
+        if (key === 'created') return 'Incomplete';
+        if (key === 'paid') return 'Paid';
+        return status || 'Unknown';
+    };
+
     const expiryCopy = (() => {
         if (usage.creditsExpired) return 'Credits expired';
         const days = usage.resetDays;
@@ -367,7 +375,7 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                 <div className="st-billing-section-head">
                     <div>
                         <h3>Payment history</h3>
-                        <p>Recent Razorpay orders and credit recharges.</p>
+                        <p>Your account&apos;s recent checkouts and recharges. Incomplete means checkout started but was not paid.</p>
                     </div>
                 </div>
                 {billingOverview.payments?.length ? (
@@ -380,7 +388,11 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                                 </div>
                                 <div>{Number(payment.credits || 0).toLocaleString()} credits</div>
                                 <div>₹{(Number(payment.amount || 0) / 100).toLocaleString('en-IN')}</div>
-                                <div><span className={`st-billing-pill ${payment.status}`}>{payment.status}</span></div>
+                                <div>
+                                    <span className={`st-billing-pill ${String(payment.status || '').toLowerCase()}`}>
+                                        {formatPaymentStatus(payment.status)}
+                                    </span>
+                                </div>
                                 <div>{formatDate(payment.paidAt || payment.createdAt)}</div>
                             </div>
                         ))}

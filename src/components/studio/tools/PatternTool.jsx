@@ -10,6 +10,7 @@ import { useImageDropzone } from '../shared/useImageDropzone';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
 import ModelLoadingBar from '../shared/ModelLoadingBar';
 import { isProUser } from '../shared/planTiers';
+import ProUpgradeModal from '../shared/ProUpgradeModal';
 
 const EXTRACT_CREDIT_KEYS = {
     'xai/grok-imagine-image': 'extract_grok',
@@ -62,6 +63,7 @@ export default function PatternTool({
     const [extractChatMessages, setExtractChatMessages] = useState({});
     const [extractChatInput, setExtractChatInput] = useState('');
     const [isExtractEditing, setIsExtractEditing] = useState(false);
+    const [proGateModel, setProGateModel] = useState(null);
 
     const { pasteProps, openFilePicker, inputProps } = useImageDropzone({
         onFile: handlePreUpload,
@@ -86,8 +88,8 @@ export default function PatternTool({
         if (modelsToRun.length === 0) return;
         const lockedPro = EXTRACT_MODEL_DEFS.some(m => enabledModels[m.id] && m.tier === 'pro' && !userIsPro);
         if (lockedPro) {
-            setError('Pro models selected — upgrade via Billing (Pro or Scale pack) to unlock them.');
-            setTool?.('billing');
+            const locked = EXTRACT_MODEL_DEFS.find(m => enabledModels[m.id] && m.tier === 'pro' && !userIsPro);
+            setProGateModel(locked?.name || 'This model');
             return;
         }
         const requiredCredits = modelsToRun.reduce((sum, model) => sum + modelCreditCost(model), 0);
@@ -228,6 +230,12 @@ export default function PatternTool({
 
     return (
         <div {...pasteProps} className="st-pattern-paste-wrap">
+        <ProUpgradeModal
+            open={Boolean(proGateModel)}
+            modelName={proGateModel}
+            onClose={() => setProGateModel(null)}
+            onViewPlans={() => typeof setTool === 'function' && setTool('billing')}
+        />
         <div className="st-pattern-extract-page">
 
             {/* === TOP CARD: Source + AI Models === */}
@@ -308,8 +316,7 @@ export default function PatternTool({
                                     onClick={() => {
                                         if (anyLoading) return;
                                         if (locked) {
-                                            setError('That model is Pro-only. Open Billing and choose a Pro or Scale pack.');
-                                            if (typeof setTool === 'function') setTool('billing');
+                                            setProGateModel(m.name);
                                             return;
                                         }
                                         setEnabledModels(prev => ({ ...prev, [m.id]: !prev[m.id] }));

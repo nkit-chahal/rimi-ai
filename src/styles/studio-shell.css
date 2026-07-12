@@ -4568,6 +4568,66 @@
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
+
+/* Compact Pro-gate dialog (model pickers) */
+.st-pro-upgrade-overlay {
+  z-index: 1200;
+  background: rgba(28, 25, 23, 0.45);
+}
+.st-pro-upgrade-modal {
+  width: 100%;
+  max-width: 400px;
+  background: var(--card, #FAF8F5);
+  border: 1px solid var(--border, rgba(68, 64, 60, 0.14));
+  border-radius: 14px;
+  padding: 1.35rem 1.4rem 1.25rem;
+  text-align: center;
+  box-shadow: 0 16px 48px rgba(28, 25, 23, 0.18);
+  animation: fade-in-up 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.st-pro-upgrade-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7c3aed;
+  background: rgba(139, 92, 246, 0.12);
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  margin-bottom: 0.7rem;
+}
+.st-pro-upgrade-modal h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text, #1C1917);
+  letter-spacing: -0.02em;
+}
+.st-pro-upgrade-modal p {
+  margin: 0 0 1.15rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--muted, #78716C);
+}
+.st-pro-upgrade-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.st-pro-upgrade-actions .st-btn {
+  min-width: 7.5rem;
+  background: #F5F2EE;
+  color: #44403C;
+  border: 1px solid rgba(68, 64, 60, 0.12);
+}
+.st-pro-upgrade-actions .st-btn.primary {
+  background: var(--gradient-primary);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 10px rgba(139, 92, 246, 0.2);
+}
 .st-modal {
   background: var(--card);
   width: 100%;
