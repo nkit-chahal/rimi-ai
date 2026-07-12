@@ -287,7 +287,12 @@ export default function DashboardTool(props) {
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, userId: user?.id }),
                     });
                     const d = await r.json();
-                    if (d.success && d.resultUrl) { resultUrl = d.resultUrl; currentInput = d.resultUrl.split('/').pop(); cacheMediaFromResponse(d); updateCreditsFromResponse(d); }
+                    if (d.success && (d.resultUrl || d.resultUrls?.[0])) {
+                        resultUrl = d.resultUrl || d.resultUrls[0];
+                        currentInput = resultUrl.split('/').pop();
+                        cacheMediaFromResponse(d);
+                        updateCreditsFromResponse(d);
+                    }
                     else throw new Error(d.error || 'Extraction failed');
                 } else if (step.type === 'seamless') {
                     const r = await fetch(`${API}/api/make-seamless`, {

@@ -150,34 +150,19 @@ def extract_design():
             encoded_string = base64.b64encode(image_bytes).decode('utf-8')
             mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"
             data_uri = f"data:{mime_type};base64,{encoded_string}"
-        start_time = time.time()
-        output = replicate.run(model_id, input={
-            "prompt": "A perfectly flat, 2D seamless repeating pattern tile of the exact fabric design, motif, and colors seen in the input image. Extract the design out of the outfit. High resolution, perfectly flat texture.",
-            "image_input": [data_uri], "aspect_ratio": "1:1"
-        })
-        duration = time.time() - start_time
-        cost_usd = 0.039
-        credits_used = required_credits
-        log_replicate_call(project_id, model_id, duration, credits_used, cost_usd)
-        image_urls = [str(url) for url in output] if isinstance(output, list) else [str(output)]
-        print(f"  [Extract Design] Done! Generated {len(image_urls)} tiles. Downloading locally...")
-        local_result_urls = []
-        for url in image_urls:
-            resp = http_requests.get(url, timeout=60)
-            resp.raise_for_status()
-            local_uuid = uuid.uuid4().hex
-            local_filename = f"extracted_{local_uuid}.png"
-            local_filepath = os.path.join(RESULTS_DIR, local_filename)
-            with open(local_filepath, 'wb') as f:
-                f.write(resp.content)
-            storage.sync_to_s3(local_filepath)
-            local_url = f"/results/{local_filename}"
-            local_result_urls.append(local_url)
-            log_export(project_id, local_filename, filename, "Extract Design", {"prompt": "Extract design out of outfit"})
-        if not local_result_urls:
+        result = _run_single_extract(model_cfg, data_uri, project_id, filename)
+        if not result.get('resultUrl'):
             refund_credits(user_id, project_id, required_credits, note='Extract design produced no results')
+            return jsonify({'error': result.get('error') or 'Extraction failed'}), 500
+        adjust_reserved_credits(user_id, project_id, required_credits, result.get('creditsUsed', required_credits))
         updated_credits = get_updated_credits(user_id)
-        return jsonify({'success': True, 'resultUrls': local_result_urls, **updated_credits})
+        # Prefer resultUrls for pipeline clients; also expose resultUrl for convenience
+        return jsonify({
+            'success': True,
+            'resultUrls': [result['resultUrl']],
+            'resultUrl': result['resultUrl'],
+            **updated_credits,
+        })
     except Exception as e:
         refund_credits(user_id, project_id, required_credits, note='Extract design failed')
         print(f"  [Extract Design] Error: {e}")
@@ -190,45 +175,53 @@ def extract_design():
 # cost to absorb Groq side-calls, invoice variance and failed retries).
 # Must stay in sync with DEFAULT_CREDIT_PRICING in backend/db.py.
 # ---------------------------------------------------------------------------
+# Shared extraction prompt — models must receive the source image (see supports_image).
+# Text-only fallback (Groq caption → T2I) invents a new pattern and looks "not even close".
+EXTRACT_PROMPT = (
+    "A perfectly flat, 2D seamless repeating pattern tile of the exact fabric design, "
+    "motif, and colors seen in the input image. Extract the design out of the outfit. "
+    "High resolution, perfectly flat texture, no perspective, no shadows, "
+    "clean edges suitable for seamless tiling."
+)
+
 EXTRACT_MODELS = [
     {
         'id': 'xai/grok-imagine-image',
         'name': 'Grok Imagine',
-        'prompt': '',  # Will be generated from image description
-        'input_key': None,
+        'prompt': EXTRACT_PROMPT,
+        'input_key': 'image',
         'input_list': False,
-        'supports_image': False,
+        'supports_image': True,
         'cost_per_image': 0.02,
         'credits': 23,
     },
     {
         'id': 'bytedance/seedream-4.5',
         'name': 'Seedream 4.5',
-        'prompt': '',  # Will be generated from image description
-        'input_key': None,
-        'input_list': False,
-        'supports_image': False,
+        'prompt': EXTRACT_PROMPT,
+        'input_key': 'image_input',
+        'input_list': True,
+        'supports_image': True,
         'cost_per_image': 0.04,
         'credits': 46,
     },
-
     {
         'id': 'google/nano-banana',
         'name': 'Nano Banana',
-        'prompt': '',  # Will be generated from image description
-        'input_key': None,
-        'input_list': False,
-        'supports_image': False,
+        'prompt': EXTRACT_PROMPT,
+        'input_key': 'image_input',
+        'input_list': True,
+        'supports_image': True,
         'cost_per_image': 0.039,
         'credits': 45,
     },
     {
         'id': 'google/nano-banana-2',
         'name': 'Nano Banana 2',
-        'prompt': '',  # Will be generated from image description
-        'input_key': None,
-        'input_list': False,
-        'supports_image': False,
+        'prompt': EXTRACT_PROMPT,
+        'input_key': 'image_input',
+        'input_list': True,
+        'supports_image': True,
         'cost_per_image': 0.067,
         'credits': 78,
     },
@@ -296,18 +289,20 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
     try:
         print(f"  [Extract Multi] Starting {model_id}...")
 
-        if model_cfg['supports_image']:
-            # Model accepts image input directly
+        if model_cfg['supports_image'] and model_cfg.get('input_key'):
+            # Image-conditioned extraction — source image is required for faithful results
             replicate_input = {
-                "prompt": model_cfg['prompt'],
+                "prompt": model_cfg.get('prompt') or EXTRACT_PROMPT,
                 "aspect_ratio": "1:1",
             }
-            if model_cfg['input_list']:
+            if model_cfg.get('input_list'):
                 replicate_input[model_cfg['input_key']] = [data_uri]
             else:
                 replicate_input[model_cfg['input_key']] = data_uri
+            if 'seedream' in model_id:
+                replicate_input["size"] = "2K"
         else:
-            # Text-only model — use the image description as prompt
+            # Text-only fallback — caption → T2I (weaker; avoid for extract models)
             desc = image_description or "detailed fabric pattern"
             text_prompt = (
                 f"A perfectly flat, 2D seamless repeating pattern tile for textile/fabric printing. "
@@ -319,7 +314,6 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
                 "prompt": text_prompt,
                 "aspect_ratio": "1:1",
             }
-            # Model-specific extra params
             if 'imagen' in model_id:
                 replicate_input["image_size"] = "2K"
             elif 'flux' in model_id:
@@ -562,7 +556,12 @@ def extract_edit():
         edit_prompt = f"Edit this pattern tile: {prompt}. Keep it as a flat 2D seamless repeating pattern tile, high resolution."
 
         replicate_input = {"prompt": edit_prompt, "aspect_ratio": "1:1"}
-        if 'nano-banana' in model_id:
+        if model_cfg.get('supports_image') and model_cfg.get('input_key'):
+            if model_cfg.get('input_list'):
+                replicate_input[model_cfg['input_key']] = [data_uri]
+            else:
+                replicate_input[model_cfg['input_key']] = data_uri
+        elif 'nano-banana' in model_id:
             replicate_input["image_input"] = [data_uri]
         else:
             replicate_input["image"] = data_uri

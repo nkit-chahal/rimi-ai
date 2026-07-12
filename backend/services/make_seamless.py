@@ -74,8 +74,18 @@ def execute_make_seamless(data, on_progress=None):
         progress(5, "Loading image")
         if image_url and image_url.startswith("http"):
             img = Image.open(BytesIO(safe_fetch_url(image_url, timeout=30)))
+        elif image_url and (image_url.startswith("/results/") or image_url.startswith("/uploads/")):
+            base = os.path.basename(image_url.split("?", 1)[0])
+            root = RESULTS_DIR if image_url.startswith("/results/") else UPLOAD_DIR
+            filepath = os.path.join(root, base)
+            if not os.path.exists(filepath):
+                raise ValueError("File not found")
+            img = Image.open(filepath)
         elif filename:
-            filepath = os.path.join(UPLOAD_DIR, filename)
+            base = os.path.basename(str(filename).split("?", 1)[0])
+            filepath = os.path.join(UPLOAD_DIR, base)
+            if not os.path.exists(filepath):
+                filepath = os.path.join(RESULTS_DIR, base)
             if not os.path.exists(filepath):
                 raise ValueError("File not found")
             img = Image.open(filepath)

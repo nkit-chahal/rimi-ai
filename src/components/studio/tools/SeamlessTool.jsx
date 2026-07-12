@@ -33,7 +33,7 @@ export default function SeamlessTool({
     tool,
 }) {
     // Local state
-    const [seamlessMode, setSeamlessMode] = useState('generate');
+    const [seamlessMode, setSeamlessMode] = useState('fix');
     const [seamlessPrompt, setSeamlessPrompt] = useState('');
     const [seamlessTiles, setSeamlessTiles] = useState([]);
     const [localSeamlessUrl, setLocalSeamlessUrl] = useState(null);
@@ -83,7 +83,10 @@ export default function SeamlessTool({
         const trigger = async (reportProgress) => {
             hasActiveSeamlessRun.current = true;
             const payload = {
-                filename: filename || activeProject.heroImageUrl,
+                filename: uploaded?.filename || null,
+                imageUrl: uploaded?.filename
+                    ? null
+                    : (uploaded?.url || activeProject?.heroImageUrl || null),
                 projectId: activeProject.id,
                 userId: user.id,
             };
@@ -134,7 +137,8 @@ export default function SeamlessTool({
                     headers: jsonAuthHeaders(currentToken),
                     body: JSON.stringify({
                         prompt: seamlessPrompt,
-                        referenceFilename: uploaded?.filename || null,
+                        filename: uploaded?.filename || null,
+                        imageUrl: uploaded?.url || null,
                         projectId: activeProject.id,
                         userId: user.id,
                     }),
@@ -181,14 +185,14 @@ export default function SeamlessTool({
         <div {...pasteProps} className="st-pattern-layout" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', padding: '2rem' }}>
             {/* Spring-Physics Segmented Control */}
             <div className="st-segmented-control">
-                <div className="st-segment-highlight" style={{ left: seamlessMode === 'generate' ? '4px' : '50%', width: 'calc(50% - 4px)' }} />
-                <button className={`st-segment-btn ${seamlessMode === 'generate' ? 'active' : ''}`} onClick={() => setSeamlessMode('generate')}>
-                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} />
-                    Generate New
-                </button>
+                <div className="st-segment-highlight" style={{ left: seamlessMode === 'fix' ? '4px' : '50%', width: 'calc(50% - 4px)' }} />
                 <button className={`st-segment-btn ${seamlessMode === 'fix' ? 'active' : ''}`} onClick={() => setSeamlessMode('fix')}>
                     <I d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" s={16} />
                     Fix Existing
+                </button>
+                <button className={`st-segment-btn ${seamlessMode === 'generate' ? 'active' : ''}`} onClick={() => setSeamlessMode('generate')}>
+                    <I d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z" s={16} />
+                    Generate New
                 </button>
             </div>
 

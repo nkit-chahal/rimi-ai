@@ -65,6 +65,8 @@ def generate_seamless():
         data_uri = None
         if filename:
             filepath = os.path.join(UPLOAD_DIR, filename)
+            if not os.path.exists(filepath):
+                filepath = os.path.join(RESULTS_DIR, filename)
             if os.path.exists(filepath):
                 with open(filepath, "rb") as img_file:
                     encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
@@ -74,6 +76,15 @@ def generate_seamless():
             content = safe_fetch_url(image_url, timeout=30)
             encoded_string = base64.b64encode(content).decode('utf-8')
             data_uri = f"data:image/png;base64,{encoded_string}"
+        elif image_url and (image_url.startswith('/results/') or image_url.startswith('/uploads/')):
+            base = os.path.basename(image_url.split('?', 1)[0])
+            root = RESULTS_DIR if image_url.startswith('/results/') else UPLOAD_DIR
+            filepath = os.path.join(root, base)
+            if os.path.exists(filepath):
+                with open(filepath, "rb") as img_file:
+                    encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
+                    mime_type = "image/png" if base.lower().endswith('.png') else "image/jpeg"
+                    data_uri = f"data:{mime_type};base64,{encoded_string}"
         messages = []
         if data_uri:
             messages.append({"role": "user", "content": [

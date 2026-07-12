@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders, resolveImagePayload, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders, resolveImagePayload, cacheMediaFromResponse, mediaUrl, openFileInTool } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
@@ -22,9 +22,11 @@ const EXTRACT_MODEL_DEFS = [
 ];
 
 export default function PatternTool({
-    uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, tool, creditPricing, setEnhUrl, setTool,
+    uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, tool, creditPricing,
+    setEnhUrl, setSeamlessUrl, setRepeatUrl, setTool,
     handlePreUpload, onUploadInvalid, onUploadPaste, currentToken, uploadStatus, isUploading, setQwenLaunch, setUploads,
 }) {
+    const handoffSetters = { setTool, setEnhUrl, setSeamlessUrl, setRepeatUrl, setUploads, tool };
     // ===== LOCAL STATE =====
     const [extractResults, setExtractResults] = useState(EXTRACT_MODEL_DEFS.map(m => ({ ...m, loading: false, url: null, error: null, duration: 0 })));
     const [enabledModels, setEnabledModels] = useState(() => EXTRACT_MODEL_DEFS.reduce((acc, m) => ({ ...acc, [m.id]: true }), {}));
@@ -95,7 +97,7 @@ export default function PatternTool({
                 });
                 const d = await r.json();
                 cacheMediaFromResponse(d);
-                if (d.success) {
+                if (r.ok && d.success) {
                     setExtractResults(prev => prev.map(m =>
                         m.id === modelDef.id
                             ? { ...m, loading: false, url: d.resultUrl, error: d.error, duration: d.duration }
@@ -105,7 +107,7 @@ export default function PatternTool({
                 } else {
                     setExtractResults(prev => prev.map(m =>
                         m.id === modelDef.id
-                            ? { ...m, loading: false, error: d.error || 'Failed' }
+                            ? { ...m, loading: false, error: d.error || `HTTP ${r.status}` }
                             : m
                     ));
                 }
@@ -414,7 +416,7 @@ export default function PatternTool({
                         <button className="st-quick-action-btn" onClick={(e) => { if (completedResults[0]) forceDownload(e, `${API}${completedResults[0].url}`); }}>
                             <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download Best
                         </button>
-                        <button className="st-quick-action-btn" onClick={() => { if (completedResults[0]) { setEnhUrl(completedResults[0].url); setTool('seamless'); } }}>
+                        <button className="st-quick-action-btn" onClick={() => { if (completedResults[0]) openFileInTool({ url: completedResults[0].url }, 'seamless', handoffSetters); }}>
                             <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={14} /> Send to Seamless
                         </button>
                         {completedResults[0] && (
@@ -458,10 +460,10 @@ export default function PatternTool({
                                         <button onClick={(e) => forceDownload(e, `${API}${galleryModel.url}`)}>
                                             <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
                                         </button>
-                                        <button onClick={() => { setEnhUrl(galleryModel.url); setTool('seamless'); setExtractGalleryOpen(false); }}>
+                                        <button onClick={() => { openFileInTool({ url: galleryModel.url }, 'seamless', handoffSetters); setExtractGalleryOpen(false); }}>
                                             <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={14} /> Seamless
                                         </button>
-                                        <button onClick={() => { setEnhUrl(galleryModel.url); setTool('repeat'); setExtractGalleryOpen(false); }}>
+                                        <button onClick={() => { openFileInTool({ url: galleryModel.url }, 'repeat', handoffSetters); setExtractGalleryOpen(false); }}>
                                             <I d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" s={14} /> Repeat
                                         </button>
                                     </>
