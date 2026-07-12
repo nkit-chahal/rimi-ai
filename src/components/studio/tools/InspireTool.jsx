@@ -494,7 +494,16 @@ export default function InspireTool({
                     <div className="st-inspire-refine-title">Refine Your Results</div>
 
                     <div className="st-inspire-control-group">
-                        <label>Creativity <I d="M12 17h.01M12 13a4 4 0 10-4-4" s={12} /></label>
+                        <label>
+                            Creativity{' '}
+                            <span
+                                title="Conservative = closer to prompt / reference; Bold = more variation."
+                                aria-label="Conservative = closer to prompt / reference; Bold = more variation."
+                                style={{ cursor: 'help', display: 'inline-flex', verticalAlign: 'middle', marginLeft: 2 }}
+                            >
+                                <I d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" s={12} />
+                            </span>
+                        </label>
                         <div className="st-inspire-named-segments">
                             {['Conservative', 'Balanced', 'Creative', 'Bold'].map((name, idx) => (
                                 <button key={name} className={creativity === idx + 1 ? 'active' : ''} onClick={() => setCreativity(idx + 1)}>{name}</button>
