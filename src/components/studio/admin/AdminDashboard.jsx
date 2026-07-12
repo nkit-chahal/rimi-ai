@@ -61,6 +61,71 @@ function HorizontalBars({ items, valueKey, labelKey, formatValue, emptyLabel = '
     );
 }
 
+const PIE_COLORS = ['#6366f1', '#06b6d4', '#f59e0b', '#10b981', '#ec4899', '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#64748b'];
+
+function shortModelName(name) {
+    if (!name) return 'unknown';
+    const parts = String(name).split('/');
+    return parts[parts.length - 1] || name;
+}
+
+function PieChart({ items, labelKey, valueKey, formatValue, emptyLabel = 'No data yet' }) {
+    const slices = (items || [])
+        .map((item) => ({
+            label: item[labelKey],
+            value: Number(item[valueKey]) || 0,
+        }))
+        .filter((s) => s.value > 0)
+        .slice(0, 8);
+    const total = slices.reduce((sum, s) => sum + s.value, 0);
+    if (!slices.length || total <= 0) {
+        return <div className="admin-empty-chart">{emptyLabel}</div>;
+    }
+
+    const size = 160;
+    const radius = 68;
+    const cx = size / 2;
+    const cy = size / 2;
+    let angle = -Math.PI / 2;
+    const arcs = slices.map((slice, index) => {
+        const sweep = (slice.value / total) * Math.PI * 2;
+        const start = angle;
+        angle += sweep;
+        const end = angle;
+        const large = sweep > Math.PI ? 1 : 0;
+        const x1 = cx + radius * Math.cos(start);
+        const y1 = cy + radius * Math.sin(start);
+        const x2 = cx + radius * Math.cos(end);
+        const y2 = cy + radius * Math.sin(end);
+        const path = `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2} Z`;
+        return { ...slice, path, color: PIE_COLORS[index % PIE_COLORS.length] };
+    });
+
+    return (
+        <div className="admin-pie-wrap">
+            <svg className="admin-pie-svg" viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Pie chart">
+                {arcs.map((arc) => (
+                    <path key={arc.label} d={arc.path} fill={arc.color} stroke="#fff" strokeWidth="2">
+                        <title>{`${arc.label}: ${formatValue(arc.value)}`}</title>
+                    </path>
+                ))}
+                <circle cx={cx} cy={cy} r="34" fill="#fff" />
+                <text x={cx} y={cy - 4} textAnchor="middle" className="admin-pie-center-value">{formatValue(total)}</text>
+                <text x={cx} y={cy + 12} textAnchor="middle" className="admin-pie-center-label">total</text>
+            </svg>
+            <ul className="admin-pie-legend">
+                {arcs.map((arc) => (
+                    <li key={arc.label}>
+                        <span className="admin-pie-swatch" style={{ background: arc.color }} />
+                        <span className="admin-pie-legend-label" title={arc.label}>{shortModelName(arc.label)}</span>
+                        <span className="admin-pie-legend-value">{formatValue(arc.value)}</span>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
 const AdminDashboard = ({
     adminStats,
     budgetData,
@@ -141,6 +206,36 @@ const AdminDashboard = ({
                     )}
                 </div>
                 <div className="admin-card glassmorphism-card admin-chart-card">
+                    <h4>AI model usage</h4>
+                    <p className="admin-chart-sub">Calls by model name (pie)</p>
+                    {adminAnalyticsLoading ? (
+                        <div className="admin-empty-chart">Loading analytics…</div>
+                    ) : (
+                        <PieChart
+                            items={adminAnalytics?.usageByModel || adminAnalytics?.costByModel || []}
+                            labelKey="model"
+                            valueKey="count"
+                            formatValue={(v) => Number(v).toLocaleString()}
+                            emptyLabel="No model usage yet"
+                        />
+                    )}
+                </div>
+                <div className="admin-card glassmorphism-card admin-chart-card">
+                    <h4>Features by tool</h4>
+                    <p className="admin-chart-sub">Export / tool_type share (pie)</p>
+                    {adminAnalyticsLoading ? (
+                        <div className="admin-empty-chart">Loading analytics…</div>
+                    ) : (
+                        <PieChart
+                            items={adminAnalytics?.featureUsageByTool || []}
+                            labelKey="tool"
+                            valueKey="count"
+                            formatValue={(v) => Number(v).toLocaleString()}
+                            emptyLabel="No feature usage yet"
+                        />
+                    )}
+                </div>
+                <div className="admin-card glassmorphism-card admin-chart-card">
                     <h4>Cost by model</h4>
                     <p className="admin-chart-sub">Top models by Replicate spend</p>
                     {adminAnalyticsLoading ? (
@@ -152,21 +247,6 @@ const AdminDashboard = ({
                             valueKey="costUsd"
                             formatValue={(v) => `$${Number(v).toFixed(4)}`}
                             emptyLabel="No model spend yet"
-                        />
-                    )}
-                </div>
-                <div className="admin-card glassmorphism-card admin-chart-card">
-                    <h4>Features by tool</h4>
-                    <p className="admin-chart-sub">Export / tool_type breakdown</p>
-                    {adminAnalyticsLoading ? (
-                        <div className="admin-empty-chart">Loading analytics…</div>
-                    ) : (
-                        <HorizontalBars
-                            items={adminAnalytics?.featureUsageByTool || []}
-                            labelKey="tool"
-                            valueKey="count"
-                            formatValue={(v) => Number(v).toLocaleString()}
-                            emptyLabel="No feature usage yet"
                         />
                     )}
                 </div>

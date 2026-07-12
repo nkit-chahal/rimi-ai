@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import I from '../shared/StudioIcons';
 import { API } from '../shared/helpers';
+import AdminPagination, { useClientPagination } from './AdminPagination';
 
 const PLAN_OPTIONS = [
     'Free Trial',
@@ -65,6 +66,8 @@ const AdminUsers = ({
             return hay.includes(q);
         });
     }, [adminUsers, searchQuery]);
+
+    const pager = useClientPagination(filteredUsers, 20);
 
     const canBlockUser = (u) => {
         if (!u) return false;
@@ -325,7 +328,7 @@ const AdminUsers = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredUsers.map((u) => {
+                                {pager.pageItems.map((u) => {
                                     const status = u.status || 'active';
                                     const suspended = status === 'suspended';
                                     const busy = busyUserId === u.id;
@@ -366,6 +369,17 @@ const AdminUsers = ({
                                 })}
                             </tbody>
                         </table>
+                    )}
+                    {!adminUsersLoading && filteredUsers.length > 0 && (
+                        <AdminPagination
+                            page={pager.page}
+                            totalPages={pager.totalPages}
+                            total={pager.total}
+                            rangeStart={pager.rangeStart}
+                            rangeEnd={pager.rangeEnd}
+                            onPageChange={pager.setPage}
+                            label="users"
+                        />
                     )}
                 </div>
             </div>

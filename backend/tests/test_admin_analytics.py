@@ -73,3 +73,5 @@ def test_admin_analytics_returns_series(client, analytics_admin):
     assert data["summary"]["logins"] >= 1
     assert data["summary"]["paidOrders"] >= 1
     assert any(item["tool"] == "Mappings" for item in data["featureUsageByTool"])
+    assert "usageByModel" in data
+    assert any(item.get("count", 0) >= 1 for item in data["usageByModel"])

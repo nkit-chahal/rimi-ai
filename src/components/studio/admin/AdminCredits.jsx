@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import I from '../shared/StudioIcons';
 import { API } from '../shared/helpers';
+import AdminPagination, { useClientPagination } from './AdminPagination';
 
 const AdminCredits = ({
     renderBudgetBanner,
@@ -100,6 +101,8 @@ const AdminCredits = ({
     };
 
     const selectedUser = adminUsers.find(u => u.id === adminSelectedUserId);
+    const paymentsPager = useClientPagination(adminBilling?.payments || [], 15);
+    const txPager = useClientPagination(adminBilling?.transactions || [], 15);
 
     return (
         <div className="admin-workspace-panel animate-fade-in">
@@ -241,7 +244,7 @@ const AdminCredits = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {adminBilling.payments.slice(0, 25).map((p) => (
+                                {paymentsPager.pageItems.map((p) => (
                                     <tr key={p.id}>
                                         <td style={{ fontSize: '12px' }}>{p.user_name || p.user_email || p.user_id || '—'}</td>
                                         <td><span className="model-tag">{p.pack_id || '—'}</span></td>
@@ -257,6 +260,15 @@ const AdminCredits = ({
                                 ))}
                             </tbody>
                         </table>
+                        <AdminPagination
+                            page={paymentsPager.page}
+                            totalPages={paymentsPager.totalPages}
+                            total={paymentsPager.total}
+                            rangeStart={paymentsPager.rangeStart}
+                            rangeEnd={paymentsPager.rangeEnd}
+                            onPageChange={paymentsPager.setPage}
+                            label="payments"
+                        />
                     </div>
                 )}
             </div>
@@ -281,7 +293,7 @@ const AdminCredits = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {adminBilling.transactions.slice(0, 30).map((tx) => (
+                                {txPager.pageItems.map((tx) => (
                                     <tr key={tx.id}>
                                         <td style={{ fontSize: '12px' }}>{tx.user_name || tx.user_email || tx.user_id || '—'}</td>
                                         <td><span className="model-tag">{tx.transaction_type || '—'}</span></td>
@@ -292,6 +304,15 @@ const AdminCredits = ({
                                 ))}
                             </tbody>
                         </table>
+                        <AdminPagination
+                            page={txPager.page}
+                            totalPages={txPager.totalPages}
+                            total={txPager.total}
+                            rangeStart={txPager.rangeStart}
+                            rangeEnd={txPager.rangeEnd}
+                            onPageChange={txPager.setPage}
+                            label="transactions"
+                        />
                     </div>
                 )}
             </div>

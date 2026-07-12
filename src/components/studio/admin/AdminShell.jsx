@@ -24,6 +24,9 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
     const [adminStats, setAdminStats] = useState({ totalUsers: 0, totalProjects: 0, recentLogs: [] });
     const [adminAnalytics, setAdminAnalytics] = useState(null);
     const [adminAnalyticsLoading, setAdminAnalyticsLoading] = useState(false);
+    const [logsPage, setLogsPage] = useState(1);
+    const [replicateTotal, setReplicateTotal] = useState(0);
+    const logsPageSize = 25;
 
     const fetchAdminUsers = useCallback(() => {
         setAdminUsersLoading(true);
@@ -96,12 +99,12 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
             Promise.all([
                 fetch(`${API}/api/admin/users`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
                 fetch(`${API}/api/admin/projects`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
-                fetch(`${API}/api/admin/logs`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
+                fetch(`${API}/api/admin/logs?limit=8&page=1`, { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json()),
             ]).then(([usersData, projectsData, logsData]) => {
                 setAdminStats({
                     totalUsers: usersData.success ? usersData.users.length : 0,
                     totalProjects: projectsData.success ? projectsData.projects.length : 0,
-                    recentLogs: logsData.success ? logsData.replicateLogs.slice(0, 8) : [],
+                    recentLogs: logsData.success ? (logsData.replicateLogs || []).slice(0, 8) : [],
                 });
                 if (usersData.success) setAdminUsers(usersData.users);
             }).catch(() => { });
@@ -126,11 +129,12 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
     useEffect(() => {
         if (tool === 'admin-logs') {
             setReplicateLogsLoading(true);
-            fetch(`${API}/api/admin/logs`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
+            fetch(`${API}/api/admin/logs?limit=${logsPageSize}&page=${logsPage}`, { headers: { 'Authorization': `Bearer ${currentToken}` } })
                 .then(r => r.json())
                 .then(d => {
-                    if (d.success && d.replicateLogs) {
-                        setReplicateLogs(d.replicateLogs);
+                    if (d.success) {
+                        setReplicateLogs(d.replicateLogs || []);
+                        setReplicateTotal(d.replicateTotal || (d.replicateLogs || []).length);
                         setLoginEvents(d.loginEvents || []);
                         setAdminAuditEvents(d.adminAuditEvents || []);
                     }
@@ -138,7 +142,11 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
                 .catch(err => console.error('Failed to fetch admin logs:', err))
                 .finally(() => setReplicateLogsLoading(false));
         }
-    }, [tool, currentToken]);
+    }, [tool, currentToken, logsPage, logsPageSize]);
+
+    useEffect(() => {
+        if (tool !== 'admin-logs') setLogsPage(1);
+    }, [tool]);
 
     const adminProps = {
         'admin-dashboard': {
@@ -160,7 +168,17 @@ export default function AdminShell({ tool, setTool, currentToken, renderBudgetBa
             currentUserId,
         },
         'admin-projects': { renderBudgetBanner, adminProjectsLoading, adminProjects },
-        'admin-logs': { renderBudgetBanner, replicateLogsLoading, replicateLogs, loginEvents, adminAuditEvents },
+        'admin-logs': {
+            renderBudgetBanner,
+            replicateLogsLoading,
+            replicateLogs,
+            loginEvents,
+            adminAuditEvents,
+            logsPage,
+            setLogsPage,
+            logsPageSize,
+            replicateTotal,
+        },
         'admin-credits': {
             renderBudgetBanner,
             adminUsers,

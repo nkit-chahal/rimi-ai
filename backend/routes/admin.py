@@ -330,10 +330,37 @@ def signup_verify_otp():
 @bp.route('/api/admin/logs', methods=['GET'])
 @admin_required
 def admin_logs():
+    try:
+        limit = max(1, min(100, int(request.args.get('limit', 50))))
+    except (TypeError, ValueError):
+        limit = 50
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except (TypeError, ValueError):
+        page = 1
+    offset = (page - 1) * limit
+    include_exports = request.args.get('exports', '0') in ('1', 'true', 'yes')
+
     conn = db()
     try:
-        replicate_logs_rows = conn.execute("SELECT * FROM replicate_logs ORDER BY id DESC").fetchall()
-        exports_rows = conn.execute("SELECT * FROM exports ORDER BY id DESC").fetchall()
+        replicate_total = conn.execute("SELECT COUNT(*) AS c FROM replicate_logs").fetchone()
+        replicate_total = int((replicate_total["c"] if isinstance(replicate_total, dict) else replicate_total[0]) or 0)
+        replicate_logs_rows = conn.execute(
+            "SELECT * FROM replicate_logs ORDER BY id DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+
+        exports = []
+        exports_total = 0
+        if include_exports:
+            exports_total_row = conn.execute("SELECT COUNT(*) AS c FROM exports").fetchone()
+            exports_total = int((exports_total_row["c"] if isinstance(exports_total_row, dict) else exports_total_row[0]) or 0)
+            exports_rows = conn.execute(
+                "SELECT * FROM exports ORDER BY id DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+            exports = rows_to_dicts(exports_rows)
+
         login_event_rows = conn.execute("""
             SELECT
                 le.*,
@@ -342,8 +369,8 @@ def admin_logs():
             FROM login_events le
             LEFT JOIN users u ON u.id = le.user_id
             ORDER BY le.created_at DESC
-            LIMIT 100
-        """).fetchall()
+            LIMIT ?
+        """, (limit,)).fetchall()
         admin_audit_rows = conn.execute("""
             SELECT
                 a.*,
@@ -355,20 +382,19 @@ def admin_logs():
             LEFT JOIN users admin ON admin.id = a.admin_user_id
             LEFT JOIN users target ON target.id = a.target_user_id
             ORDER BY a.created_at DESC
-            LIMIT 150
-        """).fetchall()
-        
-        replicate_logs = rows_to_dicts(replicate_logs_rows)
-        exports = rows_to_dicts(exports_rows)
-        login_events = rows_to_dicts(login_event_rows)
-        admin_audit_events = rows_to_dicts(admin_audit_rows)
-        
+            LIMIT ?
+        """, (limit,)).fetchall()
+
         return jsonify({
             'success': True,
-            'replicateLogs': replicate_logs,
+            'page': page,
+            'limit': limit,
+            'replicateLogs': rows_to_dicts(replicate_logs_rows),
+            'replicateTotal': replicate_total,
             'exports': exports,
-            'loginEvents': login_events,
-            'adminAuditEvents': admin_audit_events
+            'exportsTotal': exports_total,
+            'loginEvents': rows_to_dicts(login_event_rows),
+            'adminAuditEvents': rows_to_dicts(admin_audit_rows),
         })
     except Exception as e:
         print(f"Error fetching admin logs: {e}")
@@ -1039,6 +1065,7 @@ def admin_analytics():
     spend_by_day = empty_day_map()
     calls_by_day = empty_day_map()
     cost_by_model = {}
+    calls_by_model = {}
     logins_by_day = empty_day_map()
     revenue_by_day = empty_day_map()
     paid_orders = 0
@@ -1072,6 +1099,7 @@ def admin_analytics():
             cost = float(row["cost_usd"] or 0)
             model = (row["model_name"] or "unknown").strip() or "unknown"
             cost_by_model[model] = cost_by_model.get(model, 0.0) + cost
+            calls_by_model[model] = calls_by_model.get(model, 0) + 1
             if day in spend_by_day:
                 spend_by_day[day] += cost
                 calls_by_day[day] += 1
@@ -1116,10 +1144,18 @@ def admin_analytics():
         reverse=True,
     )[:12]
     top_models = sorted(
-        [{"model": k, "costUsd": round(v, 6)} for k, v in cost_by_model.items()],
-        key=lambda x: x["costUsd"],
+        [
+            {
+                "model": k,
+                "costUsd": round(v, 6),
+                "count": int(calls_by_model.get(k, 0)),
+            }
+            for k, v in cost_by_model.items()
+        ],
+        key=lambda x: x["count"],
         reverse=True,
     )[:12]
+    top_models_by_cost = sorted(top_models, key=lambda x: x["costUsd"], reverse=True)
 
     return jsonify({
         'success': True,
@@ -1129,7 +1165,8 @@ def admin_analytics():
         'featureUsageByTool': top_features,
         'apiSpendByDay': [round(spend_by_day[d], 6) for d in day_labels],
         'apiCallsByDay': [calls_by_day[d] for d in day_labels],
-        'costByModel': top_models,
+        'costByModel': top_models_by_cost,
+        'usageByModel': top_models,
         'loginsByDay': [logins_by_day[d] for d in day_labels],
         'revenueByDay': [revenue_by_day[d] for d in day_labels],
         'summary': {
