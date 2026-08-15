@@ -206,7 +206,9 @@ const AdminUsers = ({
     };
 
     const handleExtendExpiry = (user) => {
-        if (!window.confirm(`Extend expiry for "${user.name}" by 30 days?`)) return;
+        if (!window.confirm(
+            `Extend expiry for "${user.name}" by 30 days and restore remaining credits to full limit?`,
+        )) return;
         setBusyUserId(user.id);
         fetch(`${API}/api/admin/extend-expiry`, {
             method: 'POST',
@@ -217,7 +219,7 @@ const AdminUsers = ({
             .then((d) => {
                 if (d.success) {
                     const daysLabel = d.resetDays != null ? ` (${d.resetDays}d left)` : '';
-                    showFeedback(`✓ Extended expiry for ${user.name}${daysLabel}`);
+                    showFeedback(`✓ Extended expiry and restored credits for ${user.name}${daysLabel}`);
                     fetchAdminUsers();
                 } else {
                     showFeedback('✗ ' + (d.error || 'Failed to extend expiry'));
@@ -345,7 +347,7 @@ const AdminUsers = ({
                                     <th>Role</th>
                                     <th>Plan</th>
                                     <th>Status</th>
-                                    <th>Credits</th>
+                                    <th>Used / Limit</th>
                                     <th>Expires</th>
                                     <th>Actions</th>
                                 </tr>

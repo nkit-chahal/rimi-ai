@@ -590,35 +590,59 @@ def admin_adjust_credits():
         credits_limit = int(credits_limit)
     except ValueError:
         return jsonify({'success': False, 'error': 'userId and creditsLimit must be integers'}), 400
+
+    if credits_limit < 0:
+        return jsonify({'success': False, 'error': 'Credit limit cannot be negative'}), 400
         
     conn = db()
     try:
-        existing_user = conn.execute("SELECT credits_limit FROM users WHERE id = ?", (user_id,)).fetchone()
-        previous_limit = existing_user["credits_limit"] if existing_user else None
-        cur = conn.execute("UPDATE users SET credits_limit = ? WHERE id = ?", (credits_limit, user_id))
-        if cur.rowcount:
-            delta = credits_limit - previous_limit
-            created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-            conn.execute(
-                """
-                INSERT INTO credit_transactions
-                (user_id, transaction_type, credits, note, created_at)
-                VALUES (?, 'admin_adjustment', ?, ?, ?)
-                """,
-                (user_id, delta, "Admin credit limit adjustment", created_at)
-            )
-            if previous_limit is not None and credits_limit > previous_limit:
-                extend_credit_expiry(user_id, conn=conn)
-            _record_admin_audit(
-                conn,
-                "credits.adjust",
-                target_user_id=user_id,
-                details={"previousCreditsLimit": previous_limit, "creditsLimit": credits_limit, "delta": delta},
-            )
-        conn.commit()
-        if cur.rowcount == 0:
+        existing_user = conn.execute(
+            "SELECT credits_limit, credits_used FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if not existing_user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
-        return jsonify({'success': True, 'message': 'Credits limit updated successfully'})
+
+        previous_limit = existing_user["credits_limit"]
+        previous_used = int(existing_user["credits_used"] or 0)
+        clamped_used = min(previous_used, credits_limit)
+        created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+
+        conn.execute(
+            "UPDATE users SET credits_limit = ?, credits_used = ? WHERE id = ?",
+            (credits_limit, clamped_used, user_id),
+        )
+        delta = credits_limit - previous_limit
+        conn.execute(
+            """
+            INSERT INTO credit_transactions
+            (user_id, transaction_type, credits, note, created_at)
+            VALUES (?, 'admin_adjustment', ?, ?, ?)
+            """,
+            (user_id, delta, "Admin credit limit adjustment", created_at),
+        )
+        if previous_limit is not None and credits_limit > previous_limit:
+            extend_credit_expiry(user_id, conn=conn)
+        _record_admin_audit(
+            conn,
+            "credits.adjust",
+            target_user_id=user_id,
+            details={
+                "previousCreditsLimit": previous_limit,
+                "creditsLimit": credits_limit,
+                "delta": delta,
+                "previousCreditsUsed": previous_used,
+                "creditsUsed": clamped_used,
+                "clampedUsed": clamped_used < previous_used,
+            },
+        )
+        conn.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Credits limit updated successfully',
+            'creditsLimit': credits_limit,
+            'creditsUsed': clamped_used,
+        })
     except Exception as e:
         print(f"Error adjusting credits: {e}")
         return jsonify({'success': False, 'error': 'An internal error occurred'}), 500
@@ -641,16 +665,39 @@ def admin_extend_expiry():
     conn = db()
     try:
         existing = conn.execute(
-            "SELECT id, reset_at FROM users WHERE id = ?",
+            "SELECT id, reset_at, credits_used, credits_limit FROM users WHERE id = ?",
             (user_id,),
         ).fetchone()
         if not existing:
             return jsonify({'success': False, 'error': 'User not found'}), 404
 
         previous_reset_at = existing["reset_at"]
+        previous_used = int(existing["credits_used"] or 0)
+        credits_limit = int(existing["credits_limit"] or 0)
         new_reset_at = extend_credit_expiry(user_id, conn=conn)
         if not new_reset_at:
             return jsonify({'success': False, 'error': 'Failed to extend expiry'}), 500
+
+        # Admin renew: bump window and restore full remaining balance for the new period.
+        created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        conn.execute(
+            "UPDATE users SET credits_used = 0 WHERE id = ?",
+            (user_id,),
+        )
+        if previous_used > 0:
+            conn.execute(
+                """
+                INSERT INTO credit_transactions
+                (user_id, transaction_type, credits, note, created_at)
+                VALUES (?, 'admin_adjustment', ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    previous_used,
+                    "Admin expiry extend — credits restored",
+                    created_at,
+                ),
+            )
 
         reset_days = _compute_reset_days(new_reset_at)
         _record_admin_audit(
@@ -662,14 +709,23 @@ def admin_extend_expiry():
                 "resetAt": new_reset_at,
                 "resetDays": reset_days,
                 "extendedByDays": CREDIT_EXPIRY_DAYS,
+                "previousCreditsUsed": previous_used,
+                "creditsUsed": 0,
+                "creditsLimit": credits_limit,
+                "creditsRestored": True,
             },
         )
         conn.commit()
         return jsonify({
             'success': True,
-            'message': f'Credit expiry extended by {CREDIT_EXPIRY_DAYS} days',
+            'message': (
+                f'Credit expiry extended by {CREDIT_EXPIRY_DAYS} days '
+                'and remaining credits restored to full limit'
+            ),
             'resetAt': new_reset_at,
             'resetDays': reset_days,
+            'creditsUsed': 0,
+            'creditsLimit': credits_limit,
         })
     except Exception as e:
         print(f"Error extending credit expiry: {e}")
@@ -955,6 +1011,8 @@ def admin_update_user(user_id):
         status = data.get('status', existing.get('status', 'active'))
         credits_limit = _safe_int(data.get('creditsLimit'), existing['credits_limit'])
         password = data.get('password', '')
+        previous_used = int(existing.get('credits_used') or 0)
+        clamped_used = min(previous_used, credits_limit)
 
         if not email or not name:
             return jsonify({'success': False, 'error': 'Email and name are required'}), 400
@@ -977,9 +1035,10 @@ def admin_update_user(user_id):
             "role = ?",
             "plan = ?",
             "credits_limit = ?",
+            "credits_used = ?",
             "status = ?",
         ]
-        values = [email, name, initials, role, plan, credits_limit, status]
+        values = [email, name, initials, role, plan, credits_limit, clamped_used, status]
         changed = {
             "email": {"from": existing["email"], "to": email},
             "name": {"from": existing["name"], "to": name},
@@ -988,6 +1047,8 @@ def admin_update_user(user_id):
             "creditsLimit": {"from": existing["credits_limit"], "to": credits_limit},
             "status": {"from": existing.get("status", "active"), "to": status},
         }
+        if clamped_used != previous_used:
+            changed["creditsUsed"] = {"from": previous_used, "to": clamped_used}
         changed = {key: value for key, value in changed.items() if value["from"] != value["to"]}
         if password:
             if len(password) < 8:
@@ -1000,7 +1061,12 @@ def admin_update_user(user_id):
         conn.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", values)
         _record_admin_audit(conn, "user.update", target_user_id=user_id, details=changed)
         conn.commit()
-        return jsonify({'success': True, 'message': f'User {name} updated successfully'})
+        return jsonify({
+            'success': True,
+            'message': f'User {name} updated successfully',
+            'creditsLimit': credits_limit,
+            'creditsUsed': clamped_used,
+        })
     except Exception as e:
         if _is_unique_violation(e):
             conn.rollback()

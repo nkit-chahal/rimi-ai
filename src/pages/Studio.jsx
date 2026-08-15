@@ -528,6 +528,24 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         return () => { workspaceLoadIdRef.current += 1; };
     }, [applyStudioState, currentToken, isAdmin]);
 
+    // Refresh credits/plan from server when the tab becomes visible again so admin
+    // extend / limit edits appear without a hard reload.
+    useEffect(() => {
+        if (isAdmin || !currentToken) return undefined;
+
+        const refreshOnFocus = () => {
+            if (document.visibilityState && document.visibilityState !== 'visible') return;
+            loadStudioState(activeProjectId, { silent: true });
+        };
+
+        window.addEventListener('focus', refreshOnFocus);
+        document.addEventListener('visibilitychange', refreshOnFocus);
+        return () => {
+            window.removeEventListener('focus', refreshOnFocus);
+            document.removeEventListener('visibilitychange', refreshOnFocus);
+        };
+    }, [activeProjectId, currentToken, isAdmin, loadStudioState]);
+
     const workspaceReady = workspaceHydrated && !isLoadingState;
 
     useEffect(() => {

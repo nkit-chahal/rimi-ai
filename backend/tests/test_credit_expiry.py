@@ -136,3 +136,20 @@ def test_extend_credit_expiry_from_now_when_expired(expired_user):
     parsed = datetime.fromisoformat(new_reset)
     expected = now + timedelta(days=CREDIT_EXPIRY_DAYS)
     assert abs((parsed - expected).total_seconds()) < 2
+
+
+def test_extend_alone_does_not_restore_credits(expired_user):
+    """Low-level helper only bumps reset_at; admin route is responsible for restore."""
+    expire_credits_if_needed(1)
+    ok, remaining, limit, used = check_credits(1, 1)
+    assert remaining == 0
+    assert used == 100
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    new_reset = extend_credit_expiry(1, from_dt=now)
+    assert new_reset is not None
+
+    ok, remaining, limit, used = check_credits(1, 1)
+    assert remaining == 0
+    assert used == 100
+    assert limit == 100
