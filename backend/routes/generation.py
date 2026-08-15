@@ -7,6 +7,7 @@ import time
 import concurrent.futures
 import requests as http_requests
 from flask import Blueprint, request, jsonify, g
+from urllib.parse import urlparse
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client, safe_filename
 from middleware import login_required, project_access_from_payload
@@ -598,13 +599,82 @@ def extract_design_single():
     return jsonify(payload)
 
 
+def _extract_image_basename(image_url):
+    raw = str(image_url or "").strip()
+    if not raw:
+        return ""
+    path = raw
+    if "://" in raw:
+        path = urlparse(raw).path
+    return os.path.basename(path.split("?", 1)[0])
+
+
+def load_extract_image_bytes(image_url):
+    """Load an extract result from storage (S3 or disk). Avoid fetching our own /results URLs."""
+    basename = _extract_image_basename(image_url)
+    if not basename:
+        raise ValueError("Image URL is required")
+
+    data, _ = storage.get_file("results", basename)
+    if data:
+        return data
+    data, _ = storage.get_file("uploads", basename)
+    if data:
+        return data
+
+    for directory in (RESULTS_DIR, UPLOAD_DIR):
+        local_path = os.path.join(directory, basename)
+        if os.path.exists(local_path):
+            with open(local_path, "rb") as handle:
+                return handle.read()
+
+    raw = str(image_url).strip()
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return safe_fetch_url(raw, timeout=60)
+    raise FileNotFoundError(f"Image not found: {basename}")
+
+
+def build_extract_edit_input(model_cfg, prompt, data_uri, image_description=None):
+    """Build Replicate input for an extract edit. Never send image keys to text-only models."""
+    model_id = model_cfg["id"]
+    edit_prompt = (
+        f"Edit this pattern tile: {prompt}. Keep it as a flat 2D seamless repeating "
+        "pattern tile, high resolution, no perspective, no garment, no mockup."
+    )
+    if model_cfg.get("supports_image") and model_cfg.get("input_key"):
+        replicate_input = {"prompt": edit_prompt, "aspect_ratio": "1:1"}
+        if model_cfg.get("input_list"):
+            replicate_input[model_cfg["input_key"]] = [data_uri]
+        else:
+            replicate_input[model_cfg["input_key"]] = data_uri
+        if "seedream" in model_id:
+            replicate_input["size"] = "2K"
+        extra = model_cfg.get("extra_input") or {}
+        replicate_input.update(extra)
+        return replicate_input
+
+    desc = image_description or "detailed fabric pattern"
+    text_prompt = (
+        f"A perfectly flat, 2D seamless repeating pattern tile for textile printing. "
+        f"The current design: {desc}. Apply this change: {prompt}. "
+        "High resolution, perfectly flat texture, no perspective, no shadows, clean tile edges."
+    )
+    replicate_input = {"prompt": text_prompt, "aspect_ratio": "1:1"}
+    if "imagen" in model_id:
+        replicate_input["image_size"] = "2K"
+    elif "flux" in model_id:
+        replicate_input["prompt_upsampling"] = True
+    return replicate_input
+
+
 @bp.route('/api/extract-edit', methods=['POST'])
 @login_required
+@generation_rate_limit
 def extract_edit():
     """Edit an extracted pattern result using the same model that generated it."""
-    data = request.get_json()
+    data = request.get_json() or {}
     image_url = data.get('imageUrl', '')
-    prompt = data.get('prompt', '')
+    prompt = str(data.get('prompt', '') or '').strip()
     model_id = data.get('modelId', 'google/nano-banana')
     project_id, access_error = project_access_from_payload(data)
     if access_error:
@@ -612,11 +682,13 @@ def extract_edit():
     user_id = g.current_user['id']
 
     if not prompt:
-        return jsonify({'error': 'Prompt is required'}), 400
+        return jsonify({'success': False, 'error': 'Prompt is required'}), 400
     if not image_url:
-        return jsonify({'error': 'Image URL is required'}), 400
+        return jsonify({'success': False, 'error': 'Image URL is required'}), 400
 
-    model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), EXTRACT_MODELS[0])
+    model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), None)
+    if not model_cfg:
+        return jsonify({'success': False, 'error': f'Unknown model: {model_id}'}), 400
     ok_tier, tier_body, tier_code = require_model_or_error(current_user_plan(), model_id, 'extract')
     if not ok_tier:
         return tier_body, tier_code
@@ -627,29 +699,17 @@ def extract_edit():
         return jsonify(err), 403
 
     try:
-        # Load the existing result image
-        if image_url.startswith('/results/'):
-            local_path = os.path.join(RESULTS_DIR, image_url.split('/')[-1])
-            with open(local_path, 'rb') as f:
-                image_bytes = f.read()
-        else:
-            image_bytes = safe_fetch_url(image_url, timeout=60)
-
+        image_bytes = load_extract_image_bytes(image_url)
         encoded = base64.b64encode(image_bytes).decode('utf-8')
         data_uri = f"data:image/png;base64,{encoded}"
 
-        edit_prompt = f"Edit this pattern tile: {prompt}. Keep it as a flat 2D seamless repeating pattern tile, high resolution."
+        image_description = None
+        if not (model_cfg.get("supports_image") and model_cfg.get("input_key")):
+            image_description = _describe_image_for_extraction(data_uri)
 
-        replicate_input = {"prompt": edit_prompt, "aspect_ratio": "1:1"}
-        if model_cfg.get('supports_image') and model_cfg.get('input_key'):
-            if model_cfg.get('input_list'):
-                replicate_input[model_cfg['input_key']] = [data_uri]
-            else:
-                replicate_input[model_cfg['input_key']] = data_uri
-        elif 'nano-banana' in model_id:
-            replicate_input["image_input"] = [data_uri]
-        else:
-            replicate_input["image"] = data_uri
+        replicate_input = build_extract_edit_input(
+            model_cfg, prompt, data_uri, image_description=image_description
+        )
 
         print(f"  [Extract Edit] Editing with {model_id}: {prompt[:80]}...")
         start_time = time.time()
@@ -685,10 +745,14 @@ def extract_edit():
             **updated_credits,
         })
 
+    except FileNotFoundError as e:
+        refund_credits(user_id, project_id, required_credits, note='Extract edit failed')
+        print(f"  [Extract Edit] Error: {e}")
+        return jsonify({'success': False, 'error': 'Could not load the extracted image to edit.'}), 404
     except Exception as e:
         refund_credits(user_id, project_id, required_credits, note='Extract edit failed')
         print(f"  [Extract Edit] Error: {e}")
-        return jsonify({'error': f'Edit failed: {str(e)}'}), 500
+        return jsonify({'success': False, 'error': f'Edit failed: {str(e)}'}), 500
 
 
 @bp.route('/api/generate-inspirations', methods=['POST'])

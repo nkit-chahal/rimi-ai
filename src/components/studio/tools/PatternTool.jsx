@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload, jsonAuthHeaders, resolveImagePayload, cacheMediaFromResponse, mediaUrl, openFileInTool } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
@@ -38,7 +38,12 @@ const EXTRACT_MODEL_DEFS = [
     { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'G2', credits: 148, accent: '#111827', tier: 'pro' },
 ];
 
-export default function PatternTool({
+const EDIT_SUGGESTIONS = [
+    'Make motifs smaller',
+    'Shift to navy and cream',
+    'Cleaner background',
+    'Tighter seamless repeat',
+];
     uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, tool, creditPricing,
     setEnhUrl, setSeamlessUrl, setRepeatUrl, setTool,
     handlePreUpload, onUploadInvalid, onUploadPaste, currentToken, uploadStatus, isUploading, setQwenLaunch, setUploads,
@@ -64,6 +69,8 @@ export default function PatternTool({
     const [extractChatInput, setExtractChatInput] = useState('');
     const [isExtractEditing, setIsExtractEditing] = useState(false);
     const [proGateModel, setProGateModel] = useState(null);
+    const extractChatEndRef = useRef(null);
+    const extractChatInputRef = useRef(null);
 
     const { pasteProps, openFilePicker, inputProps } = useImageDropzone({
         onFile: handlePreUpload,
@@ -150,15 +157,21 @@ export default function PatternTool({
     };
 
 
-    const sendExtractEdit = async () => {
+    const sendExtractEdit = async (presetPrompt) => {
         const model = extractResults[extractGalleryIndex];
-        if (!model?.url || !extractChatInput.trim() || isExtractEditing) return;
+        const userMsg = String(presetPrompt ?? extractChatInput).trim();
+        if (!model?.url || !userMsg || isExtractEditing) return;
 
-        const userMsg = extractChatInput.trim();
+        const editCost = modelCreditCost(model);
+        if (userRemainingCredits < editCost) {
+            setError(`Need ${editCost} credits to edit with ${model.name}. You have ${userRemainingCredits} remaining.`);
+            return;
+        }
+
         setExtractChatInput('');
         setIsExtractEditing(true);
+        setError('');
 
-        // Add user message to chat
         setExtractChatMessages(prev => ({
             ...prev,
             [model.id]: [...(prev[model.id] || []), { role: 'user', content: userMsg }]
@@ -176,32 +189,35 @@ export default function PatternTool({
                     userId: user?.id
                 })
             });
-            const d = await r.json();
+            const d = await r.json().catch(() => ({}));
             cacheMediaFromResponse(d);
-            if (d.success) {
-                // Add AI response with image
+            if (r.ok && d.success && d.resultUrl) {
                 setExtractChatMessages(prev => ({
                     ...prev,
-                    [model.id]: [...(prev[model.id] || []), { role: 'ai', content: 'Updated pattern:', imageUrl: d.resultUrl }]
+                    [model.id]: [...(prev[model.id] || []), { role: 'ai', content: 'Updated tile', imageUrl: d.resultUrl }]
                 }));
-                // Update the model's result URL
-                setExtractResults(prev => prev.map((m, i) =>
-                    i === extractGalleryIndex ? { ...m, url: d.resultUrl } : m
+                setExtractResults(prev => prev.map((m) =>
+                    m.id === model.id ? { ...m, url: d.resultUrl } : m
                 ));
                 updateCreditsFromResponse(d);
             } else {
+                const message = d.error || d.message || `Edit failed (${r.status})`;
                 setExtractChatMessages(prev => ({
                     ...prev,
-                    [model.id]: [...(prev[model.id] || []), { role: 'ai', content: `Error: ${d.error || 'Edit failed'}` }]
+                    [model.id]: [...(prev[model.id] || []), { role: 'ai', error: true, content: message }]
                 }));
+                setError(message);
             }
         } catch (err) {
+            const message = err.message || 'Edit failed';
             setExtractChatMessages(prev => ({
                 ...prev,
-                [model.id]: [...(prev[model.id] || []), { role: 'ai', content: `Error: ${err.message}` }]
+                [model.id]: [...(prev[model.id] || []), { role: 'ai', error: true, content: message }]
             }));
+            setError(message);
         }
         setIsExtractEditing(false);
+        extractChatInputRef.current?.focus();
     };
 
 
@@ -211,6 +227,20 @@ export default function PatternTool({
     const completedResults = visibleResults.filter(m => m.url);
     const galleryModel = extractResults[extractGalleryIndex];
     const galleryChats = extractChatMessages[galleryModel?.id] || [];
+    const galleryCompleted = extractResults.filter(m => m.url);
+    const galleryPos = Math.max(0, galleryCompleted.findIndex(m => m.id === galleryModel?.id));
+    const editCreditCost = galleryModel ? modelCreditCost(galleryModel) : 0;
+    const canAffordEdit = userRemainingCredits >= editCreditCost;
+
+    const stepGallery = (dir) => {
+        if (!galleryCompleted.length) return;
+        const next = galleryCompleted[(galleryPos + dir + galleryCompleted.length) % galleryCompleted.length];
+        setExtractGalleryIndex(extractResults.findIndex(m => m.id === next.id));
+    };
+
+    useEffect(() => {
+        extractChatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, [galleryChats, isExtractEditing, extractGalleryIndex]);
 
     if (!preview) {
         return (
@@ -514,43 +544,52 @@ export default function PatternTool({
 
             {/* ===== GALLERY LIGHTBOX OVERLAY ===== */}
             {extractGalleryOpen && galleryModel && (
-                <div className="st-extract-gallery-overlay" onClick={() => setExtractGalleryOpen(false)} onKeyDown={(e) => {
-                    if (e.key === 'Escape') setExtractGalleryOpen(false);
-                    if (e.key === 'ArrowLeft') setExtractGalleryIndex(p => (p - 1 + extractResults.length) % extractResults.length);
-                    if (e.key === 'ArrowRight') setExtractGalleryIndex(p => (p + 1) % extractResults.length);
-                }} tabIndex={0} ref={el => el?.focus()}>
+                <div
+                    className="st-extract-gallery-overlay"
+                    role="dialog"
+                    aria-label="Pattern result editor"
+                    onClick={() => setExtractGalleryOpen(false)}
+                    onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget && e.target?.tagName !== 'TEXTAREA') {
+                            if (e.key === 'Escape') setExtractGalleryOpen(false);
+                            return;
+                        }
+                        if (e.key === 'Escape') setExtractGalleryOpen(false);
+                        if (e.key === 'ArrowLeft') stepGallery(-1);
+                        if (e.key === 'ArrowRight') stepGallery(1);
+                    }}
+                >
                     <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                        {/* Header */}
                         <div className="st-extract-gallery-header">
                             <div className="st-gallery-model-name">
-                                <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: galleryModel.color, display: 'inline-block' }} />
-                                <I d={galleryModel.icon} s={18} />
+                                <span className={`st-model-brand ${galleryModel.brand}`} style={{ width: 28, height: 28, fontSize: 11 }}>{galleryModel.logo}</span>
                                 {galleryModel.name}
-                                <span className="st-gallery-model-badge" style={{ background: `${galleryModel.color}20`, color: galleryModel.color }}>
-                                    {galleryModel.duration}s
-                                </span>
+                                {galleryModel.duration ? (
+                                    <span className="st-gallery-model-badge" style={{ background: `${galleryModel.accent}20`, color: galleryModel.accent }}>
+                                        {galleryModel.duration}s
+                                    </span>
+                                ) : null}
                             </div>
                             <div className="st-gallery-actions">
                                 {galleryModel.url && (
                                     <>
-                                        <button onClick={(e) => forceDownload(e, `${API}${galleryModel.url}`)}>
+                                        <button type="button" onClick={(e) => forceDownload(e, `${API}${galleryModel.url}`)}>
                                             <I d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" s={14} /> Download
                                         </button>
-                                        <button onClick={() => { openFileInTool({ url: galleryModel.url }, 'seamless', handoffSetters); setExtractGalleryOpen(false); }}>
+                                        <button type="button" onClick={() => { openFileInTool({ url: galleryModel.url }, 'seamless', handoffSetters); setExtractGalleryOpen(false); }}>
                                             <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={14} /> Seamless
                                         </button>
-                                        <button onClick={() => { openFileInTool({ url: galleryModel.url }, 'repeat', handoffSetters); setExtractGalleryOpen(false); }}>
+                                        <button type="button" onClick={() => { openFileInTool({ url: galleryModel.url }, 'repeat', handoffSetters); setExtractGalleryOpen(false); }}>
                                             <I d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" s={14} /> Repeat
                                         </button>
                                     </>
                                 )}
-                                <button className="st-gallery-close" onClick={() => setExtractGalleryOpen(false)}>✕</button>
+                                <button type="button" className="st-gallery-close" aria-label="Close gallery" onClick={() => setExtractGalleryOpen(false)}>✕</button>
                             </div>
                         </div>
 
-                        {/* Main Image */}
                         <div className="st-extract-gallery-main">
-                            <button className="st-extract-gallery-nav prev" onClick={() => setExtractGalleryIndex(p => (p - 1 + extractResults.length) % extractResults.length)}>
+                            <button type="button" className="st-extract-gallery-nav prev" aria-label="Previous result" onClick={() => stepGallery(-1)}>
                                 <I d="M15 19l-7-7 7-7" s={22} />
                             </button>
                             {galleryModel.url ? (
@@ -560,7 +599,7 @@ export default function PatternTool({
                                     active
                                     modelId={galleryModel.id}
                                     label={`Generating with ${galleryModel.name}…`}
-                                    accent={galleryModel.accent || galleryModel.color || '#6366f1'}
+                                    accent={galleryModel.accent || '#6366f1'}
                                     tone="light"
                                 />
                             ) : (
@@ -569,64 +608,92 @@ export default function PatternTool({
                                     <p>{galleryModel.error || 'No result yet'}</p>
                                 </div>
                             )}
-                            <button className="st-extract-gallery-nav next" onClick={() => setExtractGalleryIndex(p => (p + 1) % extractResults.length)}>
+                            <button type="button" className="st-extract-gallery-nav next" aria-label="Next result" onClick={() => stepGallery(1)}>
                                 <I d="M9 5l7 7-7 7" s={22} />
                             </button>
                         </div>
 
-                        {/* Dots */}
                         <div className="st-extract-gallery-dots">
-                            {extractResults.map((m, i) => (
+                            {galleryCompleted.map((m) => (
                                 <button
                                     key={m.id}
-                                    className={`st-extract-gallery-dot ${i === extractGalleryIndex ? 'active' : ''}`}
-                                    style={i === extractGalleryIndex ? { background: m.accent, boxShadow: `0 0 10px ${m.accent}80` } : {}}
-                                    onClick={() => setExtractGalleryIndex(i)}
+                                    type="button"
+                                    className={`st-extract-gallery-dot ${m.id === galleryModel.id ? 'active' : ''}`}
+                                    style={m.id === galleryModel.id ? { background: m.accent } : {}}
+                                    onClick={() => setExtractGalleryIndex(extractResults.findIndex(row => row.id === m.id))}
                                     title={m.name}
+                                    aria-label={m.name}
                                 />
                             ))}
                         </div>
 
-                        {/* Chat Panel */}
                         {galleryModel.url && (
                             <div className="st-extract-chat">
                                 <div className="st-extract-chat-header">
-                                    <I d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" s={14} />
-                                    Chat with {galleryModel.name}
+                                    <span>Edit this tile</span>
+                                    <span className="st-extract-chat-cost">{editCreditCost} cr · {galleryModel.name}</span>
                                 </div>
-                                <div className="st-extract-chat-messages">
-                                    {galleryChats.length === 0 && (
-                                        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.78rem', textAlign: 'center', padding: '0.5rem' }}>
-                                            Ask {galleryModel.name} to edit this pattern...
+                                <div className="st-extract-chat-messages" aria-live="polite">
+                                    {galleryChats.length === 0 && !isExtractEditing && (
+                                        <div className="st-extract-chat-empty">
+                                            Describe a change. The preview above updates with each successful edit.
                                         </div>
                                     )}
                                     {galleryChats.map((msg, i) => (
-                                        <div key={i} className={`st-extract-chat-bubble ${msg.role}`}>
+                                        <div key={`${msg.role}-${i}`} className={`st-extract-chat-bubble ${msg.role}${msg.error ? ' error' : ''}`}>
                                             {msg.content}
                                             {msg.imageUrl && (
-                                                <MediaImg src={msg.imageUrl} alt="Edit result" token={currentToken} onClick={() => {
-                                                    setExtractResults(prev => prev.map((m, idx) =>
-                                                        idx === extractGalleryIndex ? { ...m, url: msg.imageUrl } : m
-                                                    ));
-                                                }} />
+                                                <MediaImg src={msg.imageUrl} alt="Edited pattern" token={currentToken} />
                                             )}
                                         </div>
                                     ))}
                                     {isExtractEditing && (
-                                        <div className="st-extract-chat-bubble ai" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <div className="st-spinner" style={{ width: 14, height: 14 }} /> Editing with {galleryModel.name}...
+                                        <div className="st-extract-chat-bubble ai typing">
+                                            <span className="st-extract-chat-dots" aria-hidden="true"><i /><i /><i /></span>
+                                            Updating with {galleryModel.name}…
                                         </div>
                                     )}
+                                    <div ref={extractChatEndRef} />
                                 </div>
+                                {galleryChats.length === 0 && (
+                                    <div className="st-extract-chat-chips">
+                                        {EDIT_SUGGESTIONS.map((hint) => (
+                                            <button
+                                                key={hint}
+                                                type="button"
+                                                className="st-extract-chat-chip"
+                                                disabled={isExtractEditing || !canAffordEdit}
+                                                onClick={() => sendExtractEdit(hint)}
+                                            >
+                                                {hint}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 <div className="st-extract-chat-input-bar">
-                                    <input
+                                    <label className="sr-only" htmlFor="extract-edit-prompt">Edit instruction</label>
+                                    <textarea
+                                        id="extract-edit-prompt"
+                                        ref={extractChatInputRef}
+                                        rows={1}
                                         value={extractChatInput}
                                         onChange={e => setExtractChatInput(e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendExtractEdit(); } }}
-                                        placeholder={`e.g. "Make flowers smaller" or "Change to blue tones"`}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault();
+                                                sendExtractEdit();
+                                            }
+                                        }}
+                                        placeholder={canAffordEdit ? 'e.g. Make flowers smaller, keep the cream ground' : `Need ${editCreditCost} credits to edit`}
                                         disabled={isExtractEditing}
                                     />
-                                    <button className="st-extract-chat-send" onClick={sendExtractEdit} disabled={isExtractEditing || !extractChatInput.trim()}>
+                                    <button
+                                        type="button"
+                                        className="st-extract-chat-send"
+                                        onClick={() => sendExtractEdit()}
+                                        disabled={isExtractEditing || !extractChatInput.trim() || !canAffordEdit}
+                                        aria-label="Apply edit"
+                                    >
                                         <I d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" s={16} />
                                     </button>
                                 </div>

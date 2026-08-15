@@ -736,26 +736,33 @@
 /* ===== EXTRACT CHAT PANEL ===== */
 .st-extract-chat {
     flex-shrink: 0;
-    max-height: 280px;
+    max-height: 42vh;
     display: flex;
     flex-direction: column;
-    margin: 0 2rem 1.5rem;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 16px;
+    margin: 0 1.5rem 1.25rem;
+    background: #111827;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
     overflow: hidden;
 }
 .st-extract-chat-header {
-    padding: 0.65rem 1rem;
+    padding: 0.7rem 1rem;
     font-size: 0.78rem;
-    font-weight: 700;
-    color: rgba(255,255,255,0.6);
+    font-weight: 650;
+    color: rgba(255,255,255,0.85);
     border-bottom: 1px solid rgba(255,255,255,0.08);
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    justify-content: space-between;
+    gap: 0.75rem;
+    letter-spacing: 0.02em;
+}
+.st-extract-chat-cost {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0;
+    text-transform: none;
 }
 .st-extract-chat-messages {
     flex: 1;
@@ -763,91 +770,153 @@
     padding: 0.75rem 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
-    min-height: 60px;
-    max-height: 150px;
+    gap: 0.55rem;
+    min-height: 88px;
+    max-height: 180px;
+}
+.st-extract-chat-empty {
+    color: rgba(255,255,255,0.45);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    text-align: center;
+    padding: 0.65rem 0.4rem;
 }
 .st-extract-chat-bubble {
-    max-width: 80%;
+    max-width: 82%;
     padding: 0.55rem 0.85rem;
     border-radius: 12px;
     font-size: 0.82rem;
     line-height: 1.45;
-    animation: st-chat-pop 0.25s ease;
-}
-@keyframes st-chat-pop {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
 }
 .st-extract-chat-bubble.user {
     align-self: flex-end;
-    background: linear-gradient(135deg, #6366f1, #818cf8);
+    background: #4f46e5;
     color: #fff;
     border-bottom-right-radius: 4px;
 }
 .st-extract-chat-bubble.ai {
     align-self: flex-start;
-    background: rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.92);
     border-bottom-left-radius: 4px;
 }
-.st-extract-chat-bubble.ai img {
-    max-width: 200px;
-    border-radius: 8px;
-    margin-top: 0.4rem;
-    display: block;
-    cursor: pointer;
-    transition: transform 0.2s;
+.st-extract-chat-bubble.ai.error {
+    background: rgba(239, 68, 68, 0.16);
+    color: #fecaca;
 }
-.st-extract-chat-bubble.ai img:hover {
-    transform: scale(1.03);
-}
-.st-extract-chat-input-bar {
+.st-extract-chat-bubble.ai.typing {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.65rem 1rem;
+}
+.st-extract-chat-dots {
+    display: inline-flex;
+    gap: 3px;
+}
+.st-extract-chat-dots i {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.7);
+    animation: st-extract-dot 1s ease-in-out infinite;
+}
+.st-extract-chat-dots i:nth-child(2) { animation-delay: 0.15s; }
+.st-extract-chat-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes st-extract-dot {
+    0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+    40% { opacity: 1; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .st-extract-chat-dots i { animation: none; }
+}
+.st-extract-chat-bubble.ai img {
+    max-width: 160px;
+    border-radius: 8px;
+    margin-top: 0.4rem;
+    display: block;
+}
+.st-extract-chat-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0 1rem 0.55rem;
+}
+.st-extract-chat-chip {
+    min-height: 32px;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: transparent;
+    color: rgba(255,255,255,0.78);
+    font-size: 0.72rem;
+    cursor: pointer;
+}
+.st-extract-chat-chip:hover:not(:disabled) {
+    border-color: rgba(255,255,255,0.35);
+    color: #fff;
+}
+.st-extract-chat-chip:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.st-extract-chat-input-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    padding: 0.65rem 1rem 0.8rem;
     border-top: 1px solid rgba(255,255,255,0.08);
 }
-.st-extract-chat-input-bar input {
+.st-extract-chat-input-bar textarea {
     flex: 1;
+    min-height: 44px;
+    max-height: 88px;
+    resize: none;
     background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.14);
     border-radius: 10px;
-    padding: 0.55rem 0.85rem;
+    padding: 0.6rem 0.85rem;
     color: #fff;
-    font-size: 0.82rem;
+    font-size: 0.88rem;
+    line-height: 1.4;
     outline: none;
-    transition: border-color 0.2s;
+    font-family: inherit;
 }
-.st-extract-chat-input-bar input:focus {
-    border-color: rgba(99, 102, 241, 0.5);
+.st-extract-chat-input-bar textarea:focus {
+    border-color: #6366f1;
 }
-.st-extract-chat-input-bar input::placeholder {
-    color: rgba(255,255,255,0.3);
+.st-extract-chat-input-bar textarea::placeholder {
+    color: rgba(255,255,255,0.35);
 }
 .st-extract-chat-send {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #6366f1, #818cf8);
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: #4f46e5;
     border: none;
     color: #fff;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
     flex-shrink: 0;
 }
-.st-extract-chat-send:hover {
-    transform: scale(1.1);
-    box-shadow: 0 4px 16px rgba(99,102,241,0.4);
+.st-extract-chat-send:hover:not(:disabled) {
+    background: #4338ca;
 }
 .st-extract-chat-send:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-    transform: none;
+}
+.st-extract-chat .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 
