@@ -140,3 +140,48 @@ def test_update_user_clamps_used_when_lowering_limit(client, admin_headers, app)
             assert int(user["credits_used"]) == 40
         finally:
             conn.close()
+
+
+def test_update_user_can_set_used_and_limit(client, admin_headers, app):
+    resp = client.put(
+        "/api/admin/users/2",
+        json={"creditsUsed": 5000, "creditsLimit": 5000},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["success"] is True
+    assert body["creditsUsed"] == 5000
+    assert body["creditsLimit"] == 5000
+
+    with app.app_context():
+        conn = db()
+        try:
+            user = conn.execute(
+                "SELECT credits_used, credits_limit FROM users WHERE id = 2"
+            ).fetchone()
+            assert int(user["credits_used"]) == 5000
+            assert int(user["credits_limit"]) == 5000
+        finally:
+            conn.close()
+
+
+@pytest.mark.parametrize(
+    ("credits_used", "credits_limit", "error"),
+    [
+        (-1, 5000, "Credits used cannot be negative"),
+        (5001, 5000, "Credits used cannot exceed the credit limit"),
+        ("invalid", 5000, "Credits used must be an integer"),
+        (12.5, 5000, "Credits used must be an integer"),
+    ],
+)
+def test_update_user_rejects_invalid_used_credits(
+    client, admin_headers, credits_used, credits_limit, error
+):
+    resp = client.put(
+        "/api/admin/users/2",
+        json={"creditsUsed": credits_used, "creditsLimit": credits_limit},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == error

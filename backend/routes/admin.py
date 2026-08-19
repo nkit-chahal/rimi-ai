@@ -1012,7 +1012,19 @@ def admin_update_user(user_id):
         credits_limit = _safe_int(data.get('creditsLimit'), existing['credits_limit'])
         password = data.get('password', '')
         previous_used = int(existing.get('credits_used') or 0)
-        clamped_used = min(previous_used, credits_limit)
+        if 'creditsUsed' in data:
+            try:
+                raw_credits_used = data['creditsUsed']
+                if isinstance(raw_credits_used, bool):
+                    raise ValueError
+                credits_used = int(raw_credits_used)
+                if isinstance(raw_credits_used, float) and raw_credits_used != credits_used:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return jsonify({'success': False, 'error': 'Credits used must be an integer'}), 400
+        else:
+            # Keep older clients compatible while preserving the database invariant.
+            credits_used = min(previous_used, credits_limit)
 
         if not email or not name:
             return jsonify({'success': False, 'error': 'Email and name are required'}), 400
@@ -1022,6 +1034,10 @@ def admin_update_user(user_id):
             return jsonify({'success': False, 'error': 'Invalid status'}), 400
         if credits_limit < 0:
             return jsonify({'success': False, 'error': 'Credit limit cannot be negative'}), 400
+        if credits_used < 0:
+            return jsonify({'success': False, 'error': 'Credits used cannot be negative'}), 400
+        if credits_used > credits_limit:
+            return jsonify({'success': False, 'error': 'Credits used cannot exceed the credit limit'}), 400
         if existing['role'] == 'admin' and (role != 'admin' or status != 'active') and _active_admin_count(conn, user_id) == 0:
             return jsonify({'success': False, 'error': 'Cannot remove or suspend the last active admin'}), 403
         if user_id == g.current_user['id'] and status != 'active':
@@ -1038,7 +1054,7 @@ def admin_update_user(user_id):
             "credits_used = ?",
             "status = ?",
         ]
-        values = [email, name, initials, role, plan, credits_limit, clamped_used, status]
+        values = [email, name, initials, role, plan, credits_limit, credits_used, status]
         changed = {
             "email": {"from": existing["email"], "to": email},
             "name": {"from": existing["name"], "to": name},
@@ -1047,8 +1063,8 @@ def admin_update_user(user_id):
             "creditsLimit": {"from": existing["credits_limit"], "to": credits_limit},
             "status": {"from": existing.get("status", "active"), "to": status},
         }
-        if clamped_used != previous_used:
-            changed["creditsUsed"] = {"from": previous_used, "to": clamped_used}
+        if credits_used != previous_used:
+            changed["creditsUsed"] = {"from": previous_used, "to": credits_used}
         changed = {key: value for key, value in changed.items() if value["from"] != value["to"]}
         if password:
             if len(password) < 8:
@@ -1065,7 +1081,7 @@ def admin_update_user(user_id):
             'success': True,
             'message': f'User {name} updated successfully',
             'creditsLimit': credits_limit,
-            'creditsUsed': clamped_used,
+            'creditsUsed': credits_used,
         })
     except Exception as e:
         if _is_unique_violation(e):

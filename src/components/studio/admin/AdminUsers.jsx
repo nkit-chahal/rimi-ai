@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import I from '../shared/StudioIcons';
 import { API } from '../shared/helpers';
 import AdminPagination, { useClientPagination } from './AdminPagination';
@@ -33,6 +33,7 @@ function emptyEditForm(user) {
         role: user?.role || 'user',
         plan: user?.plan || 'Free Trial',
         creditsLimit: String(user?.creditsLimit ?? 0),
+        creditsUsed: String(user?.creditsUsed ?? 0),
         status: user?.status || 'active',
     };
 }
@@ -116,9 +117,23 @@ const AdminUsers = ({
 
     const handleUpdateUser = () => {
         if (!editingUser) return;
-        const { email, password, name, role, plan, creditsLimit, status } = editUserForm;
+        const { email, password, name, role, plan, creditsLimit, creditsUsed, status } = editUserForm;
         if (!email || !name) {
             showFeedback('✗ Email and name are required');
+            return;
+        }
+        const parsedCreditsLimit = Number(creditsLimit);
+        const parsedCreditsUsed = Number(creditsUsed);
+        if (creditsLimit.trim() === '' || !Number.isInteger(parsedCreditsLimit) || parsedCreditsLimit < 0) {
+            showFeedback('✗ Credit limit must be a non-negative whole number');
+            return;
+        }
+        if (creditsUsed.trim() === '' || !Number.isInteger(parsedCreditsUsed) || parsedCreditsUsed < 0) {
+            showFeedback('✗ Credits used must be a non-negative whole number');
+            return;
+        }
+        if (parsedCreditsUsed > parsedCreditsLimit) {
+            showFeedback('✗ Credits used cannot exceed the credit limit');
             return;
         }
         const body = {
@@ -127,7 +142,8 @@ const AdminUsers = ({
             role,
             plan,
             status,
-            creditsLimit: parseInt(creditsLimit, 10),
+            creditsLimit: parsedCreditsLimit,
+            creditsUsed: parsedCreditsUsed,
         };
         if (password) body.password = password;
 
@@ -229,7 +245,7 @@ const AdminUsers = ({
             .finally(() => setBusyUserId(null));
     };
 
-    const renderUserFormFields = (form, setForm, { passwordRequired }) => (
+    const renderUserFormFields = (form, setForm, { passwordRequired, includeUsage = false }) => (
         <>
             {[
                 { label: 'Full Name', key: 'name', type: 'text', placeholder: 'John Doe' },
@@ -240,13 +256,18 @@ const AdminUsers = ({
                     type: 'password',
                     placeholder: '••••••••',
                 },
-                { label: 'Credit Limit', key: 'creditsLimit', type: 'number', placeholder: '200' },
+                { label: 'Credit Limit', key: 'creditsLimit', type: 'number', placeholder: '5000', min: 0 },
+                ...(includeUsage
+                    ? [{ label: 'Credits Used', key: 'creditsUsed', type: 'number', placeholder: '0', min: 0 }]
+                    : []),
             ].map((f) => (
                 <div key={f.key} className="admin-field" style={{ marginBottom: '12px' }}>
                     <label>{f.label}</label>
                     <input
                         className="admin-input"
                         type={f.type}
+                        min={f.min}
+                        step={f.type === 'number' ? 1 : undefined}
                         placeholder={f.placeholder}
                         value={form[f.key]}
                         onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
@@ -467,7 +488,7 @@ const AdminUsers = ({
                 <div className="admin-modal-backdrop" onClick={() => setEditingUser(null)}>
                     <div className="admin-card glassmorphism-card admin-modal-card" onClick={(e) => e.stopPropagation()}>
                         <h3 style={{ marginBottom: '16px' }}>Edit User — {editingUser.name}</h3>
-                        {renderUserFormFields(editUserForm, setEditUserForm, { passwordRequired: false })}
+                        {renderUserFormFields(editUserForm, setEditUserForm, { passwordRequired: false, includeUsage: true })}
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                             <button type="button" className="admin-action-btn" onClick={() => setEditingUser(null)}>Cancel</button>
                             <button type="button" className="admin-btn-primary" style={{ padding: '8px 20px', fontSize: '13px' }} disabled={busyUserId === editingUser.id} onClick={handleUpdateUser}>
