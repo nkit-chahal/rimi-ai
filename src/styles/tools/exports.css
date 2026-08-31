@@ -45,6 +45,49 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.st-export-archive-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: .8rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 10px;
+  background: var(--primary-light);
+}
+
+.st-export-archive-notice > div {
+  display: grid;
+  gap: .2rem;
+}
+
+.st-export-archive-notice strong {
+  color: var(--text);
+  font-size: .84rem;
+}
+
+.st-export-archive-notice span {
+  color: var(--muted);
+  font-size: .74rem;
+}
+
+.st-export-archive-notice button {
+  min-width: 64px;
+  min-height: 40px;
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  color: var(--primary);
+  background: var(--card);
+  font: 750 .78rem var(--font);
+  cursor: pointer;
+}
+
+.st-export-archive-notice button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
 .st-var-item.selected {
   outline: 2px solid var(--primary);
   outline-offset: -2px;

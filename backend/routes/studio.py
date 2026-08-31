@@ -53,7 +53,10 @@ def get_studio_state(project_id=1, user_id=None):
         ).fetchall())
     project_row = conn.execute("SELECT * FROM projects WHERE id = ? AND user_id = ?", (project_id, user["id"])).fetchone()
     project = dict(project_row) if project_row else projects[0]
-    variations = rows_to_dicts(conn.execute("SELECT * FROM pattern_variations WHERE project_id = ? ORDER BY id", (project["id"],)).fetchall())
+    variations = rows_to_dicts(conn.execute(
+        "SELECT * FROM pattern_variations WHERE project_id = ? AND deleted_at IS NULL ORDER BY id",
+        (project["id"],),
+    ).fetchall())
     metrics_row = conn.execute("SELECT * FROM project_metrics WHERE project_id = ?", (project["id"],)).fetchone()
     if not metrics_row:
         conn.execute("INSERT INTO project_metrics (project_id) VALUES (?)", (project["id"],))

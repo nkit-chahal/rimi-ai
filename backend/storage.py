@@ -4,6 +4,7 @@ Falls back to local filesystem when S3 is not configured.
 """
 import os
 import io
+from urllib.parse import urlencode
 
 from config import (
     S3_ENDPOINT, S3_BUCKET, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY,
@@ -55,7 +56,8 @@ def save_file(directory_type, filename, data):
         content_type = content_types.get(ext, 'application/octet-stream')
         s3.put_object(
             Bucket=S3_BUCKET, Key=key, Body=file_bytes,
-            ContentType=content_type
+            ContentType=content_type,
+            Tagging=urlencode({'lifecycle': 'active'}),
         )
         return f"/{key}"
     else:
@@ -182,16 +184,27 @@ def sync_to_s3(filepath):
         print(f"[storage] S3 sync failed for {filepath}: {e}")
 
 
-def delete_from_s3(directory_type, filename):
-    """Remove a file from S3 storage (no-op when S3 is disabled)."""
+def update_object_tags(directory_type, filename, tags, remove_keys=()):
+    """Merge lifecycle metadata into an S3 object without deleting its bytes."""
     if not USE_S3:
-        return False
+        return True
     try:
         key = f"{directory_type}/{filename}"
         s3 = _get_s3()
-        s3.delete_object(Bucket=S3_BUCKET, Key=key)
+        response = s3.get_object_tagging(Bucket=S3_BUCKET, Key=key)
+        merged = {
+            item['Key']: item.get('Value', '')
+            for item in response.get('TagSet', [])
+            if item.get('Key') not in set(remove_keys)
+        }
+        merged.update({str(key): str(value) for key, value in tags.items() if value is not None})
+        s3.put_object_tagging(
+            Bucket=S3_BUCKET,
+            Key=key,
+            Tagging={'TagSet': [{'Key': key, 'Value': value} for key, value in sorted(merged.items())]},
+        )
         return True
     except Exception as e:
-        print(f"[storage] S3 delete failed for {directory_type}/{filename}: {e}")
+        print(f"[storage] S3 tag update failed for {directory_type}/{filename}: {e}")
         return False
 

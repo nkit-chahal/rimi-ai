@@ -99,6 +99,16 @@ def create_share_link():
 
     conn = db()
     try:
+        export = conn.execute(
+            """
+            SELECT 1 FROM exports
+            WHERE filename = ? AND project_id = ? AND deleted_at IS NULL
+              AND (user_id = ? OR user_id IS NULL)
+            """,
+            (payload.export_filename, payload.project_id, g.current_user['id']),
+        ).fetchone()
+        if not export:
+            return jsonify({'success': False, 'error': 'Export not found'}), 404
         conn.execute(
             """
             INSERT INTO share_links (token, user_id, project_id, export_filename, expires_at, created_at)
@@ -132,7 +142,8 @@ def share_og_landing(token):
             FROM share_links s
             LEFT JOIN projects p ON p.id = s.project_id
             LEFT JOIN users u ON u.id = s.user_id
-            WHERE s.token = ?
+            JOIN exports e ON e.filename = s.export_filename
+            WHERE s.token = ? AND s.revoked_at IS NULL AND e.deleted_at IS NULL
             """,
             (token,),
         ).fetchone()
@@ -233,7 +244,8 @@ def resolve_share_link(token):
             FROM share_links s
             LEFT JOIN projects p ON p.id = s.project_id
             LEFT JOIN users u ON u.id = s.user_id
-            WHERE s.token = ?
+            JOIN exports e ON e.filename = s.export_filename
+            WHERE s.token = ? AND s.revoked_at IS NULL AND e.deleted_at IS NULL
             """,
             (token,),
         ).fetchone()
@@ -278,16 +290,19 @@ def _serve_share_asset(token, attachment=False):
     try:
         row = conn.execute(
             """
-            SELECT s.export_filename, u.plan AS owner_plan
+            SELECT s.export_filename, s.expires_at, u.plan AS owner_plan
             FROM share_links s
             LEFT JOIN users u ON u.id = s.user_id
-            WHERE s.token = ?
+            JOIN exports e ON e.filename = s.export_filename
+            WHERE s.token = ? AND s.revoked_at IS NULL AND e.deleted_at IS NULL
             """,
             (token,),
         ).fetchone()
         if not row:
             return jsonify({"success": False, "error": "Share link not found"}), 404
         link = dict(row)
+        if link['expires_at'] < datetime.now(timezone.utc).replace(tzinfo=None).isoformat():
+            return jsonify({'success': False, 'error': 'Share link expired'}), 410
         filename = link["export_filename"]
         local_path = os.path.join(RESULTS_DIR, filename)
         file_bytes = None

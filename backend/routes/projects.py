@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from config import UPLOAD_DIR, RESULTS_DIR
 from db import db
 from middleware import login_required
+import storage
 
 bp = Blueprint('projects', __name__)
 
@@ -98,14 +99,25 @@ def delete_project(project_id):
                 for url in results: files_to_delete.add(url)
             except: pass
 
-    # 2. Delete physical files from disk
+    # 2. Archive S3 objects and clear only the disposable local cache.
+    archived_at = datetime.now(timezone.utc).isoformat()
     for url in files_to_delete:
         if not url: continue
         if url.startswith('/uploads/'):
-            path = os.path.join(UPLOAD_DIR, os.path.basename(url))
+            filename = os.path.basename(url)
+            storage.update_object_tags('uploads', filename, {
+                'lifecycle': 'archived', 'reason': 'project-deleted',
+                'project_id': project_id, 'deleted_at': archived_at,
+            })
+            path = os.path.join(UPLOAD_DIR, filename)
             if os.path.exists(path): os.remove(path)
         elif url.startswith('/results/'):
-            path = os.path.join(RESULTS_DIR, os.path.basename(url))
+            filename = os.path.basename(url)
+            storage.update_object_tags('results', filename, {
+                'lifecycle': 'archived', 'reason': 'project-deleted',
+                'project_id': project_id, 'deleted_at': archived_at,
+            })
+            path = os.path.join(RESULTS_DIR, filename)
             if os.path.exists(path): os.remove(path)
 
     # 3. Database Cascade Delete
@@ -138,7 +150,7 @@ def list_versions(project_id):
             """
             SELECT id, project_id, name, image_url, is_selected, created_at, export_filename
             FROM pattern_variations
-            WHERE project_id = ?
+            WHERE project_id = ? AND deleted_at IS NULL
             ORDER BY created_at DESC
             """,
             (project_id,),
@@ -172,7 +184,7 @@ def restore_version(project_id, version_id):
         if not project:
             return jsonify({'success': False, 'error': 'Project not found'}), 404
         version = conn.execute(
-            "SELECT * FROM pattern_variations WHERE id = ? AND project_id = ?",
+            "SELECT * FROM pattern_variations WHERE id = ? AND project_id = ? AND deleted_at IS NULL",
             (version_id, project_id),
         ).fetchone()
         if not version:

@@ -357,10 +357,10 @@ def admin_logs():
         exports = []
         exports_total = 0
         if include_exports:
-            exports_total_row = conn.execute("SELECT COUNT(*) AS c FROM exports").fetchone()
+            exports_total_row = conn.execute("SELECT COUNT(*) AS c FROM exports WHERE deleted_at IS NULL").fetchone()
             exports_total = int((exports_total_row["c"] if isinstance(exports_total_row, dict) else exports_total_row[0]) or 0)
             exports_rows = conn.execute(
-                "SELECT * FROM exports ORDER BY id DESC LIMIT ? OFFSET ?",
+                "SELECT * FROM exports WHERE deleted_at IS NULL ORDER BY id DESC LIMIT ? OFFSET ?",
                 (limit, offset),
             ).fetchall()
             exports = rows_to_dicts(exports_rows)

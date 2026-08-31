@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, apiFetch, forceDownload, jsonAuthHeaders, mediaUrl, cacheFileAccessToken } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
-import { createPortal } from 'react-dom';
 import '../../../styles/tools/exports.css';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
 
 export default function ExportsTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, onExportComplete, setTool, setQwenLaunch, setUploads } = props;
+    const { activeProject, user, setError, setNotice, updateCreditsFromResponse, creditPricing, currentToken, tool, onExportComplete, setTool, setQwenLaunch, setUploads } = props;
 
     const [exportsList, setExportsList] = useState([]);
     const [isLoadingExports, setIsLoadingExports] = useState(false);
@@ -19,6 +18,9 @@ export default function ExportsTool(props) {
     const [versions, setVersions] = useState([]);
     const [shareLoading, setShareLoading] = useState(null);
     const [restoreLoading, setRestoreLoading] = useState(null);
+    const [archivedBatch, setArchivedBatch] = useState(null);
+    const [isRestoringArchive, setIsRestoringArchive] = useState(false);
+    const activeProjectId = activeProject?.id;
     const isFreePlan = (user?.plan || 'Free Trial').toLowerCase().includes('free');
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
@@ -30,60 +32,61 @@ export default function ExportsTool(props) {
         return exportsList.filter(f => f.type === exportsFilter);
     }, [exportsList, exportsFilter]);
 
-    const loadExports = useCallback(() => {
+    const loadExports = useCallback(async () => {
         setIsLoadingExports(true);
-        const projectId = activeProject?.id || 1;
-        const authHeaders = currentToken ? { Authorization: `Bearer ${currentToken}` } : {};
-        Promise.all([
-            fetch(`${API}/api/exports?project_id=${projectId}`, { headers: authHeaders }).then(res => res.json()),
-            fetch(`${API}/api/pipeline-runs?project_id=${projectId}`, { headers: authHeaders }).then(res => res.json())
-        ])
-            .then(([exportsData, runsData]) => {
-                if (exportsData.success) {
-                    exportsData.exports.forEach((file) => {
-                        if (file.fileAccessToken) cacheFileAccessToken(file.imageUrl, file.fileAccessToken);
-                        if (file.previewAccessToken) cacheFileAccessToken(file.previewUrl, file.previewAccessToken);
-                        if (file.inputAccessToken && file.inputUrl) {
-                            cacheFileAccessToken(file.inputUrl, file.inputAccessToken);
-                        }
-                    });
-                    setExportsList(exportsData.exports);
+        const projectId = activeProjectId || 1;
+        try {
+            const [exportsData, runsData] = await Promise.all([
+                apiFetch(`/api/exports?project_id=${projectId}`, {}, currentToken),
+                apiFetch(`/api/pipeline-runs?project_id=${projectId}`, {}, currentToken),
+            ]);
+            if (exportsData.success) {
+                exportsData.exports.forEach((file) => {
+                    if (file.fileAccessToken) cacheFileAccessToken(file.imageUrl, file.fileAccessToken);
+                    if (file.previewAccessToken) cacheFileAccessToken(file.previewUrl, file.previewAccessToken);
+                    if (file.inputAccessToken && file.inputUrl) {
+                        cacheFileAccessToken(file.inputUrl, file.inputAccessToken);
+                    }
+                });
+                setExportsList(exportsData.exports);
+                setSelectedExports(new Set());
+                setExportsPage(1);
+            }
+            if (runsData.success) setPipelineRuns(runsData.runs);
+        } catch (err) {
+            console.error('Error loading exports or runs:', err);
+            try {
+                const data = await apiFetch(`/api/exports?project_id=${projectId}`, {}, currentToken);
+                if (data.success) {
+                    setExportsList(data.exports);
                     setSelectedExports(new Set());
                     setExportsPage(1);
                 }
-                if (runsData.success) {
-                    setPipelineRuns(runsData.runs);
-                }
-            })
-            .catch(err => {
-                console.error("Error loading exports or runs:", err);
-                fetch(`${API}/api/exports?project_id=${activeProject?.id || 1}`, { headers: authHeaders })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.success) {
-                            setExportsList(data.exports);
-                            setSelectedExports(new Set());
-                            setExportsPage(1);
-                        }
-                    });
-            })
-            .finally(() => setIsLoadingExports(false));
-    }, [activeProject?.id, currentToken]);
+            } catch (fallbackError) {
+                setError(fallbackError.message || 'Could not load export history');
+            }
+        } finally {
+            setIsLoadingExports(false);
+        }
+    }, [activeProjectId, currentToken, setError]);
 
-    const loadVersions = useCallback(() => {
-        if (!activeProject?.id || !currentToken) return;
-        apiFetch(`/api/projects/${activeProject.id}/versions`, {}, currentToken)
-            .then((data) => {
-                if (data.success) setVersions(data.versions || []);
-            })
-            .catch(() => {});
-    }, [activeProject?.id, currentToken]);
+    const loadVersions = useCallback(async () => {
+        if (!activeProjectId || !currentToken) return;
+        try {
+            const data = await apiFetch(`/api/projects/${activeProjectId}/versions`, {}, currentToken);
+            if (data.success) setVersions(data.versions || []);
+        } catch (err) {
+            setError(err.message || 'Could not load version history');
+        }
+    }, [activeProjectId, currentToken, setError]);
 
     useEffect(() => {
-        if (tool === 'exports') {
+        if (tool !== 'exports') return undefined;
+        const loadId = window.setTimeout(() => {
             loadExports();
             loadVersions();
-        }
+        }, 0);
+        return () => window.clearTimeout(loadId);
     }, [tool, loadExports, loadVersions]);
 
     const shareExport = async (filename) => {
@@ -144,22 +147,43 @@ export default function ExportsTool(props) {
 
     const deleteExports = async (filenames) => {
         if (!filenames.length) return;
-        if (!window.confirm(`Delete ${filenames.length} file${filenames.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+        if (!window.confirm(`Archive ${filenames.length} file${filenames.length > 1 ? 's' : ''} from this project? The stored files will be retained and this action can be undone.`)) return;
         setIsDeleting(true);
         try {
-            await fetch(`${API}/api/exports`, {
+            const data = await apiFetch('/api/exports', {
                 method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
-                },
                 body: JSON.stringify({ filenames }),
-            });
-            loadExports();
-        } catch {
-            setError('Failed to delete files.');
+            }, currentToken);
+            const archived = data.archived || data.deleted || [];
+            if (!archived.length) throw new Error(data.errors?.[0] || 'No files were archived');
+            setArchivedBatch({ filenames: archived });
+            setError(data.errors?.length ? `Some files could not be archived: ${data.errors.join(', ')}` : '');
+            setNotice?.(`${archived.length} export${archived.length > 1 ? 's' : ''} archived. S3 files were retained.`);
+            await Promise.all([loadExports(), loadVersions()]);
+        } catch (err) {
+            setError(err.message || 'Failed to archive files.');
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    const undoArchive = async () => {
+        if (!archivedBatch?.filenames?.length) return;
+        setIsRestoringArchive(true);
+        try {
+            const data = await apiFetch('/api/exports/restore', {
+                method: 'POST',
+                body: JSON.stringify({ filenames: archivedBatch.filenames }),
+            }, currentToken);
+            if (!data.restored?.length) throw new Error(data.errors?.[0] || 'Nothing was restored');
+            setArchivedBatch(null);
+            setError(data.errors?.length ? `Some files could not be restored: ${data.errors.join(', ')}` : '');
+            setNotice?.(`${data.restored.length} export${data.restored.length > 1 ? 's' : ''} restored.`);
+            await Promise.all([loadExports(), loadVersions()]);
+        } catch (err) {
+            setError(err.message || 'Could not restore archived files');
+        } finally {
+            setIsRestoringArchive(false);
         }
     };
 
@@ -211,17 +235,6 @@ export default function ExportsTool(props) {
         { type: 'vectorize', label: 'Vectorize', desc: 'Convert to scalable vector artwork', icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z', credits: creditPricing?.vectorize || 12 },
         { type: 'export', label: 'Export', desc: 'Choose formats & download', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3', credits: 0 },
     ];
-
-    const PIPELINE_TEMPLATES = [
-        { id: 'extract', name: 'Pattern Extraction', desc: 'Extract patterns and clean artwork.', icon: 'M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z', steps: ['upload', 'extract', 'export'] },
-        { id: 'seamless', name: 'Make Seamless', desc: 'Remove seams and create tileable patterns.', icon: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z', steps: ['upload', 'seamless', 'export'] },
-        { id: 'repeat', name: 'Repeat Set', desc: 'Generate half drop, brick, and more.', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z', steps: ['upload', 'repeat', 'export'] },
-        { id: 'upscale', name: 'Super Resolution', desc: 'Upscale for print with AI.', icon: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7', steps: ['upload', 'upscale', 'export'] },
-        { id: 'vectorize', name: 'Vectorize', desc: 'Convert to scalable vector artwork.', icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z', steps: ['upload', 'vectorize', 'export'] },
-        { id: 'full', name: 'Full Print Pipeline', desc: 'End-to-end workflow for print ready files.', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', steps: ['upload', 'extract', 'seamless', 'repeat', 'upscale', 'export'] },
-    ];
-
-
 
     if (tool === 'exports') {
         const imageCount = exportsList.filter(f => f.type === 'image').length;
@@ -389,6 +402,17 @@ export default function ExportsTool(props) {
 
         return (
             <div className="st-inspire-canvas full-width">
+                {archivedBatch && (
+                    <div className="st-export-archive-notice" role="status">
+                        <div>
+                            <strong>{archivedBatch.filenames.length} export{archivedBatch.filenames.length > 1 ? 's' : ''} archived</strong>
+                            <span>The S3 files were retained and tagged as archived.</span>
+                        </div>
+                        <button type="button" onClick={undoArchive} disabled={isRestoringArchive}>
+                            {isRestoringArchive ? 'Restoring…' : 'Undo'}
+                        </button>
+                    </div>
+                )}
                 {versions.length > 0 && (
                     <div className="st-versions-panel">
                         <div className="st-stepper-title">Version history</div>
@@ -439,7 +463,7 @@ export default function ExportsTool(props) {
                                         disabled={isDeleting}
                                     >
                                         <I d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" s={14} />
-                                        {isDeleting ? 'Deleting...' : `Delete ${selectedExports.size}`}
+                                        {isDeleting ? 'Archiving…' : `Archive ${selectedExports.size}`}
                                     </button>
                                 )}
                             </div>
@@ -553,7 +577,7 @@ export default function ExportsTool(props) {
                                                         )}
                                                         <button
                                                             className="st-export-trash-btn"
-                                                            title="Delete"
+                                                            title="Archive export"
                                                             onClick={() => deleteExports([file.id])}
                                                             disabled={isDeleting}
                                                         >

@@ -7,5 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.js'],
     globals: true,
+    // Playwright specs have their own runner and must not be collected by Vitest.
+    exclude: ['tests/e2e/**', '**/node_modules/**', '**/dist/**'],
   },
 });

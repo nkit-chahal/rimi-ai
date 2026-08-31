@@ -428,7 +428,7 @@ export async function waitForJob(jobId, token, { onProgress, intervalMs = 600, s
 }
 
 /** Submit an async API job and wait for the result with live progress. */
-export async function runAsyncJob(endpoint, body, token, { onProgress, signal } = {}) {
+export async function runAsyncJob(endpoint, body, token, { onProgress, onJobCreated, signal } = {}) {
     const data = await apiFetch(endpoint, {
         method: 'POST',
         body: JSON.stringify({ ...body, async: true }),
@@ -440,6 +440,7 @@ export async function runAsyncJob(endpoint, body, token, { onProgress, signal } 
     if (!data.jobId) {
         throw new Error('Async job did not return a job id');
     }
+    onJobCreated?.(data.jobId);
     return waitForJob(data.jobId, token, { onProgress, signal });
 }
 

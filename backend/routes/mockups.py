@@ -20,6 +20,7 @@ from auth import (
 )
 from security_utils import safe_fetch_url
 from rate_limits import generation_rate_limit
+from plan_tiers import current_user_plan, require_pro_or_error
 import storage
 
 bp = Blueprint('mockups', __name__)
@@ -246,6 +247,9 @@ def _generate_single_mockup(
 @login_required
 @generation_rate_limit
 def generate_mockup():
+    ok_pro, pro_body, pro_code = require_pro_or_error(current_user_plan(), 'Mappings')
+    if not ok_pro:
+        return pro_body, pro_code
     data = request.get_json()
     pattern_filename = data.get("patternFilename", "")
     pattern_filename = os.path.basename(pattern_filename) if pattern_filename else ""
@@ -301,6 +305,9 @@ def generate_mockup():
 @login_required
 @generation_rate_limit
 def generate_mockups_batch():
+    ok_pro, pro_body, pro_code = require_pro_or_error(current_user_plan(), 'Mappings')
+    if not ok_pro:
+        return pro_body, pro_code
     data = request.get_json()
     pattern_filename = data.get("patternFilename", "")
     pattern_filename = os.path.basename(pattern_filename) if pattern_filename else ""

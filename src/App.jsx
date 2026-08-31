@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from
 import Studio from './pages/Studio';
 import { normalizeToken } from './components/studio/shared/helpers';
 import { AuthProvider } from './contexts/AuthContext';
+import { BgTaskProvider } from './contexts/BgTaskContext';
 
 const Login = lazy(() => import('./pages/Login'));
 const SharePage = lazy(() => import('./pages/SharePage'));
@@ -49,7 +50,7 @@ function readInitialSession() {
   try {
     token = normalizeToken(localStorage.getItem('rim_token'));
   } catch {
-    token = null;
+    // Keep the null fallback when browser storage is unavailable.
   }
   if (user && !token) {
     localStorage.removeItem('rim_user');
@@ -103,7 +104,8 @@ function AppRoutes() {
 
   return (
     <AuthProvider user={currentUser} token={currentToken} onLogin={handleLogin} onLogout={handleLogout}>
-      <Routes>
+      <BgTaskProvider key={currentUser?.id || 'anonymous'} currentUserId={currentUser?.id} token={currentToken}>
+        <Routes>
         <Route
           path="/studio/*"
           element={
@@ -127,7 +129,8 @@ function AppRoutes() {
         />
         <Route path="/" element={currentUser ? <Navigate to="/studio" replace /> : <LoginRedirect />} />
         <Route path="*" element={currentUser ? <Navigate to="/studio" replace /> : <LoginRedirect />} />
-      </Routes>
+        </Routes>
+      </BgTaskProvider>
     </AuthProvider>
   );
 }

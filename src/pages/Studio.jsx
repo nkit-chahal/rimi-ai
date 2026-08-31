@@ -6,6 +6,7 @@ import { resolveToolComponent } from '../router/toolRegistry';
 import OnboardingBanner from '../components/OnboardingBanner';
 import { CreditsProvider } from '../contexts/CreditsContext';
 import { ProjectProvider } from '../contexts/ProjectContext';
+import { useBgTasks } from '../contexts/BgTaskContext';
 import { t } from '../i18n/en-IN';
 import { trackEvent } from '../observability';
 import '../styles/studio-shell.css';
@@ -15,7 +16,6 @@ import { I } from '../components/studio/shared/StudioIcons';
 import { API, apiFetch, consumeStudioPrefetch, forceDownload, cacheFileAccessToken, mediaUrl } from '../components/studio/shared/helpers';
 import ImageDropzone from '../components/studio/shared/ImageDropzone';
 import { isImageFile } from '../components/studio/shared/imageUpload';
-import { getModelTiming, resolveModelId, timedProgressPct } from '../components/studio/shared/modelTimings';
 import BgTaskManager from '../components/studio/BgTaskManager';
 import { useResultUrls } from '../stores/resultUrls';
 
@@ -170,20 +170,8 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const lastSyncedControlsRef = useRef(null);
     const workspaceLoadIdRef = useRef(0);
 
-    const [bgTasks, setBgTasks] = useState([]);
+    const { bgTasks, addBgTask, dismissTask, clearFinished, retryTask, canRetryTask } = useBgTasks();
     const [showBgTasksDropdown, setShowBgTasksDropdown] = useState(false);
-
-    // Prune completed/failed bg tasks older than 5 minutes (Phase 4a)
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setBgTasks(prev => {
-                const now = Date.now();
-                const pruned = prev.filter(t => t.status === 'running' || (t._ts && now - t._ts < 300000));
-                return pruned.length !== prev.length ? pruned : prev;
-            });
-        }, 60000);
-        return () => clearInterval(interval);
-    }, []);
 
     const [isSidebarHidden, setIsSidebarHidden] = useState(false);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
@@ -216,86 +204,22 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const qwenLaunch = resultUrls.qwenLaunch;
     const clearQwenLaunch = useCallback(() => resultUrls.clearQwenLaunch(), [resultUrls]);
     const setQwenLaunch = useCallback((v) => resultUrls.setQwenLaunch(v), [resultUrls]);
+    const openBgTask = useCallback((task) => {
+        if (task.type === 'imagelayers' && task.sessionId) {
+            setQwenLaunch({ sessionId: task.sessionId });
+            setTool('imagelayers');
+            return;
+        }
+        if (task.type === 'mappings') {
+            setTool('exports');
+            return;
+        }
+        const primaryUrl = task.resultUrl || task.resultUrls?.[0];
+        if (primaryUrl) resultUrls.set(task.type, primaryUrl);
+        setTool(task.type);
+    }, [resultUrls, setQwenLaunch, setTool]);
     const [isRepeat, setIsRepeat] = useState(false);
     const [rightPanelEl, setRightPanelEl] = useState(null);
-
-    const addBgTask = (type, label, filename, triggerFn, options = {}) => {
-        const taskId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const modelId = resolveModelId(options.modelId, options.toolType || type);
-        const timing = getModelTiming(modelId);
-        const expectedMs = Math.max(
-            800,
-            (options.expectedMs ?? timing.expectedMs) * Math.max(1, options.multiplier || 1),
-        );
-        const newTask = {
-            id: taskId,
-            type,
-            label,
-            status: 'running',
-            progress: 1,
-            stage: timing.label || 'Processing…',
-            modelId,
-            expectedMs,
-            filename: filename || 'design_input.png',
-            resultUrl: null,
-            resultUrls: null,
-            error: null,
-            createdAt: new Date().toLocaleTimeString(),
-            _startedAt: Date.now(),
-        };
-
-        setBgTasks(prev => [newTask, ...prev].slice(0, 20));
-
-        let serverProgress = 0;
-        const reportProgress = (progressPct, stage) => {
-            if (typeof progressPct === 'number') {
-                serverProgress = Math.min(99, progressPct);
-            }
-            setBgTasks(prev => prev.map(t => t.id === taskId ? {
-                ...t,
-                progress: Math.min(99, Math.max(t.progress, serverProgress)),
-                stage: stage ?? t.stage,
-            } : t));
-        };
-
-        const tickId = window.setInterval(() => {
-            setBgTasks(prev => prev.map(t => {
-                if (t.id !== taskId || t.status !== 'running') return t;
-                const elapsed = Date.now() - (t._startedAt || Date.now());
-                const timed = timedProgressPct(elapsed, t.expectedMs || expectedMs);
-                return {
-                    ...t,
-                    progress: Math.min(99, Math.max(timed, serverProgress, t.progress || 0)),
-                };
-            }));
-        }, 120);
-
-        triggerFn(reportProgress)
-            .then((result) => {
-                window.clearInterval(tickId);
-                trackEvent('generation_complete', { tool: type, label, filename });
-                setBgTasks(prev => prev.map(t => t.id === taskId ? {
-                    ...t,
-                    status: 'completed',
-                    progress: 100,
-                    resultUrl: result.url,
-                    resultUrls: result.urls || null,
-                    sessionId: result.sessionId || null,
-                    fileAccessToken: result.fileAccessToken || null,
-                    _ts: Date.now(),
-                } : t).slice(0, 20));
-            })
-            .catch((err) => {
-                window.clearInterval(tickId);
-                setBgTasks(prev => prev.map(t => t.id === taskId ? {
-                    ...t,
-                    status: 'failed',
-                    progress: 0,
-                    error: err.message || 'Generation failed',
-                    _ts: Date.now(),
-                } : t).slice(0, 20));
-            });
-    };
 
     const stateUserMatchesCurrent = currentUser?.id && state.user?.id === currentUser.id;
     const user = currentUser
@@ -1321,9 +1245,11 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             bgTasks={bgTasks}
                             show={showBgTasksDropdown}
                             onToggle={setShowBgTasksDropdown}
-                            setTool={setTool}
-                            setResultUrl={resultUrls.set}
-                            setQwenLaunch={setQwenLaunch}
+                            onOpenTask={openBgTask}
+                            onDismissTask={dismissTask}
+                            onClearFinished={clearFinished}
+                            onRetryTask={retryTask}
+                            canRetryTask={canRetryTask}
                             currentToken={currentToken}
                         />
 

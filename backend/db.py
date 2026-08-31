@@ -392,7 +392,8 @@ def _pg_schema_sql():
             name TEXT NOT NULL,
             image_url TEXT NOT NULL,
             is_selected INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            deleted_at TEXT
         );
         CREATE TABLE IF NOT EXISTS project_metrics (
             project_id INTEGER PRIMARY KEY,
@@ -471,7 +472,9 @@ def _pg_schema_sql():
             settings_json TEXT DEFAULT '{}',
             pipeline_run_id INTEGER,
             pipeline_steps_json TEXT,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            deleted_at TEXT,
+            deleted_by INTEGER
         );
         CREATE TABLE IF NOT EXISTS brand_palettes (
             id SERIAL PRIMARY KEY,
@@ -588,7 +591,8 @@ def _pg_schema_sql():
             project_id INTEGER NOT NULL,
             export_filename TEXT NOT NULL,
             expires_at TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            revoked_at TEXT
         );
         CREATE TABLE IF NOT EXISTS api_keys (
             id SERIAL PRIMARY KEY,
@@ -711,6 +715,10 @@ def _pg_run_migrations(conn):
     _pg_ensure_column(conn, "background_jobs", "progress_pct", "INTEGER NOT NULL DEFAULT 0")
     _pg_ensure_column(conn, "background_jobs", "stage", "TEXT NOT NULL DEFAULT ''")
     _pg_ensure_column(conn, "pattern_variations", "export_filename", "TEXT")
+    _pg_ensure_column(conn, "pattern_variations", "deleted_at", "TEXT")
+    _pg_ensure_column(conn, "exports", "deleted_at", "TEXT")
+    _pg_ensure_column(conn, "exports", "deleted_by", "INTEGER")
+    _pg_ensure_column(conn, "share_links", "revoked_at", "TEXT")
     _pg_ensure_column(conn, "replicate_logs", "session_id", "INTEGER")
     _pg_ensure_column(conn, "replicate_logs", "output_bytes", "INTEGER")
     _pg_ensure_column(conn, "saved_workflows", "user_id", "INTEGER")
@@ -855,6 +863,7 @@ def init_db():
                 image_url TEXT NOT NULL,
                 is_selected INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
+                deleted_at TEXT,
                 FOREIGN KEY(project_id) REFERENCES projects(id)
             );
             CREATE TABLE IF NOT EXISTS project_metrics (
@@ -938,7 +947,9 @@ def init_db():
                 settings_json TEXT DEFAULT '{}',
                 pipeline_run_id INTEGER,
                 pipeline_steps_json TEXT,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                deleted_at TEXT,
+                deleted_by INTEGER
             );
             CREATE TABLE IF NOT EXISTS brand_palettes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1065,7 +1076,8 @@ def init_db():
                 project_id INTEGER NOT NULL,
                 export_filename TEXT NOT NULL,
                 expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                revoked_at TEXT
             );
             CREATE TABLE IF NOT EXISTS api_keys (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1139,6 +1151,10 @@ def init_db():
         ensure_column("background_jobs", "progress_pct", "INTEGER NOT NULL DEFAULT 0")
         ensure_column("background_jobs", "stage", "TEXT NOT NULL DEFAULT ''")
         ensure_column("pattern_variations", "export_filename", "TEXT")
+        ensure_column("pattern_variations", "deleted_at", "TEXT")
+        ensure_column("exports", "deleted_at", "TEXT")
+        ensure_column("exports", "deleted_by", "INTEGER")
+        ensure_column("share_links", "revoked_at", "TEXT")
         ensure_column("saved_workflows", "user_id", "INTEGER REFERENCES users(id)")
         ensure_column("replicate_logs", "session_id", "INTEGER")
         ensure_column("replicate_logs", "output_bytes", "INTEGER")

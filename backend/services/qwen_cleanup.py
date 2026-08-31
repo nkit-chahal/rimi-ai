@@ -15,7 +15,7 @@ def _collect_referenced_filenames():
     with db_lock:
         conn = db()
         try:
-            export_rows = conn.execute("SELECT filename FROM exports").fetchall()
+            export_rows = conn.execute("SELECT filename FROM exports WHERE deleted_at IS NULL").fetchall()
             for row in export_rows:
                 if row['filename']:
                     referenced.add(row['filename'])
@@ -45,7 +45,7 @@ def _collect_referenced_filenames():
 
 
 def sweep_orphaned_layer_files(max_age_days=30, dry_run=False):
-    """Delete layer files not referenced anywhere and older than max_age_days."""
+    """Remove stale local cache files and tag retained S3 objects as expired."""
     referenced = _collect_referenced_filenames()
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=max_age_days)
     deleted = []
@@ -72,7 +72,11 @@ def sweep_orphaned_layer_files(max_age_days=30, dry_run=False):
             continue
         try:
             os.remove(filepath)
-            storage.delete_from_s3('results', filename)
+            storage.update_object_tags('results', filename, {
+                'lifecycle': 'expired',
+                'retention': 'orphaned-qwen-layer',
+                'expired_at': datetime.now(timezone.utc).isoformat(),
+            })
             deleted.append(filename)
         except Exception as exc:
             print(f"  [Cleanup] Failed to delete {filename}: {exc}")

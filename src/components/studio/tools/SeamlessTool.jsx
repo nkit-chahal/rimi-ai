@@ -91,6 +91,7 @@ export default function SeamlessTool({
                 userId: user.id,
             };
             const result = await runAsyncJob('/api/make-seamless', payload, currentToken, {
+                onJobCreated: jobId => reportProgress?.(1, 'Queued…', { jobId }),
                 onProgress: (job) => {
                     setSeamlessProgress(job.progressPct || 0);
                     setSeamlessStatus(job.stage || 'Working…');

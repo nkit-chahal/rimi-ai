@@ -23,6 +23,11 @@ def app(tmp_path, monkeypatch):
 
     monkeypatch.setattr(db, "DB_PATH", str(db_path))
 
+    # Each test gets a new database, so cached users from a previous fixture
+    # must not leak into authentication/plan checks for the same numeric id.
+    import middleware
+    middleware._USER_CACHE.clear()
+
     from server import create_app
 
     application = create_app()

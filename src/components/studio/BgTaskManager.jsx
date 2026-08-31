@@ -3,124 +3,119 @@ import { I } from './shared/StudioIcons';
 import { forceDownload, mediaUrl } from './shared/helpers';
 import MediaImg from './shared/MediaImg';
 
-export default function BgTaskManager({ bgTasks, show, onToggle, setTool, setResultUrl, setQwenLaunch, currentToken }) {
-    const runningCount = bgTasks.filter(t => t.status === 'running').length;
+export default function BgTaskManager({
+    bgTasks,
+    show,
+    onToggle,
+    onOpenTask,
+    onDismissTask,
+    onClearFinished,
+    onRetryTask,
+    canRetryTask,
+    currentToken,
+}) {
+    const containerRef = React.useRef(null);
+    const runningCount = bgTasks.filter(task => task.status === 'running').length;
+    const finishedCount = bgTasks.length - runningCount;
+
+    React.useEffect(() => {
+        if (!show) return undefined;
+        const closeOnOutsideClick = event => {
+            if (!containerRef.current?.contains(event.target)) onToggle(false);
+        };
+        const closeOnEscape = event => {
+            if (event.key === 'Escape') onToggle(false);
+        };
+        document.addEventListener('pointerdown', closeOnOutsideClick);
+        document.addEventListener('keydown', closeOnEscape);
+        return () => {
+            document.removeEventListener('pointerdown', closeOnOutsideClick);
+            document.removeEventListener('keydown', closeOnEscape);
+        };
+    }, [onToggle, show]);
 
     return (
-        <div className="st-bg-tasks-container" style={{ position: 'relative' }}>
+        <div className="st-bg-tasks-container" ref={containerRef}>
             <button
                 type="button"
-                className={`st-icon-btn ${runningCount > 0 ? 'active-pulse' : ''}`}
+                className={`st-icon-btn st-bg-tasks-trigger ${show ? 'is-open' : ''} ${runningCount > 0 ? 'active-pulse' : ''}`}
                 aria-expanded={show}
-                aria-haspopup="true"
+                aria-haspopup="dialog"
+                aria-label={runningCount ? `${runningCount} background tasks running` : 'Open recent background tasks'}
                 onClick={() => onToggle(!show)}
-                title="AI Background Queue Manager"
-                style={{
-                    position: 'relative',
-                    background: show ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
-                    color: runningCount > 0 ? '#6366f1' : '#64748b'
-                }}
+                title="Background tasks"
             >
                 <I d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" s={18} />
-                {runningCount > 0 && (
-                    <span className="st-bg-tasks-badge" style={{
-                        position: 'absolute',
-                        top: '-2px',
-                        right: '-2px',
-                        background: '#6366f1',
-                        color: '#fff',
-                        borderRadius: '50%',
-                        width: '14px',
-                        height: '14px',
-                        fontSize: '8px',
-                        fontWeight: 800,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 2px 6px rgba(99, 102, 241, 0.4)'
-                    }}>
-                        {runningCount}
-                    </span>
-                )}
+                {runningCount > 0 && <span className="st-bg-tasks-badge" aria-hidden="true">{runningCount}</span>}
             </button>
 
             {show && (
-                <div className="st-bg-tasks-dropdown st-glassmorphic-dropdown" style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    marginTop: '6px',
-                    width: '320px',
-                    background: '#fff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '10px',
-                    boxShadow: '0 18px 42px rgba(15, 23, 42, 0.16)',
-                    zIndex: 9999,
-                    padding: '12px'
-                }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Background Tasks</span>
-                        <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500 }}>{bgTasks.length} total</span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
-                        {bgTasks.length === 0 ? (
-                            <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem' }}>No background tasks active</div>
-                        ) : (
-                            bgTasks.map(t => (
-                                <div key={t.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b' }}>{t.label}</span>
-                                        <span style={{
-                                            fontSize: '0.65rem',
-                                            fontWeight: 800,
-                                            padding: '2px 6px',
-                                            borderRadius: '4px',
-                                            textTransform: 'uppercase',
-                                            background: t.status === 'completed' ? '#dcfce7' : t.status === 'failed' ? '#fee2e2' : '#e0e7ff',
-                                            color: t.status === 'completed' ? '#15803d' : t.status === 'failed' ? '#b91c1c' : '#4338ca',
-                                        }}>{t.status}</span>
-                                    </div>
-                                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Input: {t.filename}</div>
-                                    {t.status === 'running' && (
-                                        <div style={{ width: '100%' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#6366f1', fontWeight: 700, marginBottom: '2px' }}>
-                                                <span>{t.stage || 'Processing...'}</span>
-                                                <span>{Math.round(t.progress || 0)}%</span>
-                                            </div>
-                                            <div style={{ width: '100%', height: '5px', background: '#e2e8f0', borderRadius: '99px', overflow: 'hidden' }}>
-                                                <div style={{
-                                                    width: `${Math.max(2, Math.min(100, t.progress || 0))}%`,
-                                                    height: '100%',
-                                                    background: 'linear-gradient(90deg, #6366f1, #ec4899)',
-                                                    transition: 'width 0.18s linear',
-                                                    borderRadius: '99px',
-                                                }} />
-                                            </div>
-                                        </div>
-                                    )}
-                                    {t.status === 'completed' && t.resultUrl && (
-                                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px', alignItems: 'center' }}>
-                                            <div style={{ width: '32px', height: '32px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <MediaImg src={t.resultUrl} alt="Result" token={currentToken} accessToken={t.fileAccessToken} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '6px', flex: 1, justifyContent: 'flex-end' }}>
-                                                <button onClick={() => {
-                                                    if (t.type === 'imagelayers' && setQwenLaunch && t.sessionId) {
-                                                        setQwenLaunch({ sessionId: t.sessionId });
-                                                    }
-                                                    setTool(t.type);
-                                                    setResultUrl(t.type, t.resultUrls || t.resultUrl);
-                                                    onToggle(false);
-                                                }} style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'rgba(99, 102, 241, 0.08)', color: '#6366f1', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>View</button>
-                                                <button type="button" onClick={(e) => forceDownload(e, mediaUrl(t.resultUrl), undefined, currentToken)} style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff', borderRadius: '6px', fontWeight: 700, border: 'none', cursor: 'pointer' }}>Download</button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ))
+                <section className="st-bg-tasks-dropdown" role="dialog" aria-label="Background tasks">
+                    <header className="st-bg-tasks-header">
+                        <div>
+                            <strong>Background tasks</strong>
+                            <span>{runningCount ? `${runningCount} running · ${finishedCount} recent` : `${finishedCount} recent`}</span>
+                        </div>
+                        {finishedCount > 0 && (
+                            <button type="button" className="st-bg-tasks-clear" onClick={onClearFinished}>Clear finished</button>
                         )}
+                    </header>
+
+                    <div className="st-bg-tasks-list" aria-live="polite">
+                        {bgTasks.length === 0 ? (
+                            <div className="st-bg-tasks-empty">
+                                <span className="st-bg-tasks-empty-icon"><I d="M4 4h16v16H4zM8 9h8M8 13h5" s={20} /></span>
+                                <strong>No recent tasks</strong>
+                                <span>Long-running generations will appear here, even while you use another tool.</span>
+                            </div>
+                        ) : bgTasks.map(task => {
+                            const previewUrl = task.resultUrl || task.resultUrls?.[0];
+                            const canRetry = task.status === 'failed' && canRetryTask?.(task.id);
+                            return (
+                                <article className={`st-bg-task st-bg-task-${task.status}`} key={task.id}>
+                                    <div className="st-bg-task-heading">
+                                        <div>
+                                            <strong>{task.label}</strong>
+                                            <span title={task.filename}>Input: {task.filename}</span>
+                                        </div>
+                                        <span className="st-bg-task-status">{task.status}</span>
+                                    </div>
+
+                                    {task.status === 'running' && (
+                                        <div className="st-bg-task-progress">
+                                            <div><span>{task.stage || 'Processing…'}</span><strong>{Math.round(task.progress || 0)}%</strong></div>
+                                            <div className="st-bg-task-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(task.progress || 0)}>
+                                                <span style={{ width: `${Math.max(2, Math.min(100, task.progress || 0))}%` }} />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {task.status === 'failed' && <p className="st-bg-task-error">{task.error || 'The task could not be completed.'}</p>}
+
+                                    {task.status !== 'running' && (
+                                        <div className="st-bg-task-actions">
+                                            {previewUrl && (
+                                                <div className="st-bg-task-thumb">
+                                                    <MediaImg src={previewUrl} alt="Generated result" token={currentToken} accessToken={task.fileAccessToken} />
+                                                </div>
+                                            )}
+                                            <div>
+                                                {task.status === 'completed' && previewUrl && (
+                                                    <>
+                                                        <button type="button" onClick={() => { onOpenTask(task); onToggle(false); }}>View</button>
+                                                        <button type="button" className="primary" onClick={event => forceDownload(event, mediaUrl(previewUrl), undefined, currentToken)}>Download</button>
+                                                    </>
+                                                )}
+                                                {canRetry && <button type="button" className="primary" onClick={() => onRetryTask(task.id)}>Retry</button>}
+                                                <button type="button" onClick={() => onDismissTask(task.id)}>Dismiss</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </article>
+                            );
+                        })}
                     </div>
-                </div>
+                </section>
             )}
         </div>
     );

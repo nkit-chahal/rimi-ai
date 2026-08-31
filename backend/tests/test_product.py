@@ -43,6 +43,13 @@ def test_share_og_landing_redirects_browsers(client, app):
             """,
             ((now + timedelta(days=7)).isoformat(), now.isoformat()),
         )
+        conn.execute(
+            """
+            INSERT INTO exports (user_id, project_id, filename, tool_type, created_at)
+            VALUES (1, 1, 'tile.png', 'pattern', ?)
+            """,
+            (now.isoformat(),),
+        )
         conn.commit()
         conn.close()
 

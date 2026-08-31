@@ -446,6 +446,7 @@ export default function ImageLayersTool(props) {
                 sessionId: sid,
             };
             const d = await runAsyncJob('/api/image-layers', payload, currentToken, {
+                onJobCreated: jobId => reportProgress?.(1, 'Queued…', { jobId, sessionId: sid }),
                 onProgress: (job) => {
                     setJobProgress(job.progressPct || 0);
                     setJobStage(job.stage || '');

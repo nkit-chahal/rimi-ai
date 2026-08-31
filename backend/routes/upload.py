@@ -39,7 +39,7 @@ def _source_export_filename(filename):
         conn = db()
         try:
             row = conn.execute(
-                "SELECT filename FROM exports WHERE filename LIKE ? LIMIT 1",
+                "SELECT filename FROM exports WHERE filename LIKE ? AND deleted_at IS NULL LIMIT 1",
                 (f"{base}.%",),
             ).fetchone()
             if row:
@@ -76,7 +76,7 @@ def _lookup_file_owner(filename):
             SELECT COALESCE(e.user_id, p.user_id) AS user_id
             FROM exports e
             LEFT JOIN projects p ON p.id = e.project_id
-            WHERE e.filename = ?
+            WHERE e.filename = ? AND e.deleted_at IS NULL
             LIMIT 1
             """,
             (lookup_name,),
@@ -104,9 +104,10 @@ def _lookup_file_owner(filename):
             SELECT p.user_id
             FROM pattern_variations v
             JOIN projects p ON p.id = v.project_id
-            WHERE v.export_filename = ?
+            WHERE v.deleted_at IS NULL
+              AND (v.export_filename = ?
                OR v.image_url IN (?, ?)
-               OR v.image_url LIKE ?
+               OR v.image_url LIKE ?)
             LIMIT 1
             """,
             (lookup_name, results_path, uploads_path, like),
