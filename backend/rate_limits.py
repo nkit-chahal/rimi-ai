@@ -28,12 +28,15 @@ def rate_limit(limit_string):
 
     def decorator(fn):
         limited_fn = None
+        limited_limiter = None
 
         @wraps(fn)
         def wrapped(*args, **kwargs):
-            nonlocal limited_fn
-            if limited_fn is None:
-                limited_fn = _require_limiter().limit(limit_string)(fn)
+            nonlocal limited_fn, limited_limiter
+            current_limiter = _require_limiter()
+            if limited_fn is None or limited_limiter is not current_limiter:
+                limited_fn = current_limiter.limit(limit_string)(fn)
+                limited_limiter = current_limiter
             return limited_fn(*args, **kwargs)
 
         return wrapped
