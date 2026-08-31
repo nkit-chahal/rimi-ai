@@ -241,6 +241,28 @@ def rows_to_dicts(rows):
     return [dict(row) for row in rows]
 
 
+def migrate_legacy_email_passwords(conn):
+    """Replace legacy plaintext email passwords with bcrypt hashes."""
+    rows = conn.execute(
+        "SELECT id, password FROM users WHERE login_provider = ?",
+        ("email",),
+    ).fetchall()
+    migrated = 0
+    for row in rows:
+        stored_password = row["password"]
+        if not stored_password or stored_password.startswith("$2"):
+            continue
+        password_hash = bcrypt.hashpw(
+            stored_password.encode("utf-8"), bcrypt.gensalt()
+        ).decode("utf-8")
+        conn.execute(
+            "UPDATE users SET password = ? WHERE id = ?",
+            (password_hash, row["id"]),
+        )
+        migrated += 1
+    return migrated
+
+
 def seed_credit_pricing(conn):
     updated_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     if _USE_PG:
@@ -1234,6 +1256,9 @@ def init_db():
         except Exception as e:
             print(f"Error during auto-migration: {e}")
 
+    migrated_passwords = migrate_legacy_email_passwords(conn)
+    if migrated_passwords:
+        print(f"Migrated {migrated_passwords} legacy email password(s) to bcrypt.")
     seed_credit_pricing(conn)
     conn.commit()
     conn.close()

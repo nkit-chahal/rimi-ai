@@ -44,6 +44,8 @@ const EDIT_SUGGESTIONS = [
     'Cleaner background',
     'Tighter seamless repeat',
 ];
+
+export default function PatternTool({
     uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, tool, creditPricing,
     setEnhUrl, setSeamlessUrl, setRepeatUrl, setTool,
     handlePreUpload, onUploadInvalid, onUploadPaste, currentToken, uploadStatus, isUploading, setQwenLaunch, setUploads,
