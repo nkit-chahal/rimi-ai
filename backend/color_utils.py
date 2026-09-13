@@ -14,13 +14,20 @@ def extract_palette(image_path, num_colors=5):
     Extract dominant colors from an image using MiniBatchKMeans.
     """
     with Image.open(image_path) as img:
-        img = img.convert('RGB')
+        has_alpha = _has_alpha(img)
+        rgba = img.convert('RGBA')
         # Resize for speed
-        img.thumbnail((300, 300))
-        img_np = np.array(img)
-        
-    pixels = img_np.reshape(-1, 3)
-    
+        rgba.thumbnail((300, 300))
+        img_np = np.array(rgba)
+
+    pixels = img_np[..., :3].reshape(-1, 3)
+    if has_alpha:
+        # Transparent pixels (cut-out motifs) must not become a black cluster.
+        visible = img_np[..., 3].reshape(-1) > 32
+        if visible.sum() >= max(1, num_colors):
+            pixels = pixels[visible]
+    num_colors = max(1, min(int(num_colors), len(pixels)))
+
     kmeans = MiniBatchKMeans(n_clusters=num_colors, random_state=42, n_init=3)
     kmeans.fit(pixels)
     
@@ -50,9 +57,11 @@ def recolor_image(image_path, color_mapping, output_path):
     color_mapping is a list of dicts: [{'old': '#ff0000', 'new': '#00ff00'}, ...]
     """
     with Image.open(image_path) as img:
-        img = img.convert('RGB')
-        img_np = np.array(img, dtype=np.float32)
-        
+        has_alpha = _has_alpha(img)
+        rgba = img.convert('RGBA')
+        alpha = rgba.split()[3] if has_alpha else None
+        img_np = np.array(rgba.convert('RGB'), dtype=np.float32)
+
     original_shape = img_np.shape
     pixels = img_np.reshape(-1, 3)
     
@@ -61,7 +70,7 @@ def recolor_image(image_path, color_mapping, output_path):
     
     if len(old_colors) == 0:
         # No mapping, just save original
-        Image.fromarray(img_np.astype(np.uint8)).save(output_path)
+        _save_with_alpha(Image.fromarray(img_np.astype(np.uint8)), alpha, output_path)
         return output_path
         
     # Compute distance from each pixel to each old_color
@@ -82,6 +91,20 @@ def recolor_image(image_path, color_mapping, output_path):
     # direct mapping is usually preferred by print designers. We will stick to flat mapping.
     
     new_img_np = new_pixels.reshape(original_shape).astype(np.uint8)
-    Image.fromarray(new_img_np).save(output_path)
-    
+    _save_with_alpha(Image.fromarray(new_img_np), alpha, output_path)
+
     return output_path
+
+
+def _has_alpha(img):
+    return img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info)
+
+
+def _save_with_alpha(rgb_img, alpha, output_path):
+    """Keep transparency (cut-out motifs) when the output format supports it."""
+    if alpha is not None and not output_path.lower().endswith(('.jpg', '.jpeg')):
+        out = rgb_img.convert('RGBA')
+        out.putalpha(alpha)
+        out.save(output_path)
+    else:
+        rgb_img.save(output_path)

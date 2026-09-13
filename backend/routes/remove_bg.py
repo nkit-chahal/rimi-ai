@@ -7,6 +7,7 @@ import uuid
 import replicate
 import requests as http_requests
 from flask import Blueprint, jsonify, request, g
+from rate_limits import generation_rate_limit
 from middleware import login_required, project_access_from_payload
 
 from auth import (
@@ -66,6 +67,7 @@ def _image_to_data_uri(filepath, filename):
 
 @bp.route('/api/remove-bg', methods=['POST'])
 @login_required
+@generation_rate_limit
 def remove_background():
     data = request.get_json() or {}
     filename = data.get('filename', '')

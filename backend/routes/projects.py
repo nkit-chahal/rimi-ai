@@ -100,7 +100,7 @@ def delete_project(project_id):
             except: pass
 
     # 2. Archive S3 objects and clear only the disposable local cache.
-    archived_at = datetime.now(timezone.utc).isoformat()
+    archived_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     for url in files_to_delete:
         if not url: continue
         if url.startswith('/uploads/'):

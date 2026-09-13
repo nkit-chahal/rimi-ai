@@ -63,6 +63,7 @@ DEFAULT_CREDIT_PRICING = [
     # ----- Image Layers -----
     ("imageLayers", "Image Layers (3-layer default)", "/api/image-layers", 69, "dynamic", 1),
     ("imageLayerEdit", "Image Layer Edit", "/api/edit-layer", 35, "fixed", 1),
+    ("smartMask", "Smart Mask (Qwen)", "/api/smart-mask", 35, "fixed", 1),
     ("layerCompose", "Layer Compose / Flatten", "/api/compose-layers", 10, "fixed", 1),
     ("qwenSessionExportPsd", "Qwen Session Export PSD", "/api/qwen-sessions/export/psd", 5, "fixed", 1),
     ("qwenSessionExportZip", "Qwen Session Export ZIP", "/api/qwen-sessions/export/zip", 2, "fixed", 1),
@@ -320,17 +321,34 @@ def resolve_input_url(input_filename):
     return f"/uploads/{input_filename}"
 
 
-def iso_to_epoch(iso_str):
+def parse_iso_naive_utc(iso_value):
+    """Parse an ISO timestamp into a naive UTC datetime.
+
+    Rows are normally stored naive-UTC, but some writers and imports include an offset
+    ('+00:00', '+05:30', 'Z'); those are converted to UTC so callers can compare safely.
+    Returns None when the value cannot be parsed.
+    """
+    if not iso_value:
+        return None
     try:
-        return datetime.fromisoformat(iso_str).timestamp()
-    except Exception:
+        parsed = datetime.fromisoformat(str(iso_value).strip().replace('Z', '+00:00'))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def iso_to_epoch(iso_str):
+    parsed = parse_iso_naive_utc(iso_str)
+    if parsed is None:
         return 0.0
+    return parsed.replace(tzinfo=timezone.utc).timestamp()
 
 
 def time_ago(iso_value):
-    try:
-        then = datetime.fromisoformat(iso_value)
-    except ValueError:
+    then = parse_iso_naive_utc(iso_value)
+    if then is None:
         return "Updated recently"
     delta = datetime.now(timezone.utc).replace(tzinfo=None) - then
     if delta.days >= 1:
