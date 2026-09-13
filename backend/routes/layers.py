@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify, g
 from middleware import login_required, project_access_from_payload
 from plan_tiers import require_pro_or_error, current_user_plan
 
-from config import UPLOAD_DIR, RESULTS_DIR, groq_client
+from config import UPLOAD_DIR, RESULTS_DIR, groq_client, GROQ_VISION_MODEL
 from auth import (
     log_export,
     check_credits,
@@ -137,7 +137,7 @@ def caption_layer():
     mime_type = mime_map.get(ext, 'image/png')
 
     completion = groq_client.chat.completions.create(
-      model="meta-llama/llama-4-scout-17b-16e-instruct",
+      model=GROQ_VISION_MODEL,
       messages=[
         {
           "role": "user",
@@ -193,7 +193,7 @@ def layer_ocr():
     image_b64 = base64.b64encode(image_bytes).decode('utf-8')
 
     completion = groq_client.chat.completions.create(
-      model="meta-llama/llama-4-scout-17b-16e-instruct",
+      model=GROQ_VISION_MODEL,
       messages=[{
         "role": "user",
         "content": [

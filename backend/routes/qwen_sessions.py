@@ -14,7 +14,7 @@ from auth import (
     log_export,
     record_activity,
 )
-from config import groq_client, RESULTS_DIR
+from config import groq_client, RESULTS_DIR, GROQ_VISION_MODEL
 from db import db, db_lock
 from qwen_session_helpers import (
     append_layer_version,
@@ -350,7 +350,7 @@ def semantic_select(session_id):
             with open(path, 'rb') as f:
                 image_b64 = base64.b64encode(f.read()).decode('utf-8')
             completion = groq_client.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                model=GROQ_VISION_MODEL,
                 messages=[{
                     "role": "user",
                     "content": [
