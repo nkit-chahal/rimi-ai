@@ -19,6 +19,8 @@ export const useResultUrls = create((set) => ({
     cw: null,
     repeat: null,
     qwenLaunch: null,
+    pendingMotif: null,
+    lastPlacementResult: null,
     set: (key, url) => {
         const mapped = KEY_MAP[key] || key;
         set({ [mapped]: url });
@@ -26,4 +28,7 @@ export const useResultUrls = create((set) => ({
     setRaw: (mappedKey, url) => set({ [mappedKey]: url }),
     setQwenLaunch: (launch) => set({ qwenLaunch: launch }),
     clearQwenLaunch: () => set({ qwenLaunch: null }),
+    setPendingMotif: (motif) => set({ pendingMotif: motif }),
+    clearPendingMotif: () => set({ pendingMotif: null }),
+    setLastPlacementResult: (result) => set({ lastPlacementResult: result }),
 }));

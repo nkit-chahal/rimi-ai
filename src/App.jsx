@@ -4,9 +4,12 @@ import Studio from './pages/Studio';
 import { normalizeToken } from './components/studio/shared/helpers';
 import { AuthProvider } from './contexts/AuthContext';
 import { BgTaskProvider } from './contexts/BgTaskContext';
+import { STUDIO_DOMAINS, canEnterDomain, clearStoredDomain, resolveInitialDomain, storeDomain, toolFromPathname } from './components/studio/shared/studioDomains';
+import { trackEvent } from './observability';
 
 const Login = lazy(() => import('./pages/Login'));
 const SharePage = lazy(() => import('./pages/SharePage'));
+const StudioSelect = lazy(() => import('./pages/StudioSelect'));
 
 /** One-time migrate legacy hash URLs (#/login, #/studio/…) to path URLs. */
 function migrateLegacyHashRoute() {
@@ -65,6 +68,10 @@ function AppRoutes() {
   const [currentUser, setCurrentUser] = useState(() => initialSession.user);
   const [currentToken, setCurrentToken] = useState(() => initialSession.token);
   const [isBootEntry, setIsBootEntry] = useState(() => Boolean(initialSession.user && initialSession.token));
+  // Active studio (print / embroidery / woven). Null means the picker is shown first.
+  const [studioDomain, setStudioDomain] = useState(() => (
+    initialSession.user ? resolveInitialDomain(initialSession.user, window.location.pathname) : null
+  ));
 
   const handleLogin = useCallback((user, token) => {
     const cleanToken = normalizeToken(token);
@@ -80,6 +87,8 @@ function AppRoutes() {
     setCurrentToken(cleanToken);
     localStorage.setItem('rim_token', cleanToken);
     localStorage.setItem('rim_user', JSON.stringify(user));
+    clearStoredDomain();
+    setStudioDomain(null);
     setIsBootEntry(true);
     navigate('/studio', { replace: true });
   }, [navigate]);
@@ -93,7 +102,43 @@ function AppRoutes() {
     setCurrentToken(null);
     localStorage.removeItem('rim_user');
     localStorage.removeItem('rim_token');
+    clearStoredDomain();
+    setStudioDomain(null);
     navigate('/login', { replace: true });
+  }, [navigate]);
+
+  const handleSelectStudio = useCallback((domainId, options = {}) => {
+    if (!canEnterDomain(domainId, currentUser)) return;
+    storeDomain(domainId);
+    setStudioDomain(domainId);
+    trackEvent('studio_domain_selected', { domain: domainId });
+    const requestedTool = options.tool || null;
+    if (requestedTool) {
+      navigate(`/studio/${requestedTool}`, { replace: true });
+    } else if (!toolFromPathname(window.location.pathname)) {
+      navigate(`/studio/${STUDIO_DOMAINS[domainId].defaultTool}`, { replace: true });
+    }
+  }, [currentUser, navigate]);
+
+  const handleUserRefresh = useCallback((patch) => {
+    if (!currentUser || !patch) return;
+    const next = { ...currentUser };
+    let changed = false;
+    Object.entries(patch).forEach(([key, value]) => {
+      if (value !== undefined && next[key] !== value) {
+        next[key] = value;
+        changed = true;
+      }
+    });
+    if (!changed) return;
+    setCurrentUser(next);
+    localStorage.setItem('rim_user', JSON.stringify(next));
+  }, [currentUser]);
+
+  const handleSwitchStudio = useCallback(() => {
+    clearStoredDomain();
+    setStudioDomain(null);
+    navigate('/studio', { replace: true });
   }, [navigate]);
 
   useEffect(() => {
@@ -109,16 +154,24 @@ function AppRoutes() {
         <Route
           path="/studio/*"
           element={
-            currentUser ? (
+            !currentUser ? (
+              <Navigate to="/login" replace />
+            ) : currentUser.role !== 'admin' && !studioDomain ? (
+              <Suspense fallback={null}>
+                <StudioSelect user={currentUser} onSelect={handleSelectStudio} onLogout={handleLogout} />
+              </Suspense>
+            ) : (
               <Studio
+                key={studioDomain || 'admin'}
                 currentUser={currentUser}
                 currentToken={currentToken}
                 onLogout={handleLogout}
                 isBootEntry={isBootEntry}
                 onBootComplete={handleBootComplete}
+                activeDomain={studioDomain || 'print'}
+                onSwitchStudio={handleSwitchStudio}
+                onUserRefresh={handleUserRefresh}
               />
-            ) : (
-              <Navigate to="/login" replace />
             )
           }
         />

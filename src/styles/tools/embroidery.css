@@ -1,0 +1,1065 @@
+/* Embroidery studio tools: Thread Shades, Motif Library, Placement Studio */
+
+.emb-tool {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 1.5rem 2rem 2.5rem;
+  gap: 1.25rem;
+  overflow-y: auto;
+}
+
+.emb-tool-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.emb-tool-head h1 {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.emb-tool-head p {
+  margin: 0.25rem 0 0;
+  max-width: 62ch;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.emb-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.emb-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+
+.emb-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.emb-panel-title strong {
+  color: var(--text);
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.emb-grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+/* Controls */
+.emb-select,
+.emb-input {
+  min-height: 40px;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.emb-select:focus-visible,
+.emb-input:focus-visible {
+  outline: 3px solid rgba(139, 92, 246, 0.28);
+  outline-offset: 1px;
+  border-color: rgba(139, 92, 246, 0.6);
+}
+
+.emb-input.is-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: lowercase;
+}
+
+.emb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 40px;
+  padding: 0.5rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.emb-btn:hover:not(:disabled) {
+  border-color: rgba(139, 92, 246, 0.45);
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.emb-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.emb-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.emb-btn:focus-visible {
+  outline: 3px solid rgba(139, 92, 246, 0.35);
+  outline-offset: 2px;
+}
+
+.emb-btn.is-primary {
+  border-color: transparent;
+  background: var(--gradient-primary);
+  color: #fff;
+}
+
+.emb-btn.is-primary:hover:not(:disabled) {
+  background: var(--gradient-hover);
+}
+
+.emb-btn.is-danger:hover:not(:disabled) {
+  border-color: rgba(220, 38, 38, 0.45);
+  background: rgba(220, 38, 38, 0.06);
+  color: #b91c1c;
+}
+
+.emb-btn.is-small {
+  min-height: 32px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.emb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.emb-field label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.emb-field-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.emb-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.emb-note {
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.10);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #92400e;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.emb-color-input {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.emb-range {
+  accent-color: var(--primary);
+}
+
+/* Swatches */
+.emb-swatch {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(28, 25, 23, 0.14);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.emb-swatch.is-small {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.emb-swatch.is-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.emb-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.emb-source-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.emb-source-item code {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.emb-source-item .emb-weight {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.emb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.emb-icon-btn:hover {
+  background: rgba(28, 25, 23, 0.06);
+  color: var(--text);
+}
+
+.emb-icon-btn:focus-visible {
+  outline: 3px solid rgba(139, 92, 246, 0.35);
+}
+
+/* Preview image */
+.emb-preview {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+}
+
+.emb-preview img {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+}
+
+.emb-preview-actions {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* Match rows */
+.emb-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.emb-match-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: center;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.emb-match-arrow {
+  color: var(--muted);
+}
+
+.emb-match-pair {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.emb-match-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.emb-match-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.emb-match-title strong {
+  font-weight: 800;
+}
+
+.emb-match-title span {
+  color: var(--text2);
+}
+
+.emb-quality {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.emb-quality.is-exact { background: rgba(16, 185, 129, 0.16); color: #047857; }
+.emb-quality.is-close { background: rgba(16, 185, 129, 0.10); color: #065f46; }
+.emb-quality.is-ok { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+.emb-quality.is-far { background: rgba(244, 63, 94, 0.12); color: #be123c; }
+
+.emb-alternates {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.emb-alt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem 0.2rem 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text2);
+  cursor: pointer;
+}
+
+.emb-alt.is-active {
+  border-color: rgba(139, 92, 246, 0.6);
+  background: rgba(139, 92, 246, 0.08);
+  color: #5b21b6;
+}
+
+.emb-alt:focus-visible {
+  outline: 3px solid rgba(139, 92, 246, 0.35);
+}
+
+/* Saved palettes */
+.emb-saved-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.emb-saved-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.emb-saved-item strong {
+  font-size: 0.86rem;
+}
+
+.emb-saved-item small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.emb-saved-swatches {
+  display: flex;
+  gap: 0.2rem;
+  margin-left: auto;
+}
+
+/* Empty states */
+.emb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.88rem;
+}
+
+.emb-empty strong {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+/* Filter chips */
+.emb-chips {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.emb-chip {
+  min-height: 34px;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text2);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+
+.emb-chip.is-active {
+  border-color: transparent;
+  background: var(--gradient-primary);
+  color: #fff;
+}
+
+.emb-chip:focus-visible {
+  outline: 3px solid rgba(139, 92, 246, 0.35);
+}
+
+/* Motif library */
+.emb-motifs-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.emb-motif-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 0.9rem;
+}
+
+.emb-motif-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.emb-motif-card:hover,
+.emb-motif-card:focus-within {
+  transform: translateY(-2px);
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 12px 28px rgba(28, 25, 23, 0.08);
+}
+
+.emb-motif-thumb {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem;
+  background-color: #f3f0ec;
+  background-image:
+    linear-gradient(45deg, rgba(28, 25, 23, 0.06) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(28, 25, 23, 0.06) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(28, 25, 23, 0.06) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(28, 25, 23, 0.06) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+.emb-motif-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.emb-motif-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.65rem 0.75rem 0.75rem;
+}
+
+.emb-motif-name {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emb-motif-meta {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.emb-technique {
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(244, 63, 94, 0.10);
+  color: #be123c;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.64rem;
+}
+
+.emb-motif-actions {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0 0.75rem 0.75rem;
+}
+
+.emb-motif-actions .emb-btn {
+  flex: 1;
+}
+
+.emb-upload-thumb {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.emb-upload-thumb img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.emb-upload-thumb strong {
+  display: block;
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.emb-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.84rem;
+  color: var(--text2);
+}
+
+.emb-checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+@media (max-width: 1100px) {
+  .emb-grid-2,
+  .emb-motifs-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .emb-tool {
+    padding: 1rem 1rem 2rem;
+  }
+
+  .emb-match-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .emb-match-arrow {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emb-motif-card,
+  .emb-btn {
+    transition: none;
+  }
+
+  .emb-motif-card:hover {
+    transform: none;
+  }
+}
+
+/* ---- Placement Studio ---- */
+.emb-placement {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.emb-placement-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.emb-doc-size {
+  margin-right: auto;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.emb-placement-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 360px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background-color: #efeae3;
+  background-image:
+    linear-gradient(45deg, rgba(28, 25, 23, 0.05) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(28, 25, 23, 0.05) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(28, 25, 23, 0.05) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(28, 25, 23, 0.05) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+
+.emb-placement-canvas canvas {
+  display: block;
+}
+
+.emb-canvas-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 1rem;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.emb-canvas-hint span {
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(28, 25, 23, 0.78);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Right panel */
+.emb-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  height: 100%;
+  padding: 0.9rem;
+  overflow-y: auto;
+}
+
+.emb-side-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.3rem;
+}
+
+.emb-side-tab {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--text2);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.emb-side-tab.is-active {
+  border-color: transparent;
+  background: var(--gradient-primary);
+  color: #fff;
+}
+
+.emb-side-tab:focus-visible {
+  outline: 3px solid rgba(139, 92, 246, 0.35);
+}
+
+.emb-side-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.emb-side-title {
+  margin: 0.25rem 0 0;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.emb-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+
+.emb-swatch-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text2);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.emb-swatch-btn .dot {
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(28, 25, 23, 0.1);
+}
+
+.emb-swatch-btn.is-active {
+  border-color: rgba(139, 92, 246, 0.7);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+.emb-motif-picker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.emb-motif-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text2);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.emb-motif-pick:hover {
+  border-color: rgba(244, 63, 94, 0.5);
+}
+
+.emb-motif-pick .emb-motif-thumb {
+  border-radius: 8px;
+  padding: 0.35rem;
+}
+
+.emb-icon-row {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.emb-icon-row .emb-btn {
+  min-width: 38px;
+  min-height: 36px;
+  padding: 0.3rem 0.5rem;
+}
+
+.emb-layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.emb-layer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.emb-layer-row.is-active {
+  border-color: rgba(244, 63, 94, 0.6);
+  background: rgba(244, 63, 94, 0.06);
+}
+
+.emb-layer-row .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.emb-layer-row .emb-icon-btn {
+  width: 26px;
+  height: 26px;
+  margin-left: 0;
+}
+
+.emb-result {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg2);
+}
+
+.emb-result img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+}
+
+.emb-recolor-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.76rem;
+}
+
+/* ---- Embroidery Mockups ---- */
+.emb-product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 0.4rem;
+}
+
+.emb-product-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text2);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+
+.emb-product-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 7px;
+  background: var(--bg2);
+}
+
+.emb-product-card.is-active {
+  border-color: rgba(244, 63, 94, 0.7);
+  box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.18);
+}
+
+.emb-product-card:focus-visible {
+  outline: 3px solid rgba(139, 92, 246, 0.35);
+}
+
+.emb-suit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.emb-suit strong {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.emb-suit.is-good { background: rgba(16, 185, 129, 0.10); border-color: rgba(16, 185, 129, 0.3); color: #065f46; }
+.emb-suit.is-ok { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.32); color: #92400e; }
+.emb-suit.is-avoid { background: rgba(244, 63, 94, 0.10); border-color: rgba(244, 63, 94, 0.32); color: #9f1239; }
+
+.emb-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.9rem;
+}
+
+.emb-gallery-thumb {
+  aspect-ratio: 1;
+  background: var(--bg2);
+}
+
+.emb-gallery-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.emb-motif-pick.is-active {
+  border-color: rgba(244, 63, 94, 0.7);
+  box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.18);
+}
+
+/* ---- Stitch Styles ---- */
+.emb-style-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.emb-style-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.emb-style-card strong {
+  font-size: 0.84rem;
+  color: var(--text);
+}
+
+.emb-style-card span {
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.emb-style-card small {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.emb-style-card.is-active {
+  border-color: rgba(244, 63, 94, 0.7);
+  box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.18);
+}
+
+.emb-style-card:focus-visible {
+  outline: 3px solid rgba(139, 92, 246, 0.35);
+}
+
+textarea.emb-input {
+  resize: vertical;
+  min-height: 72px;
+}

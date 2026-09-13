@@ -2,6 +2,8 @@ import React, { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspens
 
 import ToolComingSoon from '../components/studio/shared/ToolComingSoon';
 import { COMING_SOON_TOOLS } from '../components/studio/shared/comingSoonTools';
+import { NAV, navSectionLabel, userToolsForDomain } from '../components/studio/shared/studioNav';
+import { STUDIO_DOMAINS } from '../components/studio/shared/studioDomains';
 import { resolveToolComponent } from '../router/toolRegistry';
 import OnboardingBanner from '../components/OnboardingBanner';
 import { CreditsProvider } from '../contexts/CreditsContext';
@@ -27,43 +29,16 @@ const BillingPanel = lazy(() => import('../components/studio/billing/BillingPane
 
 const navLabel = (id) => t(`nav.${id}`) || id;
 
+/** Tools that get the right-hand settings panel next to the canvas. */
+const RIGHT_PANEL_TOOLS = new Set(['dashboard', 'repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers', 'emb-placement']);
+
 /** Tools that render their own upload/preview UI — hide the global compact dropzone. */
 const COMPACT_UPLOAD_EXCLUDED_TOOLS = new Set([
     'dashboard', 'exports', 'billing', 'workspace',
     'pattern', 'inspire', 'seamless', 'mappings', 'vectorize', 'upscale', 'removebg', 'imagelayers',
     'colorways', 'colorway-manager', 'vectorpro', 'repeat',
+    'emb-threads', 'emb-motifs', 'emb-placement', 'emb-applique', 'emb-mockups', 'emb-stitches', 'emb-techpack',
 ]);
-
-const NAV = [
-    { section: '', items: [{ id: 'dashboard', label: 'Pipeline Studio', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' }] },
-    {
-        section: 'AI DESIGN TOOLS',
-        items: [
-            { id: 'pattern', label: 'Pattern Extraction', icon: 'M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z' },
-            { id: 'seamless', label: 'Make Seamless', icon: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z' },
-            { id: 'repeat', label: 'Repeat Set', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
-            { id: 'mappings', label: 'Mappings', icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z' },
-            { id: 'inspire', label: 'Inspirations', icon: 'M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7h2c3.1 0 5.5-2.5 5.5-5.5C22 6 17.5 2 12 2z' },
-            { id: 'vectorize', label: 'Vectorize', icon: 'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z' },
-            { id: 'upscale', label: 'Super Resolution', icon: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7' },
-            { id: 'removebg', label: 'Remove Background', icon: 'M3 7h18M3 12h18M8 7v10M16 7v10M5 7V5a2 2 0 012-2h10a2 2 0 012 2v2' },
-            { id: 'imagelayers', label: 'Qwen Studio', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5', requiresPro: true },
-            { id: 'colorways', label: 'Colorways', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z' },
-            { id: 'colorway-manager', label: 'Colorway Manager', icon: 'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83' },
-            { id: 'vectorpro', label: 'Vector Pro', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485' },
-            { id: 'mockup3d', label: '3D Mockup', icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.3 7l8.7 5 8.7-5M12 22V12', requiresPro: true },
-        ],
-    },
-    {
-        section: 'ASSETS & LIBRARY',
-        items: [
-            { id: 'library', label: 'Brand Library', icon: 'M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z', comingSoon: true },
-            { id: 'measurement', label: 'Measurement', icon: 'M2 2h6v6H2zM16 2h6v6h-6zM2 16h6v6H2zM16 16h6v6h-6zM8 5h8M8 19h8M5 8v8M19 8v8', comingSoon: true },
-            { id: 'exports', label: 'Exports', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3' },
-            { id: 'billing', label: 'Billing', icon: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM12 6v12M8 10h6a2 2 0 010 4h-4a2 2 0 000 4h6' },
-        ],
-    },
-];
 
 const ADMIN_NAV = [
     {
@@ -91,9 +66,12 @@ const emptyState = {
 
 const BOOT_SPLASH_MIN_MS = 400;
 
-export default function Studio({ onBack, currentUser, currentToken, onLogout, isBootEntry = false, onBootComplete }) {
+export default function Studio({ onBack, currentUser, currentToken, onLogout, isBootEntry = false, onBootComplete, activeDomain = 'print', onSwitchStudio, onUserRefresh }) {
     const adminTools = ['admin-dashboard', 'admin-users', 'admin-projects', 'admin-logs', 'admin-credits'];
-    const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'removebg', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace'];
+    const activeStudio = STUDIO_DOMAINS[activeDomain] || STUDIO_DOMAINS.print;
+    const defaultUserTool = activeStudio.defaultTool;
+    const userTools = useMemo(() => userToolsForDomain(activeStudio.id), [activeStudio.id]);
+    const visibleNav = useMemo(() => NAV.filter((section) => !section.domain || section.domain === activeStudio.id), [activeStudio.id]);
     const isAdmin = currentUser?.role === 'admin';
 
     useEffect(() => {
@@ -121,7 +99,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         const fromPath = readToolFromPath();
         const allowed = isAdmin ? adminTools : userTools;
         if (allowed.includes(fromPath)) return fromPath;
-        return isAdmin ? 'admin-dashboard' : 'pattern';
+        return isAdmin ? 'admin-dashboard' : defaultUserTool;
     });
 
     useEffect(() => {
@@ -134,10 +112,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
     const setTool = useCallback((t) => {
         const allowed = isAdmin ? adminTools : userTools;
-        if (!allowed.includes(t)) t = isAdmin ? 'admin-dashboard' : 'pattern';
+        if (!allowed.includes(t)) t = isAdmin ? 'admin-dashboard' : defaultUserTool;
         _setTool(t);
         window.history.replaceState(null, '', `/studio/${t}`);
-    }, [isAdmin]);
+    }, [isAdmin, userTools, defaultUserTool]);
 
     useEffect(() => {
         const onPopState = () => {
@@ -147,7 +125,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         };
         window.addEventListener('popstate', onPopState);
         return () => window.removeEventListener('popstate', onPopState);
-    }, [isAdmin, readToolFromPath]);
+    }, [isAdmin, readToolFromPath, userTools]);
 
     const [state, setState] = useState(emptyState);
     const [activeProjectId, setActiveProjectId] = useState(1);
@@ -233,6 +211,17 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             tier: stateUserMatchesCurrent ? (state.user.tier ?? currentUser.tier) : currentUser.tier,
         }
         : state.user;
+
+    // Propagate plan changes reported by the server (e.g. after buying a Pro pack) to the app shell,
+    // so studio locks and the picker reflect the current plan without a re-login.
+    useEffect(() => {
+        if (typeof onUserRefresh !== 'function' || !stateUserMatchesCurrent) return;
+        const patch = {};
+        if (state.user.plan !== undefined && state.user.plan !== currentUser.plan) patch.plan = state.user.plan;
+        if (state.user.isPro !== undefined && state.user.isPro !== currentUser.isPro) patch.isPro = state.user.isPro;
+        if (state.user.tier !== undefined && state.user.tier !== currentUser.tier) patch.tier = state.user.tier;
+        if (Object.keys(patch).length) onUserRefresh(patch);
+    }, [onUserRefresh, stateUserMatchesCurrent, state.user.plan, state.user.isPro, state.user.tier, currentUser]);
 
     const activeProject = state.activeProject;
     const userRemainingCredits = Math.max(0, (user.creditsLimit || 0) - (user.creditsUsed || 0));
@@ -514,7 +503,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     }, []);
 
     const commandPaletteItems = useMemo(() => {
-        const sections = isAdmin ? ADMIN_NAV : NAV;
+        const sections = isAdmin ? ADMIN_NAV : visibleNav;
         const items = sections.flatMap((section) =>
             section.items.map((it) => ({
                 id: it.id,
@@ -533,7 +522,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             });
         }
         return items;
-    }, [isAdmin]);
+    }, [isAdmin, visibleNav]);
 
     const createWorkspaceProject = async (name) => {
         const trimmed = (name || '').trim();
@@ -947,7 +936,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
     const toolLabel = useMemo(() => {
         if (tool === 'workspace') return navLabel('workspace');
-        const items = [...NAV[0].items, ...NAV[1].items, ...NAV[2].items, ...ADMIN_NAV[0].items];
+        const items = [...NAV.flatMap((section) => section.items), ...ADMIN_NAV[0].items];
         return navLabel(items.find(it => it.id === tool)?.id || tool) || 'Studio';
     }, [tool]);
 
@@ -1005,6 +994,26 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             </button>
                         </div>
 
+                        {!isAdmin && (
+                            <button
+                                type="button"
+                                className="st-studio-switch"
+                                onClick={onSwitchStudio}
+                                disabled={typeof onSwitchStudio !== 'function'}
+                                title="Switch studio"
+                                aria-label={`Current studio: ${activeStudio.label}. Switch studio`}
+                            >
+                                <span className="st-studio-switch-icon" style={{ '--studio-accent': activeStudio.accent }}>
+                                    <I d={activeStudio.icon} s={15} />
+                                </span>
+                                <span className="st-studio-switch-label">
+                                    <small>Studio</small>
+                                    <strong>{activeStudio.label}</strong>
+                                </span>
+                                <span className="st-studio-switch-action">Switch</span>
+                            </button>
+                        )}
+
                         {user.role === 'admin' ? (
                             <>
                                 {ADMIN_NAV.map((section, idx) => (
@@ -1028,9 +1037,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             </>
                         ) : (
                             <>
-                                {NAV.map((section, idx) => (
+                                {visibleNav.map((section, idx) => (
                                     <div key={idx}>
-                                        {section.section && <div className="st-nav-section">{section.section === 'AI DESIGN TOOLS' ? t('navSections.aiTools') : section.section === 'ASSETS & LIBRARY' ? t('navSections.assets') : section.section}</div>}
+                                        {section.section && <div className="st-nav-section">{navSectionLabel(section)}</div>}
                                         {section.items.map(it => (
                                             <button
                                                 key={it.id}
@@ -1350,7 +1359,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                     </div>
                 )}
 
-                <div className={`st-workspace ${!['dashboard', 'repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers'].includes(tool) ? 'full-width' : ''}`}>
+                <div className={`st-workspace ${!RIGHT_PANEL_TOOLS.has(tool) ? 'full-width' : ''}`}>
                     <main className={`st-center ${tool === 'repeat' ? 'no-scroll' : ''}`}>
                         {shouldShowPageHead && (
                             <div className="st-page-head">
@@ -1385,7 +1394,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
                         {renderCanvas()}
                     </main>
-                    {['dashboard', 'repeat', 'vectorize', 'upscale', 'removebg', 'imagelayers'].includes(tool) && (
+                    {RIGHT_PANEL_TOOLS.has(tool) && (
                         <aside className="st-right-panel" ref={setRightPanelEl} />
                     )}
                 </div>
@@ -1406,9 +1415,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                 <I d="M6 18L18 6M6 6l12 12" s={18} />
                             </button>
                         </div>
-                        {(isAdmin ? ADMIN_NAV : NAV).map((section, idx) => (
+                        {(isAdmin ? ADMIN_NAV : visibleNav).map((section, idx) => (
                             <div key={idx}>
-                                {section.section && <div className="st-mobile-nav-section">{section.section}</div>}
+                                {section.section && <div className="st-mobile-nav-section">{navSectionLabel(section)}</div>}
                                 {section.items.map((it) => (
                                     <button
                                         key={it.id}
@@ -1424,6 +1433,16 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                 ))}
                             </div>
                         ))}
+                        {!isAdmin && typeof onSwitchStudio === 'function' && (
+                            <button
+                                type="button"
+                                className="st-mobile-nav-item st-mobile-nav-switch"
+                                onClick={() => { setMobileNavOpen(false); onSwitchStudio(); }}
+                            >
+                                <I d={activeStudio.icon} s={18} />
+                                <span>Switch studio ({activeStudio.label})</span>
+                            </button>
+                        )}
                         {!isAdmin && (
                             <button
                                 type="button"

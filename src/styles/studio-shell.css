@@ -5336,3 +5336,91 @@
   }
 }
 
+
+/* ---- Studio switcher (Print / Embroidery / Woven) ---- */
+.st-studio-switch {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: -0.75rem 0 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.st-studio-switch:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(139, 92, 246, 0.35);
+}
+.st-studio-switch:disabled {
+  cursor: default;
+}
+.st-studio-switch:focus-visible {
+  outline: 3px solid rgba(139, 92, 246, 0.35);
+  outline-offset: 2px;
+}
+.st-studio-switch-icon {
+  --studio-accent: #8b5cf6;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--studio-accent);
+  background: color-mix(in srgb, var(--studio-accent) 18%, transparent);
+}
+.st-studio-switch-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+.st-studio-switch-label small {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+.st-studio-switch-label strong {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #fff;
+}
+.st-studio-switch-action {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(167, 139, 250, 0.95);
+}
+.st-studio-switch:disabled .st-studio-switch-action {
+  display: none;
+}
+.st-mobile-nav-switch {
+  margin-bottom: 0.5rem;
+  border: 1px dashed rgba(139, 92, 246, 0.35) !important;
+}
+
+/* Sidebar rows: the text label truncates, the Soon / Pro badge never clips. */
+.st-nav-item > span:not(.st-nav-soon-badge):not(.st-nav-pro-badge),
+.st-mobile-nav-item > span:not(.st-nav-soon-badge):not(.st-nav-pro-badge) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.st-nav-item .st-nav-soon-badge,
+.st-nav-item .st-nav-pro-badge,
+.st-mobile-nav-item .st-nav-soon-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  overflow: visible;
+  text-overflow: clip;
+}

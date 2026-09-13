@@ -64,6 +64,13 @@ DEFAULT_CREDIT_PRICING = [
     ("imageLayers", "Image Layers (3-layer default)", "/api/image-layers", 69, "dynamic", 1),
     ("imageLayerEdit", "Image Layer Edit", "/api/edit-layer", 35, "fixed", 1),
     ("layerCompose", "Layer Compose / Flatten", "/api/compose-layers", 10, "fixed", 1),
+    ("placementCompose", "Placement Studio Flatten", "/api/placement/compose", 5, "fixed", 1),
+    ("appliqueCreate", "Appliqué Patch", "/api/applique/create", 2, "fixed", 1),
+    ("embellishGenerate", "Embellishment Sheet", "/api/embellish/generate", 1, "fixed", 1),
+    ("embroideryMockup", "Embroidery Mockup", "/api/embroidery/mockup", 67, "dynamic", 1),
+    ("stitchRenderMotif", "Stitch Render (motif)", "/api/stitch/render", 35, "fixed", 1),
+    ("stitchRenderDesign", "Stitch Render (design)", "/api/stitch/render", 67, "dynamic", 1),
+    ("embroideryTechPack", "Embroidery Tech Pack PDF", "/api/techpack/embroidery", 3, "fixed", 1),
     ("qwenSessionExportPsd", "Qwen Session Export PSD", "/api/qwen-sessions/export/psd", 5, "fixed", 1),
     ("qwenSessionExportZip", "Qwen Session Export ZIP", "/api/qwen-sessions/export/zip", 2, "fixed", 1),
     ("qwenSessionExportSvg", "Qwen Session Export SVG", "/api/qwen-sessions/export/svg", 15, "fixed", 1),
@@ -320,17 +327,34 @@ def resolve_input_url(input_filename):
     return f"/uploads/{input_filename}"
 
 
-def iso_to_epoch(iso_str):
+def parse_iso_naive_utc(iso_value):
+    """Parse an ISO timestamp into a naive UTC datetime.
+
+    Rows are normally stored naive-UTC, but some writers and imports include an offset
+    ('+00:00', '+05:30', 'Z'); those are converted to UTC so callers can compare safely.
+    Returns None when the value cannot be parsed.
+    """
+    if not iso_value:
+        return None
     try:
-        return datetime.fromisoformat(iso_str).timestamp()
-    except Exception:
+        parsed = datetime.fromisoformat(str(iso_value).strip().replace('Z', '+00:00'))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def iso_to_epoch(iso_str):
+    parsed = parse_iso_naive_utc(iso_str)
+    if parsed is None:
         return 0.0
+    return parsed.replace(tzinfo=timezone.utc).timestamp()
 
 
 def time_ago(iso_value):
-    try:
-        then = datetime.fromisoformat(iso_value)
-    except ValueError:
+    then = parse_iso_naive_utc(iso_value)
+    if then is None:
         return "Updated recently"
     delta = datetime.now(timezone.utc).replace(tzinfo=None) - then
     if delta.days >= 1:
@@ -482,6 +506,39 @@ def _pg_schema_sql():
             name TEXT NOT NULL,
             colors_json TEXT NOT NULL,
             created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS shade_cards (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            brand TEXT,
+            kind TEXT NOT NULL DEFAULT 'custom',
+            note TEXT,
+            entries_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS thread_palettes (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            project_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            card_id TEXT,
+            entries_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS motifs (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            project_id INTEGER,
+            name TEXT NOT NULL,
+            technique TEXT NOT NULL DEFAULT 'embroidery',
+            tags_json TEXT NOT NULL DEFAULT '[]',
+            filename TEXT NOT NULL,
+            source_filename TEXT,
+            width INTEGER,
+            height INTEGER,
+            created_at TEXT NOT NULL,
+            deleted_at TEXT
         );
         CREATE TABLE IF NOT EXISTS payments (
             id SERIAL PRIMARY KEY,
@@ -958,6 +1015,39 @@ def init_db():
                 colors_json TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(project_id) REFERENCES projects(id)
+            );
+            CREATE TABLE IF NOT EXISTS shade_cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                brand TEXT,
+                kind TEXT NOT NULL DEFAULT 'custom',
+                note TEXT,
+                entries_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS thread_palettes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                project_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                card_id TEXT,
+                entries_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS motifs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                project_id INTEGER,
+                name TEXT NOT NULL,
+                technique TEXT NOT NULL DEFAULT 'embroidery',
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                filename TEXT NOT NULL,
+                source_filename TEXT,
+                width INTEGER,
+                height INTEGER,
+                created_at TEXT NOT NULL,
+                deleted_at TEXT
             );
             CREATE TABLE IF NOT EXISTS payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

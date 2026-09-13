@@ -57,7 +57,7 @@ def create_brand_palette():
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO brand_palettes (project_id, name, colors_json, created_at) VALUES (?, ?, ?, ?)",
-            (project_id, name, json.dumps(colors), datetime.now(timezone.utc).isoformat())
+            (project_id, name, json.dumps(colors), datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
         )
         conn.commit()
         return jsonify({'success': True, 'id': cur.lastrowid})

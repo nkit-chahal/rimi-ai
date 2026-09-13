@@ -12,6 +12,7 @@ AI-powered textile and surface-pattern design studio. Upload artwork, extract pa
 - **Colorways** — Palette extraction, recoloring, and Pantone matching
 - **3D Mockups** — Preview patterns on apparel and home products
 - **Pipeline Studio** — Multi-step workflows with export history
+- **Embroidery studio (Pro)** — Thread Shades (shade-card matching, Pantone or imported thread cards), Motif Library (private lace / zari / motif packs), Placement Studio (place motifs on a print, solid or fabric swatch and flatten at document resolution), Appliqué & Embellishment (stitched-edge patches, sequin / bead / mirror sheets), Embroidery Mockups (zone-aware product renders with a technique × product × fabric suitability guide), Stitch Styles (AI render pass: satin, tatami, chain, French knots, zardozi, aari, kantha, cross), Embroidery Tech Pack (PDF with placement sheet in cm, stitch estimates, thread list and production notes)
 - **Credits & Billing** — Usage-based credits with Razorpay top-ups (INR)
 
 ## Tech stack
@@ -31,7 +32,7 @@ AI-powered textile and surface-pattern design studio. Upload artwork, extract pa
 RIMI_AI/
 ├── src/                      # React frontend
 │   ├── App.jsx               # Login → Studio routing
-│   ├── pages/                # Login, Studio
+│   ├── pages/                # Login, StudioSelect (Print / Embroidery / Woven picker), Studio
 │   └── components/studio/    # Tool panels, admin, shared helpers
 ├── backend/
 │   ├── server.py             # Flask app entry point

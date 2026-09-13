@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // Match the Vite build: automatic JSX runtime, so components need no `import React`.
+  esbuild: { jsx: 'automatic' },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.js'],

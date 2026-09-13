@@ -25,12 +25,20 @@ def register_all_blueprints(app):
     from routes.jobs import bp as jobs_bp
     from routes.product import bp as product_bp
     from routes.qwen_sessions import bp as qwen_sessions_bp
+    from routes.shade_cards import bp as shade_cards_bp
+    from routes.motifs import bp as motifs_bp
+    from routes.placement import bp as placement_bp
+    from routes.applique import bp as applique_bp
+    from routes.embroidery_mockups import bp as embroidery_mockups_bp
+    from routes.stitch import bp as stitch_bp
+    from routes.embroidery_techpack import bp as embroidery_techpack_bp
 
     for blueprint in [
         studio_bp, upload_bp, color_bp, generation_bp, seamless_bp,
         repeat_bp, vectorize_bp, layers_bp, mockups_bp, colorways_bp,
         exports_bp, pipeline_bp, projects_bp, admin_bp, billing_bp,
         google_auth_bp, credits_bp, remove_bg_bp, jobs_bp, product_bp,
-        qwen_sessions_bp,
+        qwen_sessions_bp, shade_cards_bp, motifs_bp, placement_bp,
+        applique_bp, embroidery_mockups_bp, stitch_bp, embroidery_techpack_bp,
     ]:
         app.register_blueprint(blueprint)
