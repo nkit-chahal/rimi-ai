@@ -357,7 +357,7 @@ export async function apiFetch(url, options = {}, token = null) {
     const headers = { ...options.headers };
     const authToken = normalizeToken(token) || normalizeToken(options.token);
     const timeoutMs = options.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
-    const { timeoutMs: _omit, token: _tokenOpt, ...fetchOptions } = options;
+    const { ...fetchOptions } = options;
 
     if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;

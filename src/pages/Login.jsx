@@ -1,11 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { API, normalizeToken, prefetchStudioState } from '../components/studio/shared/helpers';
 import '../styles/login.css';
 
+// WebP copies of the demo prints: the login page is the first paint for every visitor, and the
+// PNG originals are ~1.1 MB each. The PNGs stay in public/ because projects and the backend
+// still reference them as placeholder artwork.
 const LOGIN_STAGE_IMAGES = [
-  { src: '/demo_floral.png', label: 'Floral textile' },
-  { src: '/demo_geometric.png', label: 'Geometric textile' },
-  { src: '/demo_botanical.png', label: 'Botanical textile' },
+  { src: '/demo_floral.webp', label: 'Floral textile' },
+  { src: '/demo_geometric.webp', label: 'Geometric textile' },
+  { src: '/demo_botanical.webp', label: 'Botanical textile' },
 ];
 
 const STAGE_INTERVAL_MS = 6000;

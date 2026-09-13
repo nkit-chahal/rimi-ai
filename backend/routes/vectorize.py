@@ -4,6 +4,7 @@ import uuid
 import base64
 import replicate
 from flask import Blueprint, request, jsonify, g
+from rate_limits import generation_rate_limit
 from middleware import login_required, project_access_from_payload
 
 from config import UPLOAD_DIR, RESULTS_DIR
@@ -21,6 +22,7 @@ bp = Blueprint('vectorize', __name__)
 # --------------- Vectorize (vtracer Local / Recraft API) ---------------
 @bp.route('/api/vectorize', methods=['POST'])
 @login_required
+@generation_rate_limit
 def vectorize_image():
     """
     Vectorizes a raster image to SVG.
@@ -190,6 +192,7 @@ def vectorize_image():
 # --------------- Upscale (Super Resolution) ---------------
 @bp.route('/api/upscale', methods=['POST'])
 @login_required
+@generation_rate_limit
 def upscale():
     data = request.get_json()
     filename = data.get('filename', '')

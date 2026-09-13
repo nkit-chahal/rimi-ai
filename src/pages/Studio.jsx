@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense as ReactSuspense } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense as ReactSuspense } from 'react';
 
 import ToolComingSoon from '../components/studio/shared/ToolComingSoon';
 import { COMING_SOON_TOOLS } from '../components/studio/shared/comingSoonTools';
@@ -13,7 +13,7 @@ import '../styles/studio-shell.css';
 
 // Shared icons & helpers
 import { I } from '../components/studio/shared/StudioIcons';
-import { API, apiFetch, consumeStudioPrefetch, forceDownload, cacheFileAccessToken, mediaUrl } from '../components/studio/shared/helpers';
+import { API, apiFetch, consumeStudioPrefetch, cacheFileAccessToken, mediaUrl } from '../components/studio/shared/helpers';
 import ImageDropzone from '../components/studio/shared/ImageDropzone';
 import { isImageFile } from '../components/studio/shared/imageUpload';
 import BgTaskManager from '../components/studio/BgTaskManager';

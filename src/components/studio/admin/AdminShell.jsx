@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { API } from '../shared/helpers';
 import { resolveToolComponent } from '../../../router/toolRegistry';
 

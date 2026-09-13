@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 
 const VARIANTS = {
   info: 'ui-toast ui-toast-info',

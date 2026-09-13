@@ -15,7 +15,10 @@ from auth import (
     credit_requirement,
     get_updated_credits,
     record_activity,
+    refund_credits,
+    reserve_credits_or_error,
 )
+from rate_limits import generation_rate_limit
 from jobs import enqueue_or_run
 from job_runners import run_edit_layer_job, run_image_layers_job, run_inpaint_layer_job
 from services.qwen_layers import (
@@ -63,6 +66,7 @@ def run_generation_job_proxy(job_id, payload_json):
 # --------------- Image Layers (Qwen Image Layered) ---------------
 @bp.route('/api/image-layers', methods=['POST'])
 @login_required
+@generation_rate_limit
 def image_layers():
   """
   Decompose an image into separate RGBA layers using Qwen Image Layered.
@@ -217,6 +221,7 @@ def layer_ocr():
 # --------------- Edit Layer (AI per-layer editing) ---------------
 @bp.route('/api/edit-layer', methods=['POST'])
 @login_required
+@generation_rate_limit
 def edit_layer():
   """
   AI-edit layer(s) based on natural language prompt.
@@ -266,6 +271,7 @@ def edit_layer():
 # --------------- Inpaint Layer (Qwen localized edit) ---------------
 @bp.route('/api/inpaint-layer', methods=['POST'])
 @login_required
+@generation_rate_limit
 def inpaint_layer():
   """
   Localized Qwen edit for one RGBA layer using a painted canvas mask.
@@ -311,6 +317,7 @@ def inpaint_layer():
 # --------------- Smart mask (Qwen-assisted) ---------------
 @bp.route('/api/smart-mask', methods=['POST'])
 @login_required
+@generation_rate_limit
 def smart_mask():
   """Generate a mask image from a click point and prompt on a layer."""
   import io
@@ -330,9 +337,19 @@ def smart_mask():
     return access_error
 
   user_id = g.current_user['id']
+  ok_pro, pro_body, pro_code = _pro_gate("Smart mask")
+  if not ok_pro:
+    return pro_body, pro_code
+
   filepath = _resolve_filepath(filename)
   if not filepath or not prompt:
     return jsonify({'error': 'Filename and prompt are required'}), 400
+
+  # Smart mask calls Replicate, so it must be paid for like any other generation.
+  required_credits = credit_requirement('smartMask', 35)
+  ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
+  if not ok:
+    return jsonify(err), 403
 
   try:
     original_img = Image.open(filepath).convert('RGBA')
@@ -368,8 +385,11 @@ def smart_mask():
       'resultUrl': f'/results/{result_name}',
       'filename': result_name,
       'fileAccessToken': media_access_token(result_name, user_id),
+      'creditsUsed': required_credits,
+      **get_updated_credits(user_id),
     })
   except Exception as e:
+    refund_credits(user_id, project_id, required_credits, note='Smart mask failed')
     print(f"  [Smart Mask] Error: {e}")
     return jsonify({'error': f'Smart mask failed: {str(e)}'}), 500
 

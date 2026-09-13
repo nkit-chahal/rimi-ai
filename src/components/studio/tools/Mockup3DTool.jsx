@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useMemo, useState } from 'react';
+import { Suspense, lazy, useMemo, useState } from 'react';
 import { I } from '../shared/StudioIcons';
 import ProToolLock from '../shared/ProToolLock';
 

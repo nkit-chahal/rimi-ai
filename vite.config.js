@@ -16,9 +16,13 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
+        // Only split libraries that the entry really does load on every page.
+        // Do NOT add three/@react-three here: forcing them into a named chunk makes the
+        // chunk a static dependency of the entry, so every visitor (login page included)
+        // downloaded ~895 KB of Three.js for a single Pro tool. Left alone, the bundler
+        // splits it at the lazy GarmentPreview3D import and loads it only on demand.
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
-          if (id.includes('@react-three') || id.includes('/three/')) return 'three-vendor'
           if (id.includes('fabric')) return 'fabric-vendor'
           if (id.includes('@sentry')) return 'sentry-vendor'
           if (id.includes('react-router-dom') || id.includes('react-dom') || id.includes('/react/')) {

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload, mediaUrl } from '../shared/helpers';
+import { apiFetch, forceDownload } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import ImageDropzone from '../shared/ImageDropzone';
 import UploadStatusBadge from '../shared/UploadStatusBadge';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload, jsonAuthHeaders, cacheMediaFromResponse, resolveMediaUrl, mediaUrl, runAsyncJob, apiFetch } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
@@ -13,6 +13,15 @@ import BeforeAfterSlider from '../shared/BeforeAfterSlider';
 import ModelLoadingBar from '../shared/ModelLoadingBar';
 import ProToolLock from '../shared/ProToolLock';
 
+/**
+ * Canvas geometry contract.
+ *
+ * Fabric 7 changed the default object origin to centre/centre. Every position calculation in
+ * this file — and the server-side compose in backend/routes/layers.py — treats a layer's
+ * left/top as its TOP-LEFT corner, which is what Fabric <= 6 did. Each image object therefore
+ * sets originX/originY explicitly. Removing those would silently offset every layer by half
+ * its own size in the flattened output, so keep them.
+ */
 function bustUrl(url) {
     if (!url) return url;
     return url.includes('?') ? `${url}&t=${Date.now()}` : `${url}?t=${Date.now()}`;
@@ -235,6 +244,8 @@ export default function ImageLayersTool(props) {
         loadFabricFromPath(d.resultUrl, currentToken).then((newImg) => {
             newImg.set({
                 customId: layerId,
+                originX: 'left',
+                originY: 'top',
                 left: objToReplace.left,
                 top: objToReplace.top,
                 scaleX: objToReplace.scaleX,
@@ -391,6 +402,8 @@ export default function ImageLayersTool(props) {
                     clearLayerMask();
                     maskImg.set({
                         customType: 'inpaintMask',
+                        originX: 'left',
+                        originY: 'top',
                         selectable: false,
                         evented: false,
                         excludeFromExport: true,
@@ -519,6 +532,12 @@ export default function ImageLayersTool(props) {
                 });
                 obj.setCoords();
             });
+
+            // The whole group moved, so the view->document mapping moved with it.
+            if (baseCanvasLayoutRef.current) {
+                baseCanvasLayoutRef.current.baseLeft += offsetX;
+                baseCanvasLayoutRef.current.baseTop += offsetY;
+            }
         };
 
         canvas.on('mouse:wheel', (opt) => {
@@ -627,6 +646,8 @@ export default function ImageLayersTool(props) {
 
                 img.set({
                     customId: layer.index,
+                    originX: 'left',
+                    originY: 'top',
                     left: layerLeft,
                     top: layerTop,
                     scaleX: (layer.scaleX ?? 1) * baseScale,
@@ -823,6 +844,8 @@ export default function ImageLayersTool(props) {
                     const childTop = sourceObj.top + (child.y || 0) * sourceObj.scaleY;
                     img.set({
                         customId: child.id,
+                        originX: 'left',
+                        originY: 'top',
                         left: childLeft,
                         top: childTop,
                         scaleX: sourceObj.scaleX,
@@ -962,6 +985,10 @@ export default function ImageLayersTool(props) {
             if (obj.initialTop !== undefined) obj.initialTop += dy;
             obj.setCoords();
         });
+        if (baseCanvasLayoutRef.current) {
+            baseCanvasLayoutRef.current.baseLeft += dx;
+            baseCanvasLayoutRef.current.baseTop += dy;
+        }
         canvas.renderAll();
     }, []);
 
@@ -1138,6 +1165,8 @@ export default function ImageLayersTool(props) {
             loadFabricFromPath(d.resultUrl, currentToken).then((newImg) => {
                 newImg.set({
                     customId: selectedLayerId,
+                    originX: 'left',
+                    originY: 'top',
                     left: objToReplace.left,
                     top: objToReplace.top,
                     scaleX: objToReplace.scaleX,
@@ -1196,6 +1225,50 @@ export default function ImageLayersTool(props) {
         }
     };
 
+    /**
+     * Canvas coordinates are a fitted *view* of the source artwork, so flattening straight from
+     * them produced exports at whatever size the browser window happened to be. Invert the
+     * view transform recorded in baseCanvasLayoutRef to get back to source pixels, so a flatten
+     * is always full resolution and independent of the viewport.
+     */
+    const buildComposePayload = () => {
+        const canvas = canvasInstanceRef.current;
+        if (!canvas) return null;
+        const layout = baseCanvasLayoutRef.current;
+        const scale = layout?.baseScale || 1;
+        const offsetX = layout?.baseLeft ?? 0;
+        const offsetY = layout?.baseTop ?? 0;
+
+        const layerMap = new Map(layersList.map((layer) => [layer.id, layer]));
+        const layers = canvas.getObjects()
+            .filter((obj) => obj.customId !== undefined && obj.customId !== null && obj.customType !== 'inpaintMask')
+            .map((obj) => {
+                const layer = layerMap.get(obj.customId);
+                return {
+                    id: obj.customId,
+                    name: layer?.name,
+                    filename: layer?.filename,
+                    x: ((obj.left || 0) - offsetX) / scale,
+                    y: ((obj.top || 0) - offsetY) / scale,
+                    scaleX: (obj.scaleX || 1) / scale,
+                    scaleY: (obj.scaleY || 1) / scale,
+                    angle: obj.angle || 0,
+                    flipX: !!obj.flipX,
+                    flipY: !!obj.flipY,
+                    opacity: obj.opacity ?? 1,
+                    visible: obj.visible !== false,
+                };
+            })
+            .filter((layer) => layer.filename);
+
+        if (!layers.length) return null;
+        return {
+            layers,
+            width: Math.round(layout?.sourceWidth || canvas.getWidth()),
+            height: Math.round(layout?.sourceHeight || canvas.getHeight()),
+        };
+    };
+
     const handleComposeLayers = async () => {
         const canvas = canvasInstanceRef.current;
         if (!canvas) return;
@@ -1208,29 +1281,8 @@ export default function ImageLayersTool(props) {
             return;
         }
 
-        const layerMap = new Map(layersList.map(layer => [layer.id, layer]));
-        const payloadLayers = canvas.getObjects()
-            .filter(obj => obj.customId !== undefined && obj.customId !== null && obj.customType !== 'inpaintMask')
-            .map((obj) => {
-                const layer = layerMap.get(obj.customId);
-                return {
-                    id: obj.customId,
-                    name: layer?.name,
-                    filename: layer?.filename,
-                    x: obj.left || 0,
-                    y: obj.top || 0,
-                    scaleX: obj.scaleX || 1,
-                    scaleY: obj.scaleY || 1,
-                    angle: obj.angle || 0,
-                    flipX: !!obj.flipX,
-                    flipY: !!obj.flipY,
-                    opacity: obj.opacity ?? 1,
-                    visible: obj.visible !== false,
-                };
-            })
-            .filter(layer => layer.filename);
-
-        if (!payloadLayers.length) return;
+        const payload = buildComposePayload();
+        if (!payload) return;
 
         setIsExportingLayers(true);
         try {
@@ -1238,9 +1290,7 @@ export default function ImageLayersTool(props) {
                 method: 'POST',
                 headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
-                    layers: payloadLayers,
-                    width: Math.round(canvas.getWidth()),
-                    height: Math.round(canvas.getHeight()),
+                    ...payload,
                     projectId: activeProject.id,
                     userId: user.id,
                     sessionId,
@@ -1273,35 +1323,14 @@ export default function ImageLayersTool(props) {
         }
         setIsExportingLayers(true);
         try {
-            const layerMap = new Map(layersList.map((layer) => [layer.id, layer]));
-            const payloadLayers = canvas.getObjects()
-                .filter((obj) => obj.customId !== undefined && obj.customId !== null && obj.customType !== 'inpaintMask')
-                .map((obj) => {
-                    const layer = layerMap.get(obj.customId);
-                    return {
-                        id: obj.customId,
-                        name: layer?.name,
-                        filename: layer?.filename,
-                        x: obj.left || 0,
-                        y: obj.top || 0,
-                        scaleX: obj.scaleX || 1,
-                        scaleY: obj.scaleY || 1,
-                        angle: obj.angle || 0,
-                        flipX: !!obj.flipX,
-                        flipY: !!obj.flipY,
-                        opacity: obj.opacity ?? 1,
-                        visible: obj.visible !== false,
-                    };
-                })
-                .filter((layer) => layer.filename);
+            const payload = buildComposePayload();
+            if (!payload) return;
 
             const res = await fetch(`${API}/api/compose-layers`, {
                 method: 'POST',
                 headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
-                    layers: payloadLayers,
-                    width: Math.round(canvas.getWidth()),
-                    height: Math.round(canvas.getHeight()),
+                    ...payload,
                     projectId: activeProject.id,
                     userId: user.id,
                     sessionId,
@@ -1492,7 +1521,6 @@ export default function ImageLayersTool(props) {
         </button>
     );
 
-
     const renderCanvasBlock = () => {
         return (
             <div {...pasteProps} className={`st-layer-editor ${isImageLayersFullscreen ? 'fullscreen' : ''}`}>
@@ -1609,7 +1637,6 @@ export default function ImageLayersTool(props) {
                                 ))}
                             </div>
                         )}
-
 
                         {/* Main Body */}
                         <div className="st-layer-body">

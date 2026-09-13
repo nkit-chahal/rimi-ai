@@ -344,7 +344,7 @@ def delete_exports():
                     tag_updated = False
                     try:
                         row = dict(export_row)
-                        now = datetime.now(timezone.utc).isoformat()
+                        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                         tag_updated = storage.update_object_tags('results', safe_name, {
                             'lifecycle': 'archived',
                             'deleted_at': now,

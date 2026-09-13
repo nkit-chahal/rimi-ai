@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import I from '../shared/StudioIcons';
 import AdminPagination, { useClientPagination } from './AdminPagination';
 

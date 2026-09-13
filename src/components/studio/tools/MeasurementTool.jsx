@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, mediaUrl } from '../shared/helpers';
+
 import MediaImg from '../shared/MediaImg';
-import { createPortal } from 'react-dom';
 
 /**
  * MeasurementTool Component
@@ -23,17 +22,7 @@ import { createPortal } from 'react-dom';
  * @param {Object} props.controls - Studio control state, e.g. scale, printWidth, gridSize
  */
 export default function MeasurementTool(props) {
-    const { 
-        uploaded, 
-        preview, 
-        activeProject, 
-        user, 
-        setError, 
-        addBgTask, 
-        updateCreditsFromResponse, 
-        controls,
-        currentToken,
-    } = props;
+    const { uploaded, preview, controls, currentToken } = props;
 
     // Drag-and-drop state (inherited template structure)
     const [isDrag, setIsDrag] = useState(false);

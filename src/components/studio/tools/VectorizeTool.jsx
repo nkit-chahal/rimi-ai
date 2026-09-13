@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders, cacheMediaFromResponse } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
@@ -83,7 +83,6 @@ export default function VectorizeTool(props) {
         });
     };
 
-
     const upscale = async () => {
         if (!uploaded) {
             setError('Upload first');
@@ -120,8 +119,6 @@ export default function VectorizeTool(props) {
             modelId: 'google/upscaler',
         });
     };
-
-
 
     const renderCanvasBlock = () => {
         const resultUrl = tool === 'vectorize' ? vecUrl : upscaleUrl;

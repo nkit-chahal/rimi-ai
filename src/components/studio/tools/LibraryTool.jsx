@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload } from '../shared/helpers';
-import { createPortal } from 'react-dom';
+import { API } from '../shared/helpers';
 
 export default function LibraryTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, currentToken } = props;
+    const { activeProject, setError, currentToken } = props;
 
     const [brandPalettes, setBrandPalettes] = useState([]);
     const [brandPalettesLoading, setBrandPalettesLoading] = useState(false);
@@ -76,7 +75,6 @@ export default function LibraryTool(props) {
             fetchBrandPalettes();
         }
     }, [activeProject?.id, fetchBrandPalettes]);
-
 
             return (
                 <div style={{ padding: '2rem', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>

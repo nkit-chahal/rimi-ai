@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
@@ -9,8 +9,18 @@ import ModelLoadingBar from '../shared/ModelLoadingBar';
 
 export default function VectorProTool(props) {
     const {
-        uploaded, preview, activeProject, user, setError, updateCreditsFromResponse, creditPricing, brandPalettes, currentToken,
-        handlePreUpload, onUploadInvalid, onUploadPaste, uploadStatus,
+        uploaded,
+        preview,
+        activeProject,
+        user,
+        setError,
+        updateCreditsFromResponse,
+        creditPricing,
+        currentToken,
+        handlePreUpload,
+        onUploadInvalid,
+        onUploadPaste,
+        uploadStatus,
     } = props;
 
     const uploadReady = Boolean(uploaded?.filename) && uploadStatus === 'ready';
@@ -130,7 +140,6 @@ export default function VectorProTool(props) {
             setLayerExportLoading(null);
         }
     };
-
 
     return (
         <div {...pasteProps} className="st-pattern-layout" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>

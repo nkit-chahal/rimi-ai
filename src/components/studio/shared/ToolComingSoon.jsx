@@ -1,4 +1,3 @@
-import React from 'react';
 import { I } from './StudioIcons';
 
 export default function ToolComingSoon({ title, description, features = [], icon }) {

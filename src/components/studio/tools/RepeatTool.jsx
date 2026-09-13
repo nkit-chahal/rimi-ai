@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload, mediaUrl } from '../shared/helpers';
+import { apiFetch, forceDownload, mediaUrl } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import { createPortal } from 'react-dom';
 
@@ -10,7 +10,32 @@ import OpenInQwenButton from '../shared/OpenInQwenButton';
 import { calcExportGrid, calcRepeatLayoutMetrics } from '../shared/repeatLayout';
 
 export default function RepeatTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, controls, updateControls, repeatUrl, setRepeatUrl, isRepeat, setIsRepeat, rightPanelEl, handlePreUpload, onUploadInvalid, onUploadPaste, uploadStatus, tool, state, setState, setUploads, currentToken, setTool, setQwenLaunch } = props;
+    const {
+        uploaded,
+        preview,
+        activeProject,
+        user,
+        setError,
+        updateCreditsFromResponse,
+        creditPricing,
+        controls,
+        updateControls,
+        setRepeatUrl,
+        isRepeat,
+        setIsRepeat,
+        rightPanelEl,
+        handlePreUpload,
+        onUploadInvalid,
+        onUploadPaste,
+        uploadStatus,
+        tool,
+        state,
+        setState,
+        setUploads,
+        currentToken,
+        setTool,
+        setQwenLaunch,
+    } = props;
 
     const { pasteProps, inputProps, openFilePicker, rootProps, isDrag } = useImageDropzone({
         onFile: handlePreUpload,
@@ -143,7 +168,6 @@ export default function RepeatTool(props) {
             setIsRepeat(false);
         }
     };
-
 
     useEffect(() => {
         setCanvasZoom(1);
@@ -390,7 +414,6 @@ export default function RepeatTool(props) {
             </section>
         );
     };
-
 
     const renderCanvasBlock = () => {
         return (
