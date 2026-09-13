@@ -12,7 +12,7 @@ from scipy import ndimage
 from flask import Blueprint, request, jsonify, g
 from middleware import login_required, project_access_from_payload
 
-from config import UPLOAD_DIR, RESULTS_DIR, groq_client
+from config import UPLOAD_DIR, RESULTS_DIR, groq_client, GROQ_VISION_MODEL
 from auth import (
     log_export, log_replicate_call,
     credit_requirement, get_updated_credits,
@@ -132,7 +132,7 @@ def _generate_single_mockup(
     try:
         print(f"  [Mockup] Describing pattern with Groq Vision...")
         completion = groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model=GROQ_VISION_MODEL,
             messages=[{
                 "role": "user",
                 "content": [

@@ -12,7 +12,7 @@ from middleware import login_required, project_access_from_payload
 from datetime import datetime, timezone
 from PIL import Image, ImageDraw, ImageChops, ImageFilter
 
-from config import UPLOAD_DIR, RESULTS_DIR, groq_client
+from config import UPLOAD_DIR, RESULTS_DIR, groq_client, GROQ_VISION_MODEL
 from db import db
 from auth import (
     credit_error_payload, credit_requirement,
@@ -95,7 +95,7 @@ def generate_seamless():
         else:
             messages.append({"role": "user", "content": system_instruction})
         completion = groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model=GROQ_VISION_MODEL,
             messages=messages, temperature=0.3 + (creativity * 0.12), max_completion_tokens=256,
         )
         designer_prompt = completion.choices[0].message.content.strip()

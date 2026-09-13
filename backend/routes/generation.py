@@ -9,7 +9,7 @@ import requests as http_requests
 from flask import Blueprint, request, jsonify, g
 from urllib.parse import urlparse
 
-from config import UPLOAD_DIR, RESULTS_DIR, groq_client, safe_filename
+from config import UPLOAD_DIR, RESULTS_DIR, groq_client, safe_filename, GROQ_VISION_MODEL
 from middleware import login_required, project_access_from_payload
 from auth import (
     adjust_reserved_credits,
@@ -91,7 +91,7 @@ def describe_image():
         }
         style_instruction = creativity_guidelines.get(creativity, creativity_guidelines[3])
         completion = groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model=GROQ_VISION_MODEL,
             messages=[{"role": "user", "content": [
                 {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_b64}"}},
                 {"type": "text", "text": (
@@ -325,7 +325,7 @@ def _describe_image_for_extraction(data_uri):
     """Use Groq vision to describe the pattern/design in an image for text-only models."""
     try:
         completion = groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model=GROQ_VISION_MODEL,
             messages=[{"role": "user", "content": [
                 {"type": "image_url", "image_url": {"url": data_uri}},
                 {"type": "text", "text": (
@@ -787,7 +787,7 @@ def generate_inspirations():
     except Exception as e:
         print(f"  [Inspirations] Image load error: {e}")
 
-    # Use Groq llama-4-scout to rewrite the prompt
+    # Use the Groq vision model to rewrite the prompt
     try:
         print(f"  [Inspirations] Consulting Llama-4-Scout to rewrite prompt (Creativity: {creativity})...")
         system_instruction = (
@@ -810,7 +810,7 @@ def generate_inspirations():
         else:
             messages.append({"role": "user", "content": system_instruction})
         completion = groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model=GROQ_VISION_MODEL,
             messages=messages, temperature=0.4 + (creativity * 0.1), max_completion_tokens=256,
         )
         designer_prompt = completion.choices[0].message.content.strip()

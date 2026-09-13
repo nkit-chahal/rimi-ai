@@ -26,6 +26,14 @@ MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 os.environ.setdefault("REPLICATE_API_TOKEN", os.getenv("REPLICATE_API_TOKEN", ""))
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
 
+# Groq vision model used for captioning, OCR, semantic select and prompt building.
+# Hosted models get retired without warning: meta-llama/llama-4-scout-17b-16e-instruct was
+# removed and every Groq call started returning 404 model_not_found. Keep this in one place
+# and overridable by env so a future retirement is a config change, not a code change.
+# Any replacement must accept multimodal content (an image_url part) and return clean text —
+# reasoning models that emit <think> blocks break the JSON parsing in layer OCR.
+GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+
 # Database – PostgreSQL on Railway (DATABASE_URL), SQLite locally
 DATABASE_URL = os.getenv('DATABASE_URL')
 DB_PATH = os.path.join(BASE_DIR, 'rimi_ai.sqlite3')

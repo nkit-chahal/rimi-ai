@@ -22,7 +22,7 @@ from auth import (
     reserve_credits_or_error,
 )
 from security_utils import media_access_token, safe_fetch_url
-from config import RESULTS_DIR, UPLOAD_DIR, groq_client
+from config import RESULTS_DIR, UPLOAD_DIR, groq_client, GROQ_VISION_MODEL
 from db import db
 
 
@@ -102,7 +102,7 @@ def execute_make_seamless(data, on_progress=None):
         progress(18, "Analyzing pattern")
         tile_uri = img_to_data_uri(img.resize((512, 512), Image.Resampling.LANCZOS))
         completion = groq_client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            model=GROQ_VISION_MODEL,
             messages=[{
                 "role": "user",
                 "content": [
