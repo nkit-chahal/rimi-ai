@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, forceDownload, jsonAuthHeaders, cacheMediaFromResponse, resolveMediaUrl, mediaUrl, runAsyncJob, apiFetch } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
@@ -1521,7 +1521,6 @@ export default function ImageLayersTool(props) {
         </button>
     );
 
-
     const renderCanvasBlock = () => {
         return (
             <div {...pasteProps} className={`st-layer-editor ${isImageLayersFullscreen ? 'fullscreen' : ''}`}>
@@ -1638,7 +1637,6 @@ export default function ImageLayersTool(props) {
                                 ))}
                             </div>
                         )}
-
 
                         {/* Main Body */}
                         <div className="st-layer-body">

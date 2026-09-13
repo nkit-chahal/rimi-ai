@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { API, normalizeToken, prefetchStudioState } from '../components/studio/shared/helpers';
 import '../styles/login.css';
 

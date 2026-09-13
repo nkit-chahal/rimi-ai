@@ -1,4 +1,3 @@
-import React from 'react';
 import { openInQwenStudio } from '../shared/helpers';
 
 export default function OpenInQwenButton({

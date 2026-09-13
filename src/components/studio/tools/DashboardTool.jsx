@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload, jsonAuthHeaders, bearerAuthHeaders, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
+import { API, apiFetch, jsonAuthHeaders, bearerAuthHeaders, cacheMediaFromResponse } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
@@ -9,7 +9,21 @@ import { useImageDropzone } from '../shared/useImageDropzone';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
 
 export default function DashboardTool(props) {
-    const { uploaded, preview, activeProject, user, setError, setNotice, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, tool, rightPanelEl, setTool, onUploadPaste, setQwenLaunch, setUploads } = props;
+    const {
+        activeProject,
+        user,
+        setError,
+        setNotice,
+        updateCreditsFromResponse,
+        creditPricing,
+        currentToken,
+        tool,
+        rightPanelEl,
+        setTool,
+        onUploadPaste,
+        setQwenLaunch,
+        setUploads,
+    } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
     const STEP_TYPES = [
@@ -460,8 +474,6 @@ export default function DashboardTool(props) {
     const [isPanning, setIsPanning] = useState(false);
     const [panStart, setPanStart] = useState({ x: 0, y: 0 });
     const [showTileBoundary, setShowTileBoundary] = useState(true);
-
-
 
     const renderCanvasBlock = () => {
         return (

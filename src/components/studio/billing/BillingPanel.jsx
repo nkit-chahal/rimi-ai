@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API } from '../shared/helpers';
 import { loadRazorpay } from '../shared/loadRazorpay';

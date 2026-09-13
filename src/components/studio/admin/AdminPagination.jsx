@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 export function useClientPagination(items, pageSize = 20) {
     const [page, setPage] = useState(1);

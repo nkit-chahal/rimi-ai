@@ -1,5 +1,3 @@
-import React from 'react';
-
 const VARIANTS = {
   primary: 'ui-btn ui-btn-primary',
   secondary: 'ui-btn ui-btn-secondary',

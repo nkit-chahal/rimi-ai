@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import MediaImg from './MediaImg';
 
 /** Side-by-side before/after comparison with draggable divider. */

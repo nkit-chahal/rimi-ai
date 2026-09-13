@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders, resolveImagePayload, cacheMediaFromResponse, mediaUrl, openFileInTool } from '../shared/helpers';
+import { API, forceDownload, jsonAuthHeaders, resolveImagePayload, cacheMediaFromResponse, openFileInTool } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
@@ -158,7 +158,6 @@ export default function PatternTool({
         });
     };
 
-
     const sendExtractEdit = async (presetPrompt) => {
         const model = extractResults[extractGalleryIndex];
         const userMsg = String(presetPrompt ?? extractChatInput).trim();
@@ -221,7 +220,6 @@ export default function PatternTool({
         setIsExtractEditing(false);
         extractChatInputRef.current?.focus();
     };
-
 
     const anyLoading = extractResults.some(m => m.loading);
     const anyResults = extractResults.some(m => m.url);

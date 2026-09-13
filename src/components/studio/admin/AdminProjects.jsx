@@ -1,4 +1,3 @@
-import React from 'react';
 import I from '../shared/StudioIcons';
 import AdminPagination, { useClientPagination } from './AdminPagination';
 

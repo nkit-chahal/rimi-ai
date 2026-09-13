@@ -1,4 +1,3 @@
-import React from 'react';
 import I from '../shared/StudioIcons';
 
 function shortDay(iso) {

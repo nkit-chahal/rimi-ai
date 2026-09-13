@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { I } from '../shared/StudioIcons';
 import { API, apiFetch } from '../shared/helpers';
 

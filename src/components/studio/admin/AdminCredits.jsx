@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import I from '../shared/StudioIcons';
 import { API } from '../shared/helpers';
 import AdminPagination, { useClientPagination } from './AdminPagination';

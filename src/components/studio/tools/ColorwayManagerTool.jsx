@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { apiFetch, forceDownload, API, jsonAuthHeaders, mediaUrl } from '../shared/helpers';
+import { apiFetch, forceDownload, API, jsonAuthHeaders } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import ImageDropzone from '../shared/ImageDropzone';
-import UploadStatusBadge from '../shared/UploadStatusBadge';
-import UploadImageFrame from '../shared/UploadImageFrame';
+
 import { useImageDropzone } from '../shared/useImageDropzone';
 import ModelLoadingBar from '../shared/ModelLoadingBar';
 
@@ -118,7 +117,6 @@ export default function ColorwayManagerTool(props) {
     };
 
     // ===== MEASUREMENT TOOL =====
-
 
     const strategies = [
         { id: 'complementary', label: 'Complementary', desc: 'Opposite colors on the wheel', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM12 7a2 2 0 100 4 2 2 0 000-4z' },

@@ -1,4 +1,3 @@
-import React from 'react';
 import { isProUser } from './planTiers';
 
 /** Full-tool lock overlay for Pro-only studio tools. */

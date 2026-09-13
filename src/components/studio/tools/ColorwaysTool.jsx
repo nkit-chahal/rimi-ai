@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { I } from '../shared/StudioIcons';
 import { apiFetch, forceDownload, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
@@ -104,7 +104,6 @@ export default function ColorwaysTool(props) {
     // ===== END COLORWAYS FUNCTIONS =====
 
     // ===== VECTOR PRO (Pantone / Color Reduction) =====
-
 
     if (!preview) {
         return (

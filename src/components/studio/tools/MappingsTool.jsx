@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload, mediaUrl } from '../shared/helpers';
+import { API, apiFetch, forceDownload } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
-import { createPortal } from 'react-dom';
+
 import { isImageFile } from '../shared/imageUpload';
 import '../../../styles/tools/mappings.css';
 import { useImageDropzone } from '../shared/useImageDropzone';
@@ -110,7 +110,6 @@ const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
     );
 };
 
-
 const isMappingFile = (file) => {
     if (!file) return false;
     if (isImageFile(file)) return true;
@@ -118,7 +117,16 @@ const isMappingFile = (file) => {
 };
 
 export default function MappingsTool(props) {
-    const { uploaded, preview, activeProject, user, setError, addBgTask, updateCreditsFromResponse, creditPricing, currentToken, onUploadPaste, setTool } = props;
+    const {
+        activeProject,
+        user,
+        setError,
+        addBgTask,
+        updateCreditsFromResponse,
+        creditPricing,
+        currentToken,
+        onUploadPaste,
+    } = props;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
 
@@ -325,7 +333,6 @@ export default function MappingsTool(props) {
     // ===== END MAPPINGS =====
 
     // ===== COLORWAYS FUNCTIONS =====
-
 
     const STEPS = ['Upload Print', 'Select Category', 'Choose Products', 'Map & Preview'];
     const currentProducts = MAPPING_PRODUCTS[mappingCategory] || [];

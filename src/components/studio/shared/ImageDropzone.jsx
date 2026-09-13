@@ -1,4 +1,3 @@
-import React from 'react';
 import { I } from './StudioIcons';
 import { useImageDropzone } from './useImageDropzone';
 import { ACCEPTED_IMAGE_EXTENSIONS } from './imageUpload';

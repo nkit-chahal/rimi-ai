@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { I } from './StudioIcons';
 
 export default function StudioCommandPalette({ open, query, onQueryChange, onClose, items, onSelect }) {
