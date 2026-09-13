@@ -116,7 +116,7 @@ export default function VectorizeTool(props) {
         };
 
         addBgTask('upscale', `Super Resolution (${upscaleFactor})`, uploaded.filename, trigger, {
-            modelId: 'google/upscaler',
+            modelId: 'nightmareai/real-esrgan',
         });
     };
 
@@ -217,7 +217,7 @@ export default function VectorizeTool(props) {
                                     active
                                     modelId={tool === 'vectorize'
                                         ? (vecEngine === 'api' ? 'recraft-ai/recraft-vectorize' : 'local')
-                                        : 'google/upscaler'}
+                                        : 'nightmareai/real-esrgan'}
                                     label={tool === 'vectorize' ? 'Converting to vector…' : 'Enhancing resolution…'}
                                     accent="#6366f1"
                                     expectedMs={tool === 'vectorize' && vecEngine !== 'api' ? 5000 : undefined}

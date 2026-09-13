@@ -88,12 +88,12 @@ export const MODEL_TIMINGS = {
         maxMs: 360000,
         label: 'GPT Image 2',
     },
-    // Not in the log table — estimated from similar upscalers
-    'google/upscaler': {
+    // google/upscaler was retired upstream (Google removed imagen-4.0-upscale-preview).
+    'nightmareai/real-esrgan': {
         expectedMs: 8000,
         minMs: 4000,
-        maxMs: 15000,
-        label: 'Google Upscaler',
+        maxMs: 20000,
+        label: 'Real-ESRGAN',
     },
     // Local / non-Replicate tools
     local: {
@@ -108,7 +108,7 @@ export const MODEL_TIMINGS = {
 export const TOOL_DEFAULT_MODELS = {
     removebg: '851-labs/background-remover',
     vectorize: 'recraft-ai/recraft-vectorize',
-    upscale: 'google/upscaler',
+    upscale: 'nightmareai/real-esrgan',
     seamless: 'black-forest-labs/flux-fill-pro',
     'seamless-generate': 'replicate/seamless-texture',
     mappings: 'google/nano-banana-2',

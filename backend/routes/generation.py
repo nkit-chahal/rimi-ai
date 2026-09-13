@@ -304,7 +304,8 @@ MODEL_TO_CREDITS = {
     'google/imagen-4-ultra':           69,   # $0.06 → 69 (2026-07-12)
     'google/nano-banana':              45,
     'google/nano-banana-2':            78,
-    'google/upscaler':                 23,
+    'google/upscaler':                 23,   # retired upstream; kept for historical log rows
+    'nightmareai/real-esrgan':         23,
     'bytedance/seedream-4.5':          46,
     'black-forest-labs/flux-schnell':  4,
     'black-forest-labs/flux-2-pro':    35,   # text-only 1MP; +ref billed 52 at call site

@@ -34,6 +34,12 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
 # reasoning models that emit <think> blocks break the JSON parsing in layer OCR.
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
 
+# Replicate upscaler for Super Resolution. google/upscaler was a thin wrapper over Google's
+# imagen-4.0-upscale-preview, which Google removed: the Replicate model page still resolves but
+# every run fails with a 404 from Vertex AI. real-esrgan is a stable, self-contained model.
+# Kept overridable so the next retirement is a config change rather than a code change.
+REPLICATE_UPSCALE_MODEL = os.getenv("REPLICATE_UPSCALE_MODEL", "nightmareai/real-esrgan")
+
 # Database – PostgreSQL on Railway (DATABASE_URL), SQLite locally
 DATABASE_URL = os.getenv('DATABASE_URL')
 DB_PATH = os.path.join(BASE_DIR, 'rimi_ai.sqlite3')

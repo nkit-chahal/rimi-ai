@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify, g
 from rate_limits import generation_rate_limit
 from middleware import login_required, project_access_from_payload
 
-from config import UPLOAD_DIR, RESULTS_DIR
+from config import UPLOAD_DIR, RESULTS_DIR, REPLICATE_UPSCALE_MODEL
 from auth import (
     log_export, log_replicate_call,
     get_credit_price, get_updated_credits,
@@ -221,7 +221,7 @@ def upscale():
         import uuid
         import time
         
-        print(f"  [Upscale] Processing {filename} with google/upscaler ({upscale_factor})...")
+        print(f"  [Upscale] Processing {filename} with {REPLICATE_UPSCALE_MODEL} ({upscale_factor})...")
         
         with open(filepath, "rb") as img_file:
             image_bytes = img_file.read()
@@ -230,18 +230,24 @@ def upscale():
             data_uri = f"data:{mime_type};base64,{encoded_string}"
 
         start_time = time.time()
+        # The UI sends "x2"/"x4"; real-esrgan wants an integer scale.
+        try:
+            scale = int(str(upscale_factor).lower().lstrip('x'))
+        except (TypeError, ValueError):
+            scale = 4
+        scale = max(2, min(4, scale))
         output = replicate.run(
-            "google/upscaler",
+            REPLICATE_UPSCALE_MODEL,
             input={
                 "image": data_uri,
-                "upscale_factor": upscale_factor
+                "scale": scale
             }
         )
         duration = time.time() - start_time
         credits_used = required_credits
         cost_usd = 0.02
 
-        log_replicate_call(project_id, "google/upscaler", duration, credits_used, cost_usd)
+        log_replicate_call(project_id, REPLICATE_UPSCALE_MODEL, duration, credits_used, cost_usd)
 
         result_name = f"upscale_{uuid.uuid4().hex[:8]}.png"
         result_path = os.path.join(RESULTS_DIR, result_name)
