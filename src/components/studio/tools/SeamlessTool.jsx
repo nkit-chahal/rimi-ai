@@ -40,7 +40,7 @@ export default function SeamlessTool({
     const [isSeamless, setIsSeamless] = useState(false);
     const [seamlessProgress, setSeamlessProgress] = useState(0);
     const [seamlessStatus, setSeamlessStatus] = useState('');
-    const [seamlessModelId, setSeamlessModelId] = useState('black-forest-labs/flux-fill-pro');
+    const [seamlessModelId, setSeamlessModelId] = useState('rimi/seamless-fix');
     const hasActiveSeamlessRun = useRef(false);
 
     const { pasteProps, openFilePicker, inputProps } = useImageDropzone({
@@ -83,7 +83,7 @@ export default function SeamlessTool({
         setSeamlessUrl(null);
         setError('');
         setSeamlessMode('fix');
-        setSeamlessModelId('black-forest-labs/flux-fill-pro');
+        setSeamlessModelId('rimi/seamless-fix');
         const trigger = async (reportProgress) => {
             hasActiveSeamlessRun.current = true;
             const payload = {
@@ -110,7 +110,7 @@ export default function SeamlessTool({
             return { url: resultUrl };
         };
         addBgTask('seamless', 'Make Seamless', filename || 'hero_image', trigger, {
-            modelId: 'black-forest-labs/flux-fill-pro',
+            modelId: 'rimi/seamless-fix',
         });
     };
 

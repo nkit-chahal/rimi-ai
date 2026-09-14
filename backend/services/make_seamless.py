@@ -1,6 +1,7 @@
 """Core make-seamless logic shared by HTTP route and background worker."""
 import base64
 import os
+import random
 import time
 import uuid
 from datetime import datetime, timezone
@@ -25,6 +26,112 @@ from security_utils import media_access_token, safe_fetch_url
 from config import RESULTS_DIR, UPLOAD_DIR, groq_client, GROQ_VISION_MODEL
 from db import db
 
+# Width of the inpaint band across each seam, as a percentage of the tile's height/width.
+# It was 22%, on both axes at once, which regenerated ~40% of the artwork: a redraw, not a seam
+# fix. 15% is enough for flux-fill to reconnect motifs across a hard cut.
+SEAM_BAND_PCT = 15
+
+# A seam is "invisible" when the wrap-around edge step is no bigger than the steps between
+# neighbouring pixels elsewhere in the image. Ratio 1.0 = indistinguishable from the interior.
+SEAMLESS_MAX_RATIO = 1.5
+
+# Texture inside the healed band vs the artwork right next to it. A real continuation has about
+# the same amount of detail as its surroundings; a model that gave up and painted flat colour
+# (or a banner of text) over the seam comes in far below. Seen at 0.08 on a floral print.
+FLAT_FILL_MAX_RATIO = 0.35
+
+
+def seam_continuity(img):
+    """Score how seamlessly a tile wraps, relative to its own texture.
+
+    Compares the two wrap-adjacent edges (column 0 next to column w-1, row 0 next to row h-1)
+    and divides by the mean adjacent-pixel difference inside the image. The previous scorer
+    compared 3%-wide edge strips MIRRORED and against an absolute threshold, so any painterly or
+    photographic artwork failed on its own continuous interior; nothing real could ever pass.
+    """
+    arr = np.asarray(img.convert("RGB"), dtype=np.float32)
+    seam_x = float(np.mean(np.abs(arr[:, 0] - arr[:, -1])))
+    seam_y = float(np.mean(np.abs(arr[0, :] - arr[-1, :])))
+    base_x = max(1.0, float(np.mean(np.abs(arr[:, 1:] - arr[:, :-1]))))
+    base_y = max(1.0, float(np.mean(np.abs(arr[1:, :] - arr[:-1, :]))))
+    ratio_x, ratio_y = seam_x / base_x, seam_y / base_y
+
+    def to_score(ratio):
+        # 1.0 at ratio<=1, falling to 0 at ratio 5 (a hard cut on this kind of artwork is 4-6).
+        return max(0.0, min(1.0, 1.0 - (ratio - 1.0) / 4.0))
+
+    v_score, h_score = to_score(ratio_x), to_score(ratio_y)
+    return {
+        "v": round(v_score, 4),
+        "h": round(h_score, 4),
+        "overall": round((v_score + h_score) / 2.0, 4),
+        "ratio_x": round(ratio_x, 3),
+        "ratio_y": round(ratio_y, 3),
+        "is_seamless": bool(ratio_x <= SEAMLESS_MAX_RATIO and ratio_y <= SEAMLESS_MAX_RATIO),
+    }
+
+
+def band_texture_ratio(tile, band_pct, arms=("h", "v")):
+    """Detail inside the seam band (which sits on the tile's edges after the offset is undone)
+    relative to the strip of original artwork immediately inside it. ~1.0 = the model continued
+    the design; << 1 = it filled the band with something flat. "h" checks the top/bottom edges,
+    "v" the left/right ones."""
+    arr = np.asarray(tile.convert("RGB"), dtype=np.float32)
+    h, w = arr.shape[:2]
+    bh = max(2, int(h * band_pct / 100.0) // 2)
+    bw = max(2, int(w * band_pct / 100.0) // 2)
+
+    def texture(region):
+        dx = np.abs(region[:, 1:] - region[:, :-1]).mean() if region.shape[1] > 1 else 0.0
+        dy = np.abs(region[1:, :] - region[:-1, :]).mean() if region.shape[0] > 1 else 0.0
+        return float(dx + dy) / 2.0
+
+    band, inner = [], []
+    if "h" in arms:
+        band += [texture(arr[:bh]), texture(arr[-bh:])]
+        inner += [texture(arr[bh:2 * bh]), texture(arr[-2 * bh:-bh])]
+    if "v" in arms:
+        band += [texture(arr[:, :bw]), texture(arr[:, -bw:])]
+        inner += [texture(arr[:, bw:2 * bw]), texture(arr[:, -2 * bw:-bw])]
+    return round((sum(band) / len(band)) / max(1.0, sum(inner) / len(inner)), 3)
+
+
+def cross_mask(width, height, band_pct, feather=True, arms=("h", "v")):
+    """White band(s) through the centre (where a seam sits after a half offset), black elsewhere.
+    "h" is the full-width band that heals the top/bottom seam, "v" the full-height band for the
+    left/right one. flux-fill-pro inpaints white. Feathered so the composite blends at the edge.
+
+    The pipeline heals one seam per pass. With both arms in one mask the model kept treating the
+    blob where they cross as a placeholder and painted a grey badge with text into it.
+    """
+    mask = Image.new("L", (width, height), 0)
+    draw = ImageDraw.Draw(mask)
+    x_off, y_off = width // 2, height // 2
+    h_brush = max(4, int(height * (band_pct / 100.0)))
+    v_brush = max(4, int(width * (band_pct / 100.0)))
+    if "h" in arms:
+        draw.rectangle([0, y_off - h_brush // 2, width, y_off + h_brush // 2], fill=255)
+    if "v" in arms:
+        draw.rectangle([x_off - v_brush // 2, 0, x_off + v_brush // 2, height], fill=255)
+    if feather:
+        mask = mask.filter(ImageFilter.GaussianBlur(radius=max(3, min(h_brush, v_brush) // 6)))
+        arr = np.array(mask, dtype=np.float32)
+        arr = np.clip(arr * 1.5, 0, 255).astype(np.uint8)
+        mask = Image.fromarray(arr)
+    return mask
+
+
+def composite_patch(original, patched, mask):
+    """Take the model's pixels only where the mask is white; keep the original everywhere else.
+
+    Diffusion inpainting re-encodes the whole frame, so the "preserved" region comes back close
+    but not identical, and softer every pass. Compositing keeps the artist's file byte-identical
+    outside the seam band and absorbs any size change the model made.
+    """
+    if patched.size != original.size:
+        patched = patched.resize(original.size, Image.Resampling.LANCZOS)
+    return Image.composite(patched, original, mask)
+
 
 def execute_make_seamless(data, on_progress=None):
     def progress(pct, stage):
@@ -48,27 +155,6 @@ def execute_make_seamless(data, on_progress=None):
         pil_img.save(buf, format="PNG")
         b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
         return f"data:image/png;base64,{b64}"
-
-    def compute_seam_score(img_to_score):
-        arr = np.array(img_to_score.convert("RGB"), dtype=np.float32)
-        h, w = arr.shape[:2]
-        strip_w = max(3, int(w * 0.03))
-        strip_h = max(3, int(h * 0.03))
-        left = arr[:, :strip_w, :]
-        right = arr[:, -strip_w:, :]
-        v_diff = np.mean(np.abs(left - right[:, ::-1, :])) / 255.0
-        v_score = max(0.0, 1.0 - v_diff * 6.0)
-        top = arr[:strip_h, :, :]
-        bottom = arr[-strip_h:, :, :]
-        h_diff = np.mean(np.abs(top - bottom[::-1, :, :])) / 255.0
-        h_score = max(0.0, 1.0 - h_diff * 6.0)
-        overall = (v_score + h_score) / 2.0
-        return {
-            "v": round(v_score, 4),
-            "h": round(h_score, 4),
-            "overall": round(overall, 4),
-            "is_seamless": bool(v_score > 0.82 and h_score > 0.82),
-        }
 
     try:
         progress(5, "Loading image")
@@ -97,7 +183,7 @@ def execute_make_seamless(data, on_progress=None):
         orig_w, orig_h = img.size
 
         progress(10, "Assessing seams")
-        pre_score = compute_seam_score(img)
+        pre_score = seam_continuity(img)
 
         progress(18, "Analyzing pattern")
         tile_uri = img_to_data_uri(img.resize((512, 512), Image.Resampling.LANCZOS))
@@ -107,7 +193,7 @@ def execute_make_seamless(data, on_progress=None):
                 "role": "user",
                 "content": [
                     {"type": "image_url", "image_url": {"url": tile_uri}},
-                    {"type": "text", "text": "Describe this repeating fabric/textile pattern precisely. Focus on: motif shapes, colors, background. 2 sentences max."},
+                    {"type": "text", "text": "Describe this fabric/textile print precisely: motif shapes, colors, background, and the artistic technique (e.g. watercolor, gouache, flat vector, block print, pencil). 2 sentences max."},
                 ],
             }],
             temperature=0.2,
@@ -115,31 +201,18 @@ def execute_make_seamless(data, on_progress=None):
         )
         description = completion.choices[0].message.content.strip()
 
-        def create_cross_mask(width, height, h_pct, v_pct, feather=True):
-            mask = Image.new("L", (width, height), 0)
-            draw = ImageDraw.Draw(mask)
-            x_off, y_off = width // 2, height // 2
-            h_brush = max(4, int(height * (h_pct / 100.0)))
-            v_brush = max(4, int(width * (v_pct / 100.0)))
-            draw.rectangle([0, y_off - h_brush // 2, width, y_off + h_brush // 2], fill=255)
-            draw.rectangle([x_off - v_brush // 2, 0, x_off + v_brush // 2, height], fill=255)
-            if feather:
-                mask = mask.filter(ImageFilter.GaussianBlur(radius=max(3, min(h_brush, v_brush) // 6)))
-                arr = np.array(mask, dtype=np.float32)
-                arr = np.clip(arr * 1.5, 0, 255).astype(np.uint8)
-                mask = Image.fromarray(arr)
-            return mask
-
         def inpaint_pass(offset_img, mask_img, guidance, steps, stage_label, stage_pct):
             progress(stage_pct, stage_label)
+            # Describe the PICTURE, never the task. flux-fill renders text it is told about: the
+            # previous prompt ("in the masked region ... so the tile repeats with no visible
+            # seams") came back as a grey banner reading "MASKED IN ... TILE REGION" painted
+            # straight across the seam. No "mask", "seam", "tile", "region", "repeat" in here.
             prompt = (
-                f"A perfectly seamless, continuously repeating textile pattern. "
-                f"The design shows {description}. "
-                f"In the masked region, seamlessly continue and reconnect all motifs, "
-                f"lines, shapes, and background textures so the tile repeats perfectly "
-                f"with no visible seams, breaks, or discontinuities. "
-                f"Match the exact style, colors, line weights, and artistic technique."
+                f"{description} "
+                "The design continues edge to edge as one dense all-over composition of the "
+                "same motifs, in the same technique, palette and line weight throughout."
             )
+            seed = random.randint(0, 2**31 - 1)
             img_uri = img_to_data_uri(offset_img)
             mask_uri = img_to_data_uri(mask_img)
             for attempt in range(3):
@@ -152,6 +225,7 @@ def execute_make_seamless(data, on_progress=None):
                         "output_format": "png",
                         "steps": steps,
                         "guidance": guidance,
+                        "seed": seed,
                     })
                     duration = time.time() - t0
                     credits_used = credit_requirement("seamless", 58)
@@ -160,39 +234,60 @@ def execute_make_seamless(data, on_progress=None):
                     result_img = Image.open(BytesIO(resp_img.content))
                     if result_img.mode != "RGB":
                         result_img = result_img.convert("RGB")
-                    return result_img
+                    return composite_patch(offset_img, result_img, mask_img)
                 except Exception:
                     if attempt < 2:
                         time.sleep((attempt + 1) * 10)
                     else:
                         raise
 
-        best_tile = img
-        best_score = pre_score
-        if not pre_score["is_seamless"]:
+        if pre_score["is_seamless"]:
+            # Nothing to heal: return the tile as-is and don't bill for a model we never ran.
+            best_tile, best_score = img, pre_score
+            refund_credits(user_id, project_id, required_credits, note="Make seamless: tile already seamless")
+        else:
+            # The old code kept the ORIGINAL unless a healed tile beat it on a scorer that floored
+            # to 0 for most real artwork. 0 is never > 0, so the model's output was discarded and
+            # the user got their own file back, graded "D", after paying for two passes.
+            # The healed tile is the result; the score only grades it.
+            #
+            # One seam per pass. Healing both at once put a big four-way junction in the mask
+            # and flux-fill kept painting a grey badge with text into it; a single straight band
+            # is an unambiguous "continue the picture across this gap".
             width, height = img.size
             x_off, y_off = width // 2, height // 2
-            offset1 = ImageChops.offset(img, x_off, y_off)
-            mask1 = create_cross_mask(width, height, h_pct=22, v_pct=22, feather=True)
-            filled1 = inpaint_pass(offset1, mask1, 50, 40, "AI patch (tier 1)", 35)
-            if filled1.size != (width, height):
-                filled1 = filled1.resize((width, height), Image.Resampling.LANCZOS)
-            tile1 = ImageChops.offset(filled1, -x_off, -y_off)
-            score1 = compute_seam_score(tile1)
-            if score1["overall"] > best_score["overall"]:
-                best_tile = tile1
-                best_score = score1
-            if not score1["is_seamless"]:
-                offset2 = ImageChops.offset(tile1, x_off, y_off)
-                mask2 = create_cross_mask(width, height, h_pct=10, v_pct=10, feather=True)
-                filled2 = inpaint_pass(offset2, mask2, 70, 45, "Refining seams (tier 2)", 65)
-                if filled2.size != (width, height):
-                    filled2 = filled2.resize((width, height), Image.Resampling.LANCZOS)
-                tile2 = ImageChops.offset(filled2, -x_off, -y_off)
-                score2 = compute_seam_score(tile2)
-                if score2["overall"] > best_score["overall"]:
-                    best_tile = tile2
-                    best_score = score2
+
+            def heal_seam(tile, arm, stage_pct):
+                """Heal one wrap seam ("h" = top/bottom, "v" = left/right). Retries once from the
+                same input if the model painted a flat fill. Returns (tile, flat) where flat
+                means both attempts failed."""
+                dx, dy = (0, y_off) if arm == "h" else (x_off, 0)
+                label = "Healing top/bottom seam" if arm == "h" else "Healing left/right seam"
+                shifted = ImageChops.offset(tile, dx, dy)
+                mask = cross_mask(width, height, SEAM_BAND_PCT, arms=(arm,))
+                healed = ImageChops.offset(inpaint_pass(shifted, mask, 50, 40, label, stage_pct), -dx, -dy)
+                ratio = band_texture_ratio(healed, SEAM_BAND_PCT, arms=(arm,))
+                if ratio >= FLAT_FILL_MAX_RATIO:
+                    return healed, False
+                retried = ImageChops.offset(
+                    inpaint_pass(shifted, mask, 50, 40, label + " (retry)", stage_pct + 8), -dx, -dy)
+                retry_ratio = band_texture_ratio(retried, SEAM_BAND_PCT, arms=(arm,))
+                best = retried if retry_ratio >= ratio else healed
+                return best, max(ratio, retry_ratio) < FLAT_FILL_MAX_RATIO
+
+            tile_h, flat_h = heal_seam(img, "h", 30)
+            if flat_h:
+                # Two flat fills on the first seam: don't spend another pass on a tile that is
+                # already going to be graded D.
+                best_tile, flat = tile_h, True
+            else:
+                best_tile, flat = heal_seam(tile_h, "v", 60)
+            best_score = seam_continuity(best_tile)
+            if flat:
+                # A flat band wraps "perfectly", so the continuity score alone would call this
+                # an A; don't let it.
+                best_score = {**best_score, "is_seamless": False,
+                              "overall": min(best_score["overall"], 0.4), "flat_fill": True}
 
         progress(88, "Saving result")
         fixed_tile = best_tile
@@ -203,11 +298,13 @@ def execute_make_seamless(data, on_progress=None):
 
         overall_score = best_score["overall"]
         score_pct = int(overall_score * 100)
-        tile_seamless = 1 if overall_score >= 0.70 else 0
+        tile_seamless = 1 if best_score["is_seamless"] else 0
         resolution = 1 if (orig_w >= 1024 and orig_h >= 1024) else 0
         print_readiness = 1 if (tile_seamless and resolution) else 0
         color_balance = 1
-        if overall_score >= 0.90:
+        if best_score.get("flat_fill"):
+            label, note = "D - Poor", "The AI painted flat colour over the seam instead of continuing the design. Try running it again."
+        elif overall_score >= 0.90:
             label, note = "A - Excellent", f"Perfect seamless tiling ({score_pct}% match)."
         elif overall_score >= 0.75:
             label, note = "B - Good", f"High-quality seamless tiling ({score_pct}% match)."
@@ -215,6 +312,11 @@ def execute_make_seamless(data, on_progress=None):
             label, note = "C - Fair", f"Seamless tiling with minor edge variations ({score_pct}% match)."
         else:
             label, note = "D - Poor", f"Significant seam mismatch detected ({score_pct}% match)."
+
+        if not pre_score["is_seamless"] and not best_score.get("flat_fill"):
+            # ~30% of the tile is new paint. Say so; a print buyer should not assume the file is
+            # the artist's pixels edge to edge.
+            note += " The band along the tile edges was repainted by AI in the artwork's style."
 
         new_url = f"/results/{result_name}"
         now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()

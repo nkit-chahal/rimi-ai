@@ -40,6 +40,15 @@ export const MODEL_TIMINGS = {
         maxMs: 14000,
         label: 'Flux Fill Pro',
     },
+    // Make Seamless "Fix Existing" is a pipeline, not one call: a Groq description, then one
+    // flux-fill-pro pass per seam (top/bottom, left/right), each retried once if it comes back
+    // flat. Timing the whole job rather than a single model call keeps the ETA honest.
+    'rimi/seamless-fix': {
+        expectedMs: 30000,
+        minMs: 22000,
+        maxMs: 45000,
+        label: 'Flux Fill Pro ×2',
+    },
     'black-forest-labs/flux-2-pro': {
         expectedMs: 8500,
         minMs: 8000,
@@ -109,7 +118,7 @@ export const TOOL_DEFAULT_MODELS = {
     removebg: '851-labs/background-remover',
     vectorize: 'recraft-ai/recraft-vectorize',
     upscale: 'nightmareai/real-esrgan',
-    seamless: 'black-forest-labs/flux-fill-pro',
+    seamless: 'rimi/seamless-fix',
     'seamless-generate': 'replicate/seamless-texture',
     mappings: 'google/nano-banana-2',
     imagelayers: 'qwen/qwen-image-layered',
