@@ -399,12 +399,6 @@ export default function SeamlessTool({
                                     {seamlessUrl ? (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', alignItems: 'center' }}>
                                             <MediaImg className="st-result-reveal" src={seamlessUrl} alt="Seamless Result" token={currentToken} style={{ maxWidth: '100%', maxHeight: '280px', objectFit: 'contain', borderRadius: '8px' }} />
-                                            <div className="st-tile-preview-2x2">
-                                                <MediaImg src={seamlessUrl} alt="Tile 1" token={currentToken} />
-                                                <MediaImg src={seamlessUrl} alt="Tile 2" token={currentToken} />
-                                                <MediaImg src={seamlessUrl} alt="Tile 3" token={currentToken} />
-                                                <MediaImg src={seamlessUrl} alt="Tile 4" token={currentToken} />
-                                            </div>
                                             <a href={seamlessUrl} onClick={(e) => forceDownload(e, seamlessUrl)} className="st-extract-btn-creative" style={{ fontSize: '0.85rem', padding: '0.5rem 1.25rem' }}>
                                                 <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={14} />
                                                 Download Tile
