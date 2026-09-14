@@ -1,4 +1,4 @@
-"""
+r"""
 RIMI AI — Seam Quality Validator
 ================================
 Analyses every image in test_images/ for seamless-repeat quality.
@@ -18,6 +18,8 @@ Run:
 import os
 import sys
 import numpy as np
+
+from seam_metrics import seam_continuity
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
 from pathlib import Path
 import json
@@ -33,42 +35,31 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 # ── 1. Seam Score Computation ──────────────────────────────────────
 def compute_seam_score(img: Image.Image, strip_pct: float = 0.03) -> dict:
     """
-    Compare edge strips to measure how seamless a tile is.
-    
-    - strip_pct: fraction of image width/height to use as the comparison strip
-    - Returns dict with vertical, horizontal, overall scores (0–1) and diagnostics
+    How seamlessly the tile wraps, using the same metric as the product (seam_metrics).
+
+    The previous version compared MIRRORED edge strips against an absolute threshold; real
+    artwork failed on its own continuous interior, so its grades meant nothing.
+    - strip_pct only sizes the heatmap strips drawn on the diagnostic sheet
     """
     arr = np.array(img.convert("RGB"), dtype=np.float32)
     h, w = arr.shape[:2]
     strip_w = max(3, int(w * strip_pct))
     strip_h = max(3, int(h * strip_pct))
+    s = seam_continuity(img)
 
-    # Vertical seam: left edge vs right edge
-    left_strip  = arr[:, :strip_w, :]
-    right_strip = arr[:, -strip_w:, :]
-    # Flip right strip so pixel rows align for comparison
-    v_diff = np.abs(left_strip - right_strip[:, ::-1, :])
-    v_mean_diff = np.mean(v_diff) / 255.0
-    v_score = max(0.0, 1.0 - v_mean_diff * 6.0)
+    # Per-pixel step across each seam (col 0 next to col w-1, row 0 next to row h-1),
+    # broadcast across the strip so the sheet's edge overlay glows where the seam is worst.
+    v_step = np.mean(np.abs(arr[:, 0, :] - arr[:, -1, :]), axis=1)   # (H,)
+    h_step = np.mean(np.abs(arr[0, :, :] - arr[-1, :, :]), axis=1)   # (W,)
+    v_heat = np.repeat(v_step[:, None], strip_w, axis=1)             # (H, strip_w)
+    h_heat = np.repeat(h_step[None, :], strip_h, axis=0)             # (strip_h, W)
 
-    # Horizontal seam: top edge vs bottom edge
-    top_strip    = arr[:strip_h, :, :]
-    bottom_strip = arr[-strip_h:, :, :]
-    h_diff = np.abs(top_strip - bottom_strip[::-1, :, :])
-    h_mean_diff = np.mean(h_diff) / 255.0
-    h_score = max(0.0, 1.0 - h_mean_diff * 6.0)
-
-    overall = (v_score + h_score) / 2.0
-
-    # Per-pixel seam heatmaps (for visualization)
-    v_heat = np.mean(v_diff, axis=2)  # H × strip_w
-    h_heat = np.mean(h_diff, axis=2)  # strip_h × W
-
+    overall = s["overall"]
     return {
-        "vertical_score": round(v_score, 4),
-        "horizontal_score": round(h_score, 4),
-        "overall_score": round(overall, 4),
-        "is_seamless": v_score > 0.82 and h_score > 0.82,
+        "vertical_score": s["v"],
+        "horizontal_score": s["h"],
+        "overall_score": overall,
+        "is_seamless": s["is_seamless"],
         "grade": (
             "A — Excellent" if overall > 0.90 else
             "B — Good" if overall > 0.75 else
@@ -76,8 +67,8 @@ def compute_seam_score(img: Image.Image, strip_pct: float = 0.03) -> dict:
             "D — Poor" if overall > 0.35 else
             "F — Failed"
         ),
-        "v_raw_diff": round(v_mean_diff, 4),
-        "h_raw_diff": round(h_mean_diff, 4),
+        "v_ratio": s["ratio_x"],
+        "h_ratio": s["ratio_y"],
         "v_heatmap": v_heat,
         "h_heatmap": h_heat,
         "strip_w": strip_w,

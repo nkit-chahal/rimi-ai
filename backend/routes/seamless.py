@@ -4,7 +4,6 @@ import uuid
 import base64
 import json
 import time
-import numpy as np
 import requests as http_requests
 from io import BytesIO
 from flask import Blueprint, request, jsonify, g
@@ -23,6 +22,7 @@ from security_utils import media_access_token, safe_fetch_url
 from rate_limits import expensive_generation_rate_limit
 from jobs import enqueue_or_run
 from services.make_seamless import execute_make_seamless
+from seam_metrics import seam_continuity
 from workers import run_generation_job
 import replicate
 import storage
@@ -121,21 +121,9 @@ def generate_seamless():
             url_str = str(out_url.url) if hasattr(out_url, 'url') else str(out_url)
             resp = http_requests.get(url_str, timeout=60)
             img = Image.open(BytesIO(resp.content)).convert('RGB')
-            arr = np.array(img, dtype=np.float32)
-            h, w = arr.shape[:2]
-            seam_x = np.mean(np.abs(arr[:, 0, :] - arr[:, -1, :]))
-            seam_y = np.mean(np.abs(arr[0, :, :] - arr[-1, :, :]))
-            abs_score_x = max(0.0, 1.0 - seam_x / 50.0)
-            abs_score_y = max(0.0, 1.0 - seam_y / 50.0)
-            abs_score = (abs_score_x + abs_score_y) / 2.0
-            diff_x = np.mean(np.abs(arr[:, 1:, :] - arr[:, :-1, :]))
-            diff_y = np.mean(np.abs(arr[1:, :, :] - arr[:-1, :, :]))
-            rx = seam_x / max(1e-5, diff_x)
-            ry = seam_y / max(1e-5, diff_y)
-            ratio_x = max(0.0, min(1.0, 1.0 - (rx - 1.5) / 4.0)) if rx > 1.5 else 1.0
-            ratio_y = max(0.0, min(1.0, 1.0 - (ry - 1.5) / 4.0)) if ry > 1.5 else 1.0
-            ratio_score = (ratio_x + ratio_y) / 2.0
-            score = abs_score * 0.7 + ratio_score * 0.3
+            # Same metric as Fix Existing. The blend that lived here weighted an absolute
+            # edge-step term at 70%, which graded clean painterly tiles "D - Poor".
+            score = seam_continuity(img)["overall"]
             result_name = f"seamless_gen_{uuid.uuid4().hex[:8]}.png"
             result_path = os.path.join(RESULTS_DIR, result_name)
             img.save(result_path, 'PNG')
@@ -158,7 +146,7 @@ def generate_seamless():
             conn.execute("UPDATE projects SET hero_image_url = ?, thumbnail_url = ?, updated_at = ? WHERE id = ?",
                          (best_url, best_url, now, project_id))
             score_pct = int(best_score * 100)
-            tile_seamless = 1 if best_score >= 0.70 else 0
+            tile_seamless = 1 if best_score >= 0.75 else 0  # B or better, as in Fix Existing
             label = "A - Excellent" if best_score >= 0.90 else "B - Good" if best_score >= 0.75 else "C - Fair" if best_score >= 0.60 else "D - Poor"
             note = f"Generated natively seamless tile ({score_pct}% match)."
             conn.execute(

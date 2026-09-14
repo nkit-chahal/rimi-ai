@@ -55,3 +55,5 @@ dump.rdb
 appendonly.aof
 *.rdb
 
+# Make Seamless harness outputs saved next to the test images (see tests/*__report.txt)
+tests/*__*
