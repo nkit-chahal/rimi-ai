@@ -8,7 +8,6 @@ import '../../../styles/tools/mappings.css';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import ModelLoadingBar from '../shared/ModelLoadingBar';
 import { getModelTiming } from '../shared/modelTimings';
-import UploadStatusBadge from '../shared/UploadStatusBadge';
 
 const CustomMappingCanvas = ({ imageUrl, onComplete, onCancel }) => {
     const canvasRef = useRef(null);
@@ -369,23 +368,16 @@ export default function MappingsTool(props) {
                 <div className="st-map-section">
                     <h2 className="st-map-section-title">Upload Your Print</h2>
                     <p className="st-map-section-desc">Upload a high quality print or pattern</p>
-                    <div className={`st-map-upload-row ${printReady ? 'uploaded' : ''}`}>
+                    <div className="st-map-upload-row">
                         <div
                             className={`st-map-upload-zone ${mappingPrintPreview ? 'has-image' : ''} ${isPrintUploading ? 'is-uploading' : ''} ${printReady ? 'is-ready' : ''} ${mappingUploadStatus === 'error' ? 'is-error' : ''} ${isDrag ? 'dragging' : ''}`}
                             {...rootProps}
                         >
                             {mappingPrintPreview ? (
                                 <>
-                                    <div
-                                        className="st-map-upload-icon"
-                                        style={
-                                            printReady
-                                                ? { background: '#dcfce7', color: '#16a34a' }
-                                                : mappingUploadStatus === 'error'
-                                                    ? { background: '#fee2e2', color: '#dc2626' }
-                                                    : { background: '#eef2ff', color: '#4f46e5' }
-                                        }
-                                    >
+                                    {/* One status, stated once. The check icon, the heading and a
+                                        "Ready" pill all used to say the same thing at the same time. */}
+                                    <div className={`st-map-upload-icon ${printReady ? 'is-ready' : ''} ${isPrintUploading ? 'is-uploading' : ''} ${mappingUploadStatus === 'error' ? 'is-error' : ''}`}>
                                         {isPrintUploading ? (
                                             <span className="st-upload-status-spinner st-upload-status-spinner-lg" aria-hidden="true" />
                                         ) : mappingUploadStatus === 'error' ? (
@@ -394,22 +386,21 @@ export default function MappingsTool(props) {
                                             <I d="M5 13l4 4L19 7" s={24} />
                                         )}
                                     </div>
-                                    <h3>
+                                    <h3 aria-live="polite">
                                         {isPrintUploading
-                                            ? 'Uploading print…'
+                                            ? 'Uploading…'
                                             : mappingUploadStatus === 'error'
                                                 ? 'Upload failed'
-                                                : 'Print uploaded successfully!'}
+                                                : 'Print ready'}
                                     </h3>
-                                    <p>{printDisplayName}</p>
-                                    <UploadStatusBadge status={mappingUploadStatus} className="st-map-upload-status" />
-                                    {mappingUploadStatus === 'error' && (
+                                    <p className="st-map-upload-filename" title={printDisplayName}>{printDisplayName}</p>
+                                    {!isPrintUploading && (
                                         <button
-                                            className="st-map-upload-btn"
+                                            className="st-map-upload-btn is-subtle"
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); openFilePicker(); }}
                                         >
-                                            Try again
+                                            {mappingUploadStatus === 'error' ? 'Try again' : 'Choose another'}
                                         </button>
                                     )}
                                 </>
@@ -432,19 +423,23 @@ export default function MappingsTool(props) {
                             {mappingPrintPreview ? (
                                 <>
                                     <div className={`st-map-print-img-wrap ${isPrintUploading ? 'is-uploading' : ''}`}>
-                                        <img className="st-map-print-img" src={mappingPrintPreview} alt="Print Preview" />
+                                        {/* A slim sweep along the top edge, the way a browser shows a
+                                            page loading. It replaces a dimming overlay that carried its
+                                            own spinner and caption on top of a shimmer, for one upload. */}
                                         {isPrintUploading && (
-                                            <div className="st-map-print-upload-overlay" aria-live="polite">
-                                                <span className="st-upload-status-spinner st-upload-status-spinner-lg" />
-                                                <span>Uploading to server…</span>
+                                            <div className="st-map-upload-bar" role="progressbar" aria-label="Uploading print">
+                                                <span />
                                             </div>
                                         )}
+                                        <img className="st-map-print-img" src={mappingPrintPreview} alt="Print Preview" />
                                     </div>
                                     <div className="st-map-print-info">
                                         <div className="st-map-print-name">
                                             Print Name
-                                            <span>{printDisplayName}</span>
+                                            <span title={printDisplayName}>{printDisplayName}</span>
                                         </div>
+                                        {/* Was hidden exactly when the upload finished, so a finished
+                                            print could not be swapped from here. */}
                                         <button
                                             className="st-map-replace-btn"
                                             type="button"
