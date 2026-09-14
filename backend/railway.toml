@@ -2,6 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "gunicorn -c gunicorn_config.py server:app"
+# Starts gunicorn AND the RQ worker; see start-web.sh for why both live in one service.
+startCommand = "sh start-web.sh"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
