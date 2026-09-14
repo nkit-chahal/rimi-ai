@@ -17,8 +17,6 @@ const EXTRACT_CREDIT_KEYS = {
     'google/nano-banana': 'extract_nano_banana',
     'google/nano-banana-2': 'extract_nano_banana_2',
     'bytedance/seedream-4.5': 'extract_seedream',
-    'google/imagen-4-fast': 'extract_imagen_fast',
-    'google/imagen-4-ultra': 'extract_imagen_ultra',
     'black-forest-labs/flux-schnell': 'extract_flux_schnell',
     'black-forest-labs/flux-2-pro': 'extract_flux_2_pro',
     'openai/gpt-image-2': 'extract_gpt_image_2',
@@ -29,11 +27,9 @@ const EXTRACT_CREDIT_KEYS = {
 const EXTRACT_MODEL_DEFS = [
     { id: 'black-forest-labs/flux-schnell', name: 'Flux Schnell', sub: 'Black Forest', brand: 'bfl', logo: 'FS', credits: 4, accent: '#a855f7', tier: 'normal' },
     { id: 'xai/grok-imagine-image', name: 'Grok Imagine', sub: 'xAI', brand: 'xai', logo: 'GR', credits: 23, accent: '#1d9bf0', tier: 'normal' },
-    { id: 'google/imagen-4-fast', name: 'Imagen 4 Fast', sub: 'Google', brand: 'google', logo: 'I4', credits: 23, accent: '#34a853', tier: 'normal' },
     { id: 'google/nano-banana', name: 'Nano Banana', sub: 'Google', brand: 'google', logo: 'NB', credits: 45, accent: '#34a853', tier: 'normal' },
     { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: 46, accent: '#f59e0b', tier: 'pro' },
     { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest', brand: 'bfl', logo: 'F2', credits: 52, accent: '#7c3aed', tier: 'pro' },
-    { id: 'google/imagen-4-ultra', name: 'Imagen 4 Ultra', sub: 'Google', brand: 'google', logo: 'IU', credits: 69, accent: '#0f9d58', tier: 'pro' },
     { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', credits: 78, accent: '#4285f4', tier: 'pro' },
     { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'G2', credits: 148, accent: '#111827', tier: 'pro' },
 ];
@@ -331,12 +327,10 @@ export default function PatternTool({
                                 'xai/grok-imagine-image': { desc: 'Fast and creative with strong pattern interpretation.', tag: 'Fast', tagColor: '#1d9bf0' },
                                 'bytedance/seedream-4.5': { desc: 'Strong with texture preservation and soft details.', tag: 'Pro', tagColor: '#f59e0b' },
                                 'black-forest-labs/flux-schnell': { desc: 'Ultra fast and budget-friendly generation.', tag: 'Budget', tagColor: '#a855f7' },
-                                'google/imagen-4-fast': { desc: 'Quick Google extract drafts (caption-assisted).', tag: 'Fast', tagColor: '#34a853' },
                                 'google/nano-banana': { desc: 'Balanced quality and cost efficiency.', tag: 'Balanced', tagColor: '#34a853' },
                                 'google/nano-banana-2': { desc: 'Enhanced quality with strong pattern extraction.', tag: 'Pro', tagColor: '#4285f4' },
                                 'black-forest-labs/flux-2-pro': { desc: 'High-fidelity Flux 2 extract with reference image.', tag: 'Pro', tagColor: '#7c3aed' },
                                 'openai/gpt-image-2': { desc: 'Top prompt adherence — quality=high ($0.128).', tag: 'Pro', tagColor: '#111827' },
-                                'google/imagen-4-ultra': { desc: 'Highest Imagen quality for polished tiles.', tag: 'Pro', tagColor: '#0f9d58' },
                             };
                             const info = descriptions[m.id] || { desc: '', tag: m.tier === 'pro' ? 'Pro' : '', tagColor: '#888' };
                             const cost = modelCreditCost(m);

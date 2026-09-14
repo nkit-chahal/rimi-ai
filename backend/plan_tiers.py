@@ -23,7 +23,6 @@ PRO_PLANS = frozenset({
 NORMAL_INSPIRE_MODELS = frozenset({
     "black-forest-labs/flux-schnell",
     "xai/grok-imagine-image",
-    "google/imagen-4-fast",
     "google/nano-banana",
 })
 
@@ -31,14 +30,12 @@ PRO_INSPIRE_MODELS = frozenset({
     "bytedance/seedream-4.5",
     "google/nano-banana-2",
     "openai/gpt-image-2",
-    "google/imagen-4-ultra",
     "black-forest-labs/flux-2-pro",
 })
 
 NORMAL_EXTRACT_MODELS = frozenset({
     "xai/grok-imagine-image",
     "google/nano-banana",
-    "google/imagen-4-fast",
     "black-forest-labs/flux-schnell",
 })
 
@@ -46,7 +43,6 @@ PRO_EXTRACT_MODELS = frozenset({
     "bytedance/seedream-4.5",
     "google/nano-banana-2",
     "openai/gpt-image-2",
-    "google/imagen-4-ultra",  # text-only on Replicate; caption → T2I
     "black-forest-labs/flux-2-pro",
 })
 

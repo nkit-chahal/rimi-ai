@@ -55,7 +55,7 @@ BILLING_PLANS = [
         "badge": "",
         "features": [
             "3,960 AI credits",
-            "Normal models: Flux Schnell, Grok, Imagen 4 Fast, Nano Banana",
+            "Normal models: Flux Schnell, Grok, Nano Banana",
             "Mappings (Nano Banana 2), Seamless, Repeat, Colorways, Vectorize",
         ],
     },
@@ -85,7 +85,7 @@ BILLING_PLANS = [
         "badge": "",
         "features": [
             "65,340 AI credits",
-            "GPT Image 2, Imagen 4 Ultra, Flux 2 Pro",
+            "GPT Image 2, Flux 2 Pro",
             "Nano Banana 2 + Seedream 4.5 (Inspire/Extract)",
             "Qwen Studio, 3D Mockup",
         ],

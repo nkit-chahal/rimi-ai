@@ -38,14 +38,11 @@ def test_model_input_keys_match_replicate_apis():
     assert by_id["xai/grok-imagine-image"]["input_list"] is False
     assert by_id["openai/gpt-image-2"]["credits"] == 148
     assert by_id["black-forest-labs/flux-2-pro"]["credits"] == 52
-    assert by_id["google/imagen-4-ultra"]["credits"] == 69
-    assert by_id["google/imagen-4-fast"]["supports_image"] is False
     assert by_id["black-forest-labs/flux-schnell"]["supports_image"] is False
 
 
 def test_new_pro_model_credits_in_registry():
     assert MODEL_TO_CREDITS["openai/gpt-image-2"] == 148
-    assert MODEL_TO_CREDITS["google/imagen-4-ultra"] == 69
     assert MODEL_TO_CREDITS["black-forest-labs/flux-2-pro"] == 35
 
 
@@ -91,3 +88,50 @@ def test_run_single_extract_builds_image_conditioned_input(monkeypatch):
     assert captured["input"]["image_input"] == [data_uri]
     assert "prompt" in captured["input"]
     assert "image_input" in captured["input"]
+
+
+def test_retired_models_are_not_selectable():
+    """A retired model left in a picker is a card the user can click that always fails.
+
+    google/imagen-4-fast and google/imagen-4-ultra were verified dead on 2026-09-14: both return
+    404 from us-central1-aiplatform.googleapis.com for imagen-4.0-*-generate-001, while their
+    Replicate pages still show "Warm". google/upscaler went the same way earlier.
+
+    This checks selectability, not mere mention. MODEL_TO_CREDITS deliberately keeps a
+    google/upscaler entry so historical replicate_logs rows still resolve to a credit value;
+    that is a lookup, not an offer.
+    """
+    import re
+    from pathlib import Path
+
+    import plan_tiers
+
+    retired = {"google/imagen-4-fast", "google/imagen-4-ultra", "google/upscaler"}
+    offenders = []
+
+    for model in retired & {m["id"] for m in EXTRACT_MODELS}:
+        offenders.append(f"EXTRACT_MODELS offers {model}")
+
+    for name in ("NORMAL_INSPIRE_MODELS", "PRO_INSPIRE_MODELS",
+                 "NORMAL_EXTRACT_MODELS", "PRO_EXTRACT_MODELS"):
+        for model in retired & set(getattr(plan_tiers, name)):
+            offenders.append(f"plan_tiers.{name} offers {model}")
+
+    # Frontend pickers declare their models as `id: '<model>'` entries.
+    root = Path(__file__).resolve().parents[2]
+    for path in (root / "src").rglob("*.js*"):
+        if "node_modules" in str(path):
+            continue
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for model in retired:
+                if re.search(rf"id:\s*['\"]{re.escape(model)}['\"]", line):
+                    offenders.append(f"{path.relative_to(root)}:{n} offers {model}")
+
+    assert not offenders, "retired models are still selectable:\n  " + "\n  ".join(offenders)
+
+
+def test_every_offered_extract_model_has_a_credit_price():
+    """A model in the picker with no price would be generated for free."""
+    missing = [m["id"] for m in EXTRACT_MODELS
+               if not m.get("credits") and m["id"] not in MODEL_TO_CREDITS]
+    assert not missing, missing

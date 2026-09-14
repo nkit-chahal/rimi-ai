@@ -19,7 +19,6 @@ export const PRO_INSPIRE_MODELS = new Set([
   'bytedance/seedream-4.5',
   'google/nano-banana-2',
   'openai/gpt-image-2',
-  'google/imagen-4-ultra',
   'black-forest-labs/flux-2-pro',
 ]);
 
@@ -27,7 +26,6 @@ export const PRO_EXTRACT_MODELS = new Set([
   'bytedance/seedream-4.5',
   'google/nano-banana-2',
   'openai/gpt-image-2',
-  'google/imagen-4-ultra',
   'black-forest-labs/flux-2-pro',
 ]);
 

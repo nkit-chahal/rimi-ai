@@ -211,17 +211,6 @@ EXTRACT_MODELS = [
         'tier': 'normal',
     },
     {
-        'id': 'google/imagen-4-fast',
-        'name': 'Imagen 4 Fast',
-        'prompt': EXTRACT_PROMPT,
-        'input_key': None,
-        'input_list': False,
-        'supports_image': False,  # text-only on Replicate; uses Groq caption
-        'cost_per_image': 0.02,
-        'credits': 23,
-        'tier': 'normal',
-    },
-    {
         'id': 'black-forest-labs/flux-schnell',
         'name': 'Flux Schnell',
         'prompt': EXTRACT_PROMPT,
@@ -269,18 +258,6 @@ EXTRACT_MODELS = [
         'extra_input': {'quality': 'high', 'output_format': 'png'},
     },
     {
-        # Replicate 2026-07-12: $0.06 flat → 69 (text-only; caption → T2I)
-        'id': 'google/imagen-4-ultra',
-        'name': 'Imagen 4 Ultra',
-        'prompt': EXTRACT_PROMPT,
-        'input_key': None,
-        'input_list': False,
-        'supports_image': False,
-        'cost_per_image': 0.06,
-        'credits': 69,
-        'tier': 'pro',
-    },
-    {
         # Replicate 2026-07-12: $0.015 run + $0.015 in + $0.015 out = $0.045 → 52
         'id': 'black-forest-labs/flux-2-pro',
         'name': 'Flux 2 Pro',
@@ -300,8 +277,6 @@ EXTRACT_MODELS = [
 # Replaces the old flat `credit_requirement('inspire', 310)`.
 # ---------------------------------------------------------------------------
 MODEL_TO_CREDITS = {
-    'google/imagen-4-fast':            23,
-    'google/imagen-4-ultra':           69,   # $0.06 → 69 (2026-07-12)
     'google/nano-banana':              45,
     'google/nano-banana-2':            78,
     'google/upscaler':                 23,   # retired upstream; kept for historical log rows
@@ -382,8 +357,6 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
                 "prompt": text_prompt,
                 "aspect_ratio": "1:1",
             }
-            if 'imagen' in model_id:
-                replicate_input["image_size"] = "2K"
             # No prompt_upsampling here: it is a FLUX *pro* input, and the only flux model that
             # reaches this text-only branch is flux-schnell, whose schema does not accept it
             # (prompt, aspect_ratio, num_outputs, num_inference_steps, seed, output_format,
@@ -663,9 +636,7 @@ def build_extract_edit_input(model_cfg, prompt, data_uri, image_description=None
         "High resolution, perfectly flat texture, no perspective, no shadows, clean tile edges."
     )
     replicate_input = {"prompt": text_prompt, "aspect_ratio": "1:1"}
-    if "imagen" in model_id:
-        replicate_input["image_size"] = "2K"
-    elif "flux" in model_id:
+    if "flux" in model_id:
         replicate_input["prompt_upsampling"] = True
     return replicate_input
 
@@ -939,8 +910,6 @@ def generate_inspirations():
                     # These models are billed per-image, not per-second!
                     per_image_costs = {
                         'xai/grok-imagine-image': 0.02,
-                        'google/imagen-4-fast': 0.02,
-                        'google/imagen-4-ultra': 0.06,
                         'google/nano-banana': 0.039,
                         'google/nano-banana-2': 0.067,
                         'bytedance/seedream-4.5': 0.04,

@@ -16,12 +16,6 @@ export const MODEL_TIMINGS = {
         maxMs: 8000,
         label: 'Background Remover',
     },
-    'google/imagen-4-fast': {
-        expectedMs: 4500,
-        minMs: 3000,
-        maxMs: 6000,
-        label: 'Imagen 4 Fast',
-    },
     'xai/grok-imagine-image': {
         expectedMs: 7500,
         minMs: 6000,
@@ -72,12 +66,6 @@ export const MODEL_TIMINGS = {
         minMs: 9000,
         maxMs: 16000,
         label: 'Qwen Layered',
-    },
-    'google/imagen-4-ultra': {
-        expectedMs: 14000,
-        minMs: 13000,
-        maxMs: 15000,
-        label: 'Imagen 4 Ultra',
     },
     'bytedance/seedream-4.5': {
         expectedMs: 15500,
