@@ -15,8 +15,11 @@
     <meta property="og:title" content="RIMI AI — AI Pattern Design Studio for Textiles" />
     <meta property="og:description" content="Clean, enhance, make seamless, vectorize, and generate creative textile design variations — all in one studio." />
     <meta property="og:image" content="https://rimiai.pro/og-cover.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
+    <!-- og-cover.png is 1024x1024; it was declared 1200x630, which makes crawlers reserve a
+         landscape card and then letterbox a square image into it. Kept as PNG deliberately —
+         several social crawlers handle a WebP og:image poorly. -->
+    <meta property="og:image:width" content="1024" />
+    <meta property="og:image:height" content="1024" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="RIMI AI — AI Pattern Design Studio for Textiles" />

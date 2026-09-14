@@ -137,41 +137,41 @@ export default function MappingsTool(props) {
     ];
     const MAPPING_PRODUCTS = {
         home: [
-            { id: 'bed_sheet', name: 'Bed Sheet', image: '/products/bed_sheet.png' },
-            { id: 'pillow_cover', name: 'Pillow Cover', image: '/products/pillow_cover.png' },
-            { id: 'pillow_lumbar', name: 'Lumbar Pillow', image: '/products/pillow_lumbar.png' },
-            { id: 'comforter', name: 'Comforter', image: '/products/comforter.png' },
-            { id: 'cushion', name: 'Cushion', image: '/products/cushion.png' },
-            { id: 'cushion_floor', name: 'Floor Cushion', image: '/products/cushion_floor.png' },
-            { id: 'curtain', name: 'Curtain', image: '/products/curtain.png' },
-            { id: 'tablecloth', name: 'Tablecloth', image: '/products/tablecloth.png' },
-            { id: 'table_runner', name: 'Table Runner', image: '/products/table_runner.png' },
-            { id: 'napkin_set', name: 'Napkin Set', image: '/products/napkin_set.png' },
-            { id: 'throw_blanket', name: 'Throw Blanket', image: '/products/throw_blanket.png' },
-            { id: 'duvet_cover', name: 'Duvet Cover', image: '/products/duvet_cover.png' },
-            { id: 'sofa_upholstery', name: 'Sofa Upholstery', image: '/products/sofa_upholstery.png' },
-            { id: 'wallpaper', name: 'Wallpaper', image: '/products/wallpaper.png' },
-            { id: 'rug', name: 'Area Rug', image: '/products/rug.png' },
-            { id: 'shower_curtain', name: 'Shower Curtain', image: '/products/shower_curtain.png' },
-            { id: 'bath_towel', name: 'Bath Towel', image: '/products/bath_towel.png' },
-            { id: 'lamp_shade', name: 'Lamp Shade', image: '/products/lamp_shade.png' },
+            { id: 'bed_sheet', name: 'Bed Sheet', image: '/products/bed_sheet.webp' },
+            { id: 'pillow_cover', name: 'Pillow Cover', image: '/products/pillow_cover.webp' },
+            { id: 'pillow_lumbar', name: 'Lumbar Pillow', image: '/products/pillow_lumbar.webp' },
+            { id: 'comforter', name: 'Comforter', image: '/products/comforter.webp' },
+            { id: 'cushion', name: 'Cushion', image: '/products/cushion.webp' },
+            { id: 'cushion_floor', name: 'Floor Cushion', image: '/products/cushion_floor.webp' },
+            { id: 'curtain', name: 'Curtain', image: '/products/curtain.webp' },
+            { id: 'tablecloth', name: 'Tablecloth', image: '/products/tablecloth.webp' },
+            { id: 'table_runner', name: 'Table Runner', image: '/products/table_runner.webp' },
+            { id: 'napkin_set', name: 'Napkin Set', image: '/products/napkin_set.webp' },
+            { id: 'throw_blanket', name: 'Throw Blanket', image: '/products/throw_blanket.webp' },
+            { id: 'duvet_cover', name: 'Duvet Cover', image: '/products/duvet_cover.webp' },
+            { id: 'sofa_upholstery', name: 'Sofa Upholstery', image: '/products/sofa_upholstery.webp' },
+            { id: 'wallpaper', name: 'Wallpaper', image: '/products/wallpaper.webp' },
+            { id: 'rug', name: 'Area Rug', image: '/products/rug.webp' },
+            { id: 'shower_curtain', name: 'Shower Curtain', image: '/products/shower_curtain.webp' },
+            { id: 'bath_towel', name: 'Bath Towel', image: '/products/bath_towel.webp' },
+            { id: 'lamp_shade', name: 'Lamp Shade', image: '/products/lamp_shade.webp' },
         ],
         apparel: [
-            { id: 'tshirt', name: 'T-Shirt', image: '/products/tshirt.png' },
-            { id: 'hoodie', name: 'Hoodie', image: '/products/hoodie.png' },
-            { id: 'dress', name: 'Dress', image: '/products/dress.png' },
-            { id: 'saree', name: 'Saree', image: '/products/saree.png' },
-            { id: 'kimono', name: 'Kimono', image: '/products/kimono.png' },
-            { id: 'leggings', name: 'Leggings', image: '/products/leggings.png' },
-            { id: 'skirt', name: 'Skirt', image: '/products/skirt.png' },
+            { id: 'tshirt', name: 'T-Shirt', image: '/products/tshirt.webp' },
+            { id: 'hoodie', name: 'Hoodie', image: '/products/hoodie.webp' },
+            { id: 'dress', name: 'Dress', image: '/products/dress.webp' },
+            { id: 'saree', name: 'Saree', image: '/products/saree.webp' },
+            { id: 'kimono', name: 'Kimono', image: '/products/kimono.webp' },
+            { id: 'leggings', name: 'Leggings', image: '/products/leggings.webp' },
+            { id: 'skirt', name: 'Skirt', image: '/products/skirt.webp' },
         ],
         accessories: [
-            { id: 'tote_bag', name: 'Tote Bag', image: '/products/tote_bag.png' },
-            { id: 'backpack', name: 'Backpack', image: '/products/backpack.png' },
-            { id: 'phone_case', name: 'Phone Case', image: '/products/phone_case.png' },
-            { id: 'scarf', name: 'Scarf', image: '/products/scarf.png' },
-            { id: 'umbrella', name: 'Umbrella', image: '/products/umbrella.png' },
-            { id: 'socks', name: 'Socks', image: '/products/socks.png' },
+            { id: 'tote_bag', name: 'Tote Bag', image: '/products/tote_bag.webp' },
+            { id: 'backpack', name: 'Backpack', image: '/products/backpack.webp' },
+            { id: 'phone_case', name: 'Phone Case', image: '/products/phone_case.webp' },
+            { id: 'scarf', name: 'Scarf', image: '/products/scarf.webp' },
+            { id: 'umbrella', name: 'Umbrella', image: '/products/umbrella.webp' },
+            { id: 'socks', name: 'Socks', image: '/products/socks.webp' },
         ],
         custom: [
             { id: 'custom_product', name: 'Custom Product Mapping', image: null },
@@ -539,7 +539,18 @@ export default function MappingsTool(props) {
                                         </div>
                                         <div className="st-map-product-image-container" style={{ width: '100%', height: '120px', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             {product.image ? (
-                                                <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                                // The grid is a 520px-tall scroller, so most of these
+                                                // start below the fold. Intrinsic width/height keep the
+                                                // box reserved while a lazy image is still pending.
+                                                <img
+                                                    src={product.image}
+                                                    alt={product.name}
+                                                    width={320}
+                                                    height={320}
+                                                    loading="lazy"
+                                                    decoding="async"
+                                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                                />
                                             ) : (
                                                 <div className="st-map-product-icon">
                                                     <I d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" s={28} />

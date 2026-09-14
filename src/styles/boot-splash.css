@@ -39,7 +39,9 @@
   inset: 0;
   pointer-events: none;
   opacity: 0.22;
-  background-image: url('/demo_floral.png');
+  /* The WebP copy: this paints on app load at 22% opacity and 420px, so the 1.06 MB PNG bought
+     nothing. The login page was moved to WebP in 44a5725; the splash was missed. */
+  background-image: url('/demo_floral.webp');
   background-size: 420px;
   background-position: center;
   filter: grayscale(0.15) contrast(0.95);
