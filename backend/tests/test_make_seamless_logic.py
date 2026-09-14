@@ -150,8 +150,11 @@ class TestPipelineSelection:
 
         class FakeChoice:
             message = type("M", (), {"content": "yellow and turquoise flowers on deep green"})()
-        monkeypatch.setattr(ms.groq_client.chat.completions, "create",
-                            lambda **kw: type("C", (), {"choices": [FakeChoice()]})())
+
+        def fake_groq(**kw):
+            calls["groq"] = calls.get("groq", 0) + 1
+            return type("C", (), {"choices": [FakeChoice()]})()
+        monkeypatch.setattr(ms.groq_client.chat.completions, "create", fake_groq)
 
         def fake_refund(*a, **k):
             calls["refunds"] += 1
@@ -194,8 +197,12 @@ class TestPipelineSelection:
 
     def test_one_model_call_per_seam(self, monkeypatch, tmp_path):
         # Two seams (top/bottom, left/right), one straight-band pass each, no refine pass.
-        _, _, _, calls = self._run(monkeypatch, tmp_path, periodic_tile())
+        result, _, _, calls = self._run(monkeypatch, tmp_path, periodic_tile())
         assert calls["replicate"] == 2
+        assert calls.get("groq", 0) == 1, "caption is fetched once and reused for both passes"
+        # The flag the user sees must agree with the letter grade.
+        assert result["health"]["label"].startswith(("A", "B"))
+        assert result["health"]["tileSeamless"] is True
 
     def test_unhealed_seam_is_graded_honestly(self, monkeypatch, tmp_path):
         # In offset space the seam sits at the CENTRE of what the model returns. A model output
@@ -235,6 +242,7 @@ class TestPipelineSelection:
         result, out, original, calls = self._run(
             monkeypatch, tmp_path, periodic_tile(), input_tile=periodic_tile(seed=7))
         assert calls["replicate"] == 0
+        assert calls.get("groq", 0) == 0, "no healing, so no caption call either"
         assert calls["refunds"] == 1
         assert np.array_equal(np.array(out), original)
         assert result["health"]["tileSeamless"] is True

@@ -185,23 +185,31 @@ def execute_make_seamless(data, on_progress=None):
         progress(10, "Assessing seams")
         pre_score = seam_continuity(img)
 
-        progress(18, "Analyzing pattern")
-        tile_uri = img_to_data_uri(img.resize((512, 512), Image.Resampling.LANCZOS))
-        completion = groq_client.chat.completions.create(
-            model=GROQ_VISION_MODEL,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": tile_uri}},
-                    {"type": "text", "text": "Describe this fabric/textile print precisely: motif shapes, colors, background, and the artistic technique (e.g. watercolor, gouache, flat vector, block print, pencil). 2 sentences max."},
-                ],
-            }],
-            temperature=0.2,
-            max_completion_tokens=200,
-        )
-        description = completion.choices[0].message.content.strip()
+        _description = []
+
+        def describe_pattern():
+            """Groq caption that anchors the inpaint prompt. Lazy and cached: a tile that is
+            already seamless never runs a pass, so it should not pay for (or wait on) this."""
+            if not _description:
+                progress(18, "Analyzing pattern")
+                tile_uri = img_to_data_uri(img.resize((512, 512), Image.Resampling.LANCZOS))
+                completion = groq_client.chat.completions.create(
+                    model=GROQ_VISION_MODEL,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": tile_uri}},
+                            {"type": "text", "text": "Describe this fabric/textile print precisely: motif shapes, colors, background, and the artistic technique (e.g. watercolor, gouache, flat vector, block print, pencil). 2 sentences max."},
+                        ],
+                    }],
+                    temperature=0.2,
+                    max_completion_tokens=200,
+                )
+                _description.append(completion.choices[0].message.content.strip())
+            return _description[0]
 
         def inpaint_pass(offset_img, mask_img, guidance, steps, stage_label, stage_pct):
+            description = describe_pattern()
             progress(stage_pct, stage_label)
             # Describe the PICTURE, never the task. flux-fill renders text it is told about: the
             # previous prompt ("in the masked region ... so the tile repeats with no visible
@@ -298,7 +306,11 @@ def execute_make_seamless(data, on_progress=None):
 
         overall_score = best_score["overall"]
         score_pct = int(overall_score * 100)
-        tile_seamless = 1 if best_score["is_seamless"] else 0
+        # SEAMLESS_MAX_RATIO (1.5) decides whether to heal at all and is deliberately strict:
+        # when in doubt, heal. The flag shown to the user must agree with the letter grade,
+        # otherwise a tile can read "A - Excellent" and "not seamless" at once (a 1.53 ratio
+        # did exactly that). B or better is seamless; a flat fill never is.
+        tile_seamless = 1 if (overall_score >= 0.75 and not best_score.get("flat_fill")) else 0
         resolution = 1 if (orig_w >= 1024 and orig_h >= 1024) else 0
         print_readiness = 1 if (tile_seamless and resolution) else 0
         color_balance = 1
