@@ -97,10 +97,20 @@ if _USE_PG:
 
 class _PgCursorWrapper:
     """Wraps a psycopg2 cursor so callers can use SQLite-style '?' placeholders."""
+    # Postgres has no sqlite-style lastrowid, so inserts into these tables get a "RETURNING id"
+    # appended and the value is exposed as cur.lastrowid. Any table whose id a caller reads back
+    # MUST be listed here: if it is missing, lastrowid silently returns None on Postgres while
+    # SQLite keeps working locally, so the bug only ever appears in production. That is exactly
+    # how background_jobs went unnoticed — jobs were enqueued as "rimi-None-..." and every worker
+    # run died with "Job None not found". The lastrowid property below makes the next one loud.
     _RETURNING_ID_TABLES = {
+        "api_keys",
+        "background_jobs",
         "brand_palettes",
-        "projects",
         "pipeline_runs",
+        "projects",
+        "qwen_layer_versions",
+        "qwen_layered_sessions",
         "saved_workflows",
         "users",
     }
@@ -121,16 +131,18 @@ class _PgCursorWrapper:
             sql += ' ON CONFLICT DO NOTHING'
         return sql
 
-    @classmethod
-    def _insert_returns_id(cls, sql):
+    @staticmethod
+    def _insert_table(sql):
+        """Table name for an INSERT statement, else None."""
         import re
         match = re.match(r'\s*INSERT\s+INTO\s+(?:"?[\w]+"?\.)?"?([\w]+)"?', sql, flags=re.IGNORECASE)
-        return bool(match and match.group(1).lower() in cls._RETURNING_ID_TABLES)
+        return match.group(1).lower() if match else None
 
     def execute(self, sql, params=None):
         converted = self._convert_query(sql)
         # Only add RETURNING id for tables where callers consume lastrowid.
-        self._last_was_insert = self._insert_returns_id(converted)
+        self._last_insert_table = self._insert_table(converted)
+        self._last_was_insert = self._last_insert_table in self._RETURNING_ID_TABLES
         if self._last_was_insert and 'RETURNING' not in converted.upper():
             converted = converted.rstrip().rstrip(';') + ' RETURNING id'
         self._cur.execute(converted, params or ())
@@ -161,6 +173,19 @@ class _PgCursorWrapper:
 
     @property
     def lastrowid(self):
+        # Reading lastrowid after inserting into an unlisted table always yields None on Postgres.
+        # The read itself is the signal that a caller needs the id, so complain here rather than
+        # letting None flow downstream and fail somewhere unrelated (or corrupt a row).
+        table = getattr(self, '_last_insert_table', None)
+        if table and not getattr(self, '_last_was_insert', False):
+            message = (
+                f"cur.lastrowid read after INSERT INTO {table}, which is not in "
+                f"_RETURNING_ID_TABLES; this returns None on Postgres. Add the table to the set."
+            )
+            if os.getenv("FLASK_ENV") in ("testing", "development"):
+                raise RuntimeError(message)
+            import logging
+            logging.getLogger(__name__).error(message)
         return getattr(self, '_lastrowid', None)
 
     @property
