@@ -408,8 +408,16 @@ export async function apiFetch(url, options = {}, token = null) {
 }
 
 /** Poll a background job until it completes. */
+// A job that is enqueued but never picked up (no RQ worker running alongside the backend) stays
+// 'queued' forever. Without these ceilings the poll loop spun silently and the user just watched a
+// progress bar sit there; now it fails with something diagnosable.
+const JOB_QUEUED_TIMEOUT_MS = 90_000;   // still 'queued' this long => nothing is draining the queue
+const JOB_TOTAL_TIMEOUT_MS = 900_000;   // 15 min; longer than any real generation
+
 export async function waitForJob(jobId, token, { onProgress, intervalMs = 600, signal } = {}) {
     const authToken = normalizeToken(token);
+    const startedAt = Date.now();
+    let leftQueueAt = null;
     while (true) {
         if (signal?.aborted) {
             throw new Error('Job cancelled');
@@ -422,6 +430,19 @@ export async function waitForJob(jobId, token, { onProgress, intervalMs = 600, s
         }
         if (job.status === 'failed') {
             throw new Error(job.error || 'Job failed');
+        }
+        if (job.status !== 'queued' && leftQueueAt === null) {
+            leftQueueAt = Date.now();
+        }
+        const elapsed = Date.now() - startedAt;
+        if (leftQueueAt === null && elapsed > JOB_QUEUED_TIMEOUT_MS) {
+            throw new Error(
+                'This job was accepted but never started. The background worker looks to be down — '
+                + 'please try again shortly or contact support.',
+            );
+        }
+        if (elapsed > JOB_TOTAL_TIMEOUT_MS) {
+            throw new Error('This job is taking unusually long. It may still finish — check your exports shortly.');
         }
         await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
     }

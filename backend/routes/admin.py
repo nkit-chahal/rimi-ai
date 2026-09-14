@@ -1362,6 +1362,31 @@ def health_ready():
     else:
         checks['redis'] = 'skipped'
 
+    # Reaching Redis is not the same as having something drain the queue. In production
+    # enqueue_or_run hands async jobs (make-seamless, the Qwen jobs) to RQ and returns; with no
+    # worker process alongside the web service they stay 'queued' forever and the UI spins.
+    # Surface that here so a missing worker is a visible failure, not a mystery hang.
+    if checks.get('redis') == 'ok':
+        try:
+            from rq import Queue, Worker
+            from jobs import QUEUE_NAME
+            from redis_client import redis_from_url
+            conn = redis_from_url(redis_url, socket_connect_timeout=2)
+            queue = Queue(QUEUE_NAME, connection=conn)
+            workers = [w for w in Worker.all(connection=conn) if QUEUE_NAME in w.queue_names()]
+            checks['queueDepth'] = queue.count
+            checks['workers'] = len(workers)
+            if not workers:
+                checks['rq_worker'] = f"error: no RQ worker listening on '{QUEUE_NAME}'"
+                overall_ok = False
+            else:
+                checks['rq_worker'] = 'ok'
+        except Exception as exc:
+            checks['rq_worker'] = f'error: {exc}'
+            overall_ok = False
+    else:
+        checks['rq_worker'] = 'skipped'
+
     status_code = 200 if overall_ok else 503
     return jsonify({
         'status': 'ok' if overall_ok else 'degraded',

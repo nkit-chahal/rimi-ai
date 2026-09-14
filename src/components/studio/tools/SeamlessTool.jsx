@@ -53,7 +53,11 @@ export default function SeamlessTool({
     const setSeamlessUrl = parentSetSeamlessUrl !== undefined ? parentSetSeamlessUrl : setLocalSeamlessUrl;
 
     const userRemainingCredits = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
-    const seamlessCreditCost = creditPricing?.seamless || 58;
+    // Fix Existing runs flux-fill-pro; Generate New runs the seamless-texture model,
+    // which is priced separately. Showing one number for both under-quoted the user.
+    const fixCreditCost = creditPricing?.seamless || 58;
+    const generateCreditCost = creditPricing?.seamless_texture || 84;
+    const seamlessCreditCost = seamlessMode === 'generate' ? generateCreditCost : fixCreditCost;
     const hasEnoughSeamlessCredits = userRemainingCredits >= seamlessCreditCost;
 
     useEffect(() => {
@@ -287,32 +291,49 @@ export default function SeamlessTool({
 
                     {/* Generated Results */}
                     {seamlessTiles.length > 0 && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
-                            {seamlessTiles.map((tile, i) => {
-                                const tileUrl = tile.url;
-                                const isSelected = seamlessUrl === tileUrl || seamlessUrl === mediaUrl(tile.url);
-                                const isBest = i === bestTileIndex;
-                                const scoreClass = tile.score >= 0.9 ? 'excellent' : tile.score >= 0.75 ? 'good' : 'poor';
-                                return (
-                                    <div
-                                        key={i}
-                                        className={`st-tile-result-card ${isSelected ? 'selected' : ''}`}
-                                        onClick={() => { setSeamlessUrl(tileUrl); setUploads(prev => ({ ...prev, [tool]: { ...prev[tool], url: tileUrl } })); }}
-                                    >
-                                        <MediaImg src={tileUrl} alt={`Tile ${i + 1}`} token={currentToken} />
-                                        <div className={`st-score-badge ${scoreClass}`}>
-                                            {Math.round(tile.score * 100)}%
-                                        </div>
-                                        {isBest && <div className="st-best-pick">AI Pick</div>}
-                                        <div className="st-tile-result-overlay">
-                                            <a href={tileUrl} onClick={(e) => { e.stopPropagation(); forceDownload(e, tileUrl); }}>
-                                                <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={16} />
-                                            </a>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                        <section className="st-tile-results" aria-label="Generated tiles">
+                            <header className="st-tile-results-head">
+                                <h3>{seamlessTiles.length} tiles generated</h3>
+                                <p>Click a tile to use it, or download any of them.</p>
+                            </header>
+                            <div className="st-tile-grid">
+                                {seamlessTiles.map((tile, i) => {
+                                    const tileUrl = tile.url;
+                                    const isSelected = seamlessUrl === tileUrl || seamlessUrl === mediaUrl(tile.url);
+                                    const isBest = i === bestTileIndex;
+                                    const match = Math.round(tile.score * 100);
+                                    return (
+                                        <article key={i} className={`st-tile-result-card ${isSelected ? 'selected' : ''}`}>
+                                            <button
+                                                type="button"
+                                                className="st-tile-preview"
+                                                onClick={() => { setSeamlessUrl(tileUrl); setUploads(prev => ({ ...prev, [tool]: { ...prev[tool], url: tileUrl } })); }}
+                                                aria-pressed={isSelected}
+                                                aria-label={`Use tile ${i + 1}`}
+                                            >
+                                                <MediaImg src={tileUrl} alt={`Tile ${i + 1}`} token={currentToken} />
+                                                {isBest && <span className="st-best-pick">Best match</span>}
+                                                {isSelected && <span className="st-tile-selected-tick"><I d="M5 13l4 4L19 7" s={14} /> In use</span>}
+                                            </button>
+                                            <div className="st-tile-actions">
+                                                <span className="st-tile-match" title="How closely the tile's opposite edges line up">
+                                                    {match}% edge match
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    className="st-tile-download"
+                                                    onClick={(e) => forceDownload(e, mediaUrl(tileUrl), `tile_${i + 1}.png`, currentToken)}
+                                                    aria-label={`Download tile ${i + 1}`}
+                                                >
+                                                    <I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={15} />
+                                                    Download
+                                                </button>
+                                            </div>
+                                        </article>
+                                    );
+                                })}
+                            </div>
+                        </section>
                     )}
                 </div>
             ) : (
