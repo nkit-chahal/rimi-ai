@@ -6,7 +6,7 @@ import time
 import concurrent.futures
 import numpy as np
 from PIL import Image
-import replicate
+from replicate_client import run_model
 from io import BytesIO
 from scipy import ndimage
 from flask import Blueprint, request, jsonify, g
@@ -200,7 +200,7 @@ def _generate_single_mockup(
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             t0 = time.time()
-            output = replicate.run(
+            output = run_model(
                 MODEL_ID,
                 input={
                     "prompt": prompt,

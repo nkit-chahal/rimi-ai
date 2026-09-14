@@ -5,7 +5,7 @@ import os
 import time
 import uuid
 
-import replicate
+from replicate_client import run_model
 import requests as http_requests
 from PIL import Image, ImageFilter
 
@@ -117,7 +117,7 @@ def execute_image_layers(payload, on_progress=None):
 
     progress(20, f'Calling Qwen Image Layered ({num_layers} layers)')
     start_time = time.time()
-    output = replicate.run(
+    output = run_model(
         'qwen/qwen-image-layered',
         input={
             'image': data_uri,
@@ -235,7 +235,7 @@ def execute_edit_layer(payload, on_progress=None):
                 with open(ref_path, 'rb') as ref_file:
                     ref_b64 = base64.b64encode(ref_file.read()).decode('utf-8')
                     style_uri = f'data:image/png;base64,{ref_b64}'
-        output = replicate.run(model_id, input={
+        output = run_model(model_id, input={
             'structure_image': data_uri,
             'style_image': style_uri,
             'prompt': user_prompt or 'Apply artistic style',
@@ -249,7 +249,7 @@ def execute_edit_layer(payload, on_progress=None):
                 with open(ref_path, 'rb') as ref_file:
                     ref_b64 = base64.b64encode(ref_file.read()).decode('utf-8')
                     replicate_input['image_2'] = f'data:image/png;base64,{ref_b64}'
-        output = replicate.run(model_id, input=replicate_input)
+        output = run_model(model_id, input=replicate_input)
         required_credits = credit_requirement('imageLayerEdit', 35)
     duration = time.time() - start_time
     cost_usd = 0.03 if model_id == 'qwen/qwen-image-edit' else 0.02 + duration * 0.001525
@@ -379,7 +379,7 @@ def execute_inpaint_layer(payload, on_progress=None):
 
     progress(35, 'Calling Qwen Image Edit')
     start_time = time.time()
-    output = replicate.run('qwen/qwen-image-edit', input={'image': data_uri, 'prompt': ai_prompt})
+    output = run_model('qwen/qwen-image-edit', input={'image': data_uri, 'prompt': ai_prompt})
     duration = time.time() - start_time
     required_credits = credit_requirement('imageLayerEdit', 35)
     cost_usd = 0.03

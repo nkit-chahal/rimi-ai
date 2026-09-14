@@ -2,7 +2,7 @@
 import os
 import uuid
 import base64
-import replicate
+from replicate_client import run_model
 from flask import Blueprint, request, jsonify, g
 from rate_limits import generation_rate_limit
 from middleware import login_required, project_access_from_payload
@@ -84,7 +84,7 @@ def vectorize_image():
                 data_uri = f"data:{mime_type};base64,{encoded_string}"
 
             start_time = time.time()
-            output = replicate.run(
+            output = run_model(
                 "recraft-ai/recraft-vectorize",
                 input={"image": data_uri}
             )
@@ -236,7 +236,7 @@ def upscale():
         except (TypeError, ValueError):
             scale = 4
         scale = max(2, min(4, scale))
-        output = replicate.run(
+        output = run_model(
             REPLICATE_UPSCALE_MODEL,
             input={
                 "image": data_uri,

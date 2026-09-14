@@ -141,7 +141,7 @@ class TestPipelineSelection:
             calls["replicate"] += 1
             calls["prompts"].append(input["prompt"])
             return "https://fake/out.png"
-        monkeypatch.setattr(ms.replicate, "run", fake_run)
+        monkeypatch.setattr(ms, "run_model", fake_run)
 
         buf = io.BytesIO()
         model_returns.save(buf, format="PNG")

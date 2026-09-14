@@ -322,7 +322,7 @@ def smart_mask():
   """Generate a mask image from a click point and prompt on a layer."""
   import io
   import uuid
-  import replicate
+  from replicate_client import run_model
   from PIL import Image
   from auth import rgba_layer_to_green_matte
   from services.qwen_layers import _download_replicate_output
@@ -364,7 +364,7 @@ def smart_mask():
       f"highlighting only: {prompt}. The mask region should be white on black. "
       f"Focus near coordinate ({click_x}, {click_y}). Keep background black."
     )
-    output = replicate.run('qwen/qwen-image-edit', input={'image': data_uri, 'prompt': ai_prompt})
+    output = run_model('qwen/qwen-image-edit', input={'image': data_uri, 'prompt': ai_prompt})
     result_bytes = _download_replicate_output(output)
     result_name = f'smartmask_{uuid.uuid4().hex[:8]}.png'
     result_path = os.path.join(RESULTS_DIR, result_name)

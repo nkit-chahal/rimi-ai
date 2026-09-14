@@ -22,7 +22,7 @@ from auth import (
     reserve_credits_or_error,
 )
 from security_utils import safe_fetch_url, validate_external_url, media_access_token
-import replicate
+from replicate_client import run_model
 import storage
 from jobs import enqueue_or_run
 from workers import run_generation_job
@@ -384,11 +384,13 @@ def _run_single_extract(model_cfg, data_uri, project_id, filename, image_descrip
             }
             if 'imagen' in model_id:
                 replicate_input["image_size"] = "2K"
-            elif 'flux' in model_id:
-                replicate_input["prompt_upsampling"] = True
+            # No prompt_upsampling here: it is a FLUX *pro* input, and the only flux model that
+            # reaches this text-only branch is flux-schnell, whose schema does not accept it
+            # (prompt, aspect_ratio, num_outputs, num_inference_steps, seed, output_format,
+            # output_quality, disable_safety_checker, go_fast, megapixels).
 
         start_time = time.time()
-        output = replicate.run(model_id, input=replicate_input)
+        output = run_model(model_id, input=replicate_input)
         duration = time.time() - start_time
 
         credits_used = int(model_cfg.get('credits') or credit_requirement('extract', 148))
@@ -714,7 +716,7 @@ def extract_edit():
 
         print(f"  [Extract Edit] Editing with {model_id}: {prompt[:80]}...")
         start_time = time.time()
-        output = replicate.run(model_id, input=replicate_input)
+        output = run_model(model_id, input=replicate_input)
         duration = time.time() - start_time
 
         credits_used = required_credits
@@ -859,7 +861,7 @@ def generate_inspirations():
         try:
             print(f"  [Inspirations] Generating {count} seamless tiles using FSTL text-to-image...")
             start_time = time.time()
-            output = replicate.run(
+            output = run_model(
                 "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
                 input={"prompt": f"FSTL {designer_prompt}, seamless repeating textile pattern, tileable",
                        "model": "dev", "aspect_ratio": "1:1", "num_outputs": min(4, count),
@@ -930,7 +932,7 @@ def generate_inspirations():
                             replicate_input["image"] = data_uri
                         
                     start_time = time.time()
-                    output = replicate.run(model_id, input=replicate_input)
+                    output = run_model(model_id, input=replicate_input)
                     duration = time.time() - start_time
                     
                     # Exact Per-Image Costs from Replicate Invoice JSON

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 import numpy as np
-import replicate
+from replicate_client import run_model
 import requests as http_requests
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
@@ -164,7 +164,7 @@ def execute_make_seamless(data, on_progress=None):
             for attempt in range(3):
                 try:
                     t0 = time.time()
-                    output = replicate.run("black-forest-labs/flux-fill-pro", input={
+                    output = run_model("black-forest-labs/flux-fill-pro", input={
                         "image": img_uri,
                         "mask": mask_uri,
                         "prompt": prompt,

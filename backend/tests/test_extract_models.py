@@ -67,7 +67,7 @@ def test_run_single_extract_builds_image_conditioned_input(monkeypatch):
         def raise_for_status(self):
             return None
 
-    monkeypatch.setattr("routes.generation.replicate.run", fake_run)
+    monkeypatch.setattr("routes.generation.run_model", fake_run)
     monkeypatch.setattr(
         "routes.generation.http_requests.get",
         lambda *a, **k: FakeResp(),

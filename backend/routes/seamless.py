@@ -24,7 +24,7 @@ from jobs import enqueue_or_run
 from services.make_seamless import execute_make_seamless
 from seam_metrics import seam_continuity
 from workers import run_generation_job
-import replicate
+from replicate_client import run_model
 import storage
 
 bp = Blueprint('seamless', __name__)
@@ -104,7 +104,7 @@ def generate_seamless():
         guidance = guidance_map.get(creativity, 3.0)
         print(f"  [Generate Seamless] Generating {count} seamless tiles (guidance={guidance})...")
         start_time = time.time()
-        output = replicate.run(
+        output = run_model(
             "replicate/seamless-texture:9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
             input={"prompt": f"FSTL {designer_prompt}, seamless repeating textile pattern, tileable",
                    "model": "dev", "aspect_ratio": "1:1", "num_outputs": count,

@@ -4,7 +4,7 @@ import os
 import time
 import uuid
 
-import replicate
+from replicate_client import run_model
 import requests as http_requests
 from flask import Blueprint, jsonify, request, g
 from rate_limits import generation_rate_limit
@@ -94,7 +94,7 @@ def remove_background():
         data_uri = _image_to_data_uri(filepath, source_name)
 
         start_time = time.time()
-        output = replicate.run(REMOVE_BG_MODEL, input={'image': data_uri})
+        output = run_model(REMOVE_BG_MODEL, input={'image': data_uri})
         duration = time.time() - start_time
         credits_used = required_credits
 
