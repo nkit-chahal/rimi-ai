@@ -139,6 +139,23 @@ def _public_plan(plan):
     }
 
 
+@bp.route("/api/billing/plans", methods=["GET"])
+def public_billing_plans():
+    """Public, checkout-safe plan catalogue for the marketing pricing page."""
+    return jsonify({
+        "success": True,
+        "plans": [_public_plan(plan) for plan in BILLING_PLANS],
+        "creditExpiryDays": 30,
+        "proDurationDays": 30,
+        "customTopUp": {
+            "enabled": True,
+            "minAmountInr": CUSTOM_MIN_AMOUNT_INR,
+            "maxAmountInr": CUSTOM_MAX_AMOUNT_INR,
+            "creditsPerRupee": CUSTOM_CREDITS_PER_RUPEE,
+        },
+    })
+
+
 def _razorpay_credentials():
     key_id = os.getenv("RAZORPAY_KEY_ID", "").strip()
     key_secret = os.getenv("RAZORPAY_KEY_SECRET", "").strip()

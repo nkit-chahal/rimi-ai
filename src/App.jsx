@@ -7,6 +7,8 @@ import { BgTaskProvider } from './contexts/BgTaskContext';
 
 const Login = lazy(() => import('./pages/Login'));
 const SharePage = lazy(() => import('./pages/SharePage'));
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const PricingPage = lazy(() => import('./pages/PricingPage'));
 
 /** One-time migrate legacy hash URLs (#/login, #/studio/…) to path URLs. */
 function migrateLegacyHashRoute() {
@@ -81,7 +83,10 @@ function AppRoutes() {
     localStorage.setItem('rim_token', cleanToken);
     localStorage.setItem('rim_user', JSON.stringify(user));
     setIsBootEntry(true);
-    navigate('/studio', { replace: true });
+    const requestedRedirect = new URLSearchParams(window.location.search).get('redirect');
+    const isStudioRedirect = requestedRedirect === '/studio' || requestedRedirect?.startsWith('/studio/');
+    const safeRedirect = isStudioRedirect ? requestedRedirect : '/studio';
+    navigate(safeRedirect, { replace: true });
   }, [navigate]);
 
   const handleBootComplete = useCallback(() => {
@@ -127,7 +132,9 @@ function AppRoutes() {
           path="/login"
           element={currentUser ? <Navigate to="/studio" replace /> : <Suspense fallback={null}><Login onLogin={handleLogin} /></Suspense>}
         />
-        <Route path="/" element={currentUser ? <Navigate to="/studio" replace /> : <LoginRedirect />} />
+        <Route path="/intro" element={<Suspense fallback={null}><LandingPage currentUser={currentUser} /></Suspense>} />
+        <Route path="/pricing" element={<Suspense fallback={null}><PricingPage currentUser={currentUser} /></Suspense>} />
+        <Route path="/" element={<Suspense fallback={null}><LandingPage currentUser={currentUser} /></Suspense>} />
         <Route path="*" element={currentUser ? <Navigate to="/studio" replace /> : <LoginRedirect />} />
         </Routes>
       </BgTaskProvider>
