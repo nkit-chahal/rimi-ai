@@ -122,6 +122,43 @@ header{position:sticky;top:0;z-index:50;background:rgba(11,9,16,.72);
   border:1px solid var(--line-dark)}
 @keyframes slide{to{transform:translateX(-50%)}}
 
+/* ---------------------------------------------------------------------------
+   Framed block: a hairline rule with a dot at each corner. Borrowed from the
+   restrained grid-line detailing modern product sites use (ElevenLabs et al) —
+   it gives structure without adding another colour or another box shadow.
+   ------------------------------------------------------------------------ */
+.framed{position:relative;border:1px solid var(--line)}
+.framed::before,.framed::after,
+.framed > .dots::before,.framed > .dots::after{
+  content:"";position:absolute;width:5px;height:5px;border-radius:50%;
+  background:var(--violet);opacity:.5}
+.framed::before{top:-3px;left:-3px}
+.framed::after{top:-3px;right:-3px}
+.framed > .dots::before{bottom:-3px;left:-3px}
+.framed > .dots::after{bottom:-3px;right:-3px}
+
+/* ---- client wall ---- */
+.logos-head{display:flex;align-items:center;justify-content:space-between;gap:20px;
+  flex-wrap:wrap;margin-bottom:26px}
+.logos-head p{font-size:1rem;font-weight:600;color:var(--t2)}
+.logos-head p b{color:var(--t1);font-weight:700}
+.pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);
+  background:var(--card);border-radius:999px;padding:.6rem 1.25rem;font-size:.86rem;
+  font-weight:600;text-decoration:none;color:var(--t1);transition:border-color .15s,color .15s}
+.pill:hover{border-color:var(--violet);color:var(--violet-dk)}
+.logo-grid{display:grid;grid-template-columns:repeat(6,1fr);background:var(--card)}
+.logo-grid > div{display:flex;align-items:center;justify-content:center;gap:9px;
+  min-height:104px;padding:20px 14px;border-right:1px solid var(--line);
+  border-bottom:1px solid var(--line)}
+.logo-grid > div:nth-child(6n){border-right:0}
+.logo-grid > div:nth-last-child(-n+6){border-bottom:0}
+/* Placeholder mark. Replace the whole <div> with <img src="assets/logos/name.svg">. */
+.logo-slot{color:#A8A29E;font-weight:700;font-size:.84rem;letter-spacing:-.01em;
+  white-space:nowrap}
+.logo-slot i{display:inline-block;width:19px;height:19px;border-radius:5px;
+  background:#D6D3D1;vertical-align:-4px;margin-right:8px}
+.logos-note{margin-top:18px;font-size:.8rem;color:var(--t3)}
+
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:20px}
 .stat{padding:26px 24px;border-radius:var(--r);background:var(--card);
   border:1px solid var(--line);border-top:3px solid var(--violet)}
@@ -224,6 +261,11 @@ footer{background:var(--ink);color:var(--on-dark-3);padding-block:38px;font-size
   .bento{grid-template-columns:repeat(2,1fr)}
   .c2,.c3{grid-column:span 2}
   .stats,.plans{grid-template-columns:repeat(2,1fr)}
+  .logo-grid{grid-template-columns:repeat(3,1fr)}
+  .logo-grid > div:nth-child(6n){border-right:1px solid var(--line)}
+  .logo-grid > div:nth-child(3n){border-right:0}
+  .logo-grid > div:nth-last-child(-n+6){border-bottom:1px solid var(--line)}
+  .logo-grid > div:nth-last-child(-n+3){border-bottom:0}
   .flow{grid-template-columns:repeat(2,1fr)}
   .flow > div:nth-child(2){border-right:0}
   .flow > div:nth-child(1),.flow > div:nth-child(2){border-bottom:1px solid var(--line)}
@@ -233,6 +275,11 @@ footer{background:var(--ink);color:var(--on-dark-3);padding-block:38px;font-size
 }
 @media(max-width:620px){
   .bento,.stats,.plans,.flow,.road{grid-template-columns:1fr}
+  .logo-grid{grid-template-columns:repeat(2,1fr)}
+  .logo-grid > div:nth-child(3n){border-right:1px solid var(--line)}
+  .logo-grid > div:nth-child(2n){border-right:0}
+  .logo-grid > div:nth-last-child(-n+3){border-bottom:1px solid var(--line)}
+  .logo-grid > div:nth-last-child(-n+2){border-bottom:0}
   .c2,.c3{grid-column:span 1}
   .flow > div{border-right:0;border-bottom:1px solid var(--line)}
   .flow > div:last-child{border-bottom:0}
@@ -310,6 +357,48 @@ footer{background:var(--ink);color:var(--on-dark-3);padding-block:38px;font-size
       <img src="assets/line.webp" alt="" aria-hidden="true" loading="lazy">
     </div>
   </div>
+
+  <!-- ===================================================================
+       CLIENT WALL — PLACEHOLDERS.
+
+       Every slot below is a placeholder. Replace each <div> with the real
+       logo, e.g.  <div><img src="assets/logos/acme.svg" alt="Acme Textiles"></div>
+       and delete the .logos-note paragraph once they are real.
+
+       Do NOT drop in logos of companies that are not customers. A "trusted by"
+       wall is a factual claim: one prospect recognising a name and asking about
+       it ends the meeting, and using a mark without permission is a trademark
+       problem. If there are no logos yet, delete this whole section — an honest
+       page with no wall is stronger than a wall that cannot be stood behind.
+       =================================================================== -->
+  <section class="wrap" style="padding-bottom:0">
+    <div class="rv">
+      <div class="logos-head">
+        <p><b>Trusted by</b> textile studios, mills and brands</p>
+        <a class="pill" href="#contact">Read the case studies &rarr;</a>
+      </div>
+      <div class="framed">
+        <span class="dots"></span>
+        <div class="logo-grid">
+          <div><span class="logo-slot"><i></i>Client one</span></div>
+          <div><span class="logo-slot"><i></i>Client two</span></div>
+          <div><span class="logo-slot"><i></i>Client three</span></div>
+          <div><span class="logo-slot"><i></i>Client four</span></div>
+          <div><span class="logo-slot"><i></i>Client five</span></div>
+          <div><span class="logo-slot"><i></i>Client six</span></div>
+          <div><span class="logo-slot"><i></i>Client seven</span></div>
+          <div><span class="logo-slot"><i></i>Client eight</span></div>
+          <div><span class="logo-slot"><i></i>Client nine</span></div>
+          <div><span class="logo-slot"><i></i>Client ten</span></div>
+          <div><span class="logo-slot"><i></i>Client eleven</span></div>
+          <div><span class="logo-slot"><i></i>Client twelve</span></div>
+        </div>
+      </div>
+      <p class="logos-note">
+        Placeholder slots &mdash; replace with real customer logos, or remove this section.
+      </p>
+    </div>
+  </section>
 
   <section class="wrap">
     <div class="rv">

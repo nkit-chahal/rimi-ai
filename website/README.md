@@ -46,6 +46,26 @@ The hero texture and the two large bento tiles reuse `deco.webp` and `palm.webp`
 backgrounds. They tile correctly because they are genuine seamless repeats — which is itself a
 small demonstration of the product.
 
+## The client wall
+
+The "Trusted by" section is **twelve placeholder slots**. Replace each one with a real logo:
+
+```html
+<div><img src="assets/logos/acme.svg" alt="Acme Textiles"></div>
+```
+
+Then delete the `.logos-note` line beneath the grid. The grid reflows on its own — 6 columns on
+desktop, 3 on tablet, 2 on phone — so any number of logos works as long as it fills the rows.
+
+**Only put companies there that are actually customers, and that have agreed to be named.** A
+"trusted by" wall is a factual claim, not decoration: one prospect recognising a name and asking
+about the engagement ends the meeting, and using a company's mark without permission is a
+trademark problem. If there are no logos yet, delete the whole section — a page with no wall is
+stronger than a wall that cannot be stood behind.
+
+The framing (hairline rule, dot at each corner) is the `.framed` utility and can be reused around
+any block.
+
 ## Motion
 
 Deliberately restrained, matching the principle applied to the app itself: motion reports change,
