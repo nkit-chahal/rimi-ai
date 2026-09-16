@@ -14,7 +14,7 @@ from auth import (
     log_export,
     record_activity,
 )
-from config import groq_client, RESULTS_DIR, GROQ_VISION_MODEL
+from config import groq_client, RESULTS_DIR, GROQ_VISION_MODEL, clamp_canvas
 from db import db, db_lock
 from qwen_session_helpers import (
     append_layer_version,
@@ -62,7 +62,7 @@ def create_session():
     user_id = g.current_user['id']
     source_filename = os.path.basename(data.get('sourceFilename', '') or data.get('filename', '') or '')
     name = (data.get('name') or 'Untitled Session').strip()[:120]
-    canvas_width = int(data.get('canvasWidth', 1024))
+    canvas_width = clamp_canvas(data.get('canvasWidth'), 1024)
     canvas_height = int(data.get('canvasHeight', 1024))
     document = data.get('document') or {'layers': [], 'canvas': {'width': canvas_width, 'height': canvas_height}}
     now = _now_iso()

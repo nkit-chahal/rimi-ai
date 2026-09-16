@@ -143,23 +143,25 @@ def generate_seamless():
             print(f"  [Generate Seamless] Tile {idx+1}: score={score:.3f}")
         if best_url:
             conn = db()
-            now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-            conn.execute("UPDATE projects SET hero_image_url = ?, thumbnail_url = ?, updated_at = ? WHERE id = ?",
-                         (best_url, best_url, now, project_id))
-            score_pct = int(best_score * 100)
-            tile_seamless = 1 if best_score >= 0.75 else 0  # B or better, as in Fix Existing
-            label = "A - Excellent" if best_score >= 0.90 else "B - Good" if best_score >= 0.75 else "C - Fair" if best_score >= 0.60 else "D - Poor"
-            note = f"Generated natively seamless tile ({score_pct}% match)."
-            conn.execute(
-                "INSERT INTO pattern_health (project_id, score, label, tile_seamless, color_balance, print_readiness, resolution, note) "
-                "VALUES (?, ?, ?, ?, 1, ?, 1, ?) ON CONFLICT(project_id) DO UPDATE SET "
-                "score=excluded.score, label=excluded.label, tile_seamless=excluded.tile_seamless, "
-                "color_balance=excluded.color_balance, print_readiness=excluded.print_readiness, "
-                "resolution=excluded.resolution, note=excluded.note",
-                (project_id, score_pct, label, tile_seamless, 1 if tile_seamless else 0, note)
-            )
-            conn.commit()
-            conn.close()
+            try:
+                now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+                conn.execute("UPDATE projects SET hero_image_url = ?, thumbnail_url = ?, updated_at = ? WHERE id = ?",
+                             (best_url, best_url, now, project_id))
+                score_pct = int(best_score * 100)
+                tile_seamless = 1 if best_score >= 0.75 else 0  # B or better, as in Fix Existing
+                label = "A - Excellent" if best_score >= 0.90 else "B - Good" if best_score >= 0.75 else "C - Fair" if best_score >= 0.60 else "D - Poor"
+                note = f"Generated natively seamless tile ({score_pct}% match)."
+                conn.execute(
+                    "INSERT INTO pattern_health (project_id, score, label, tile_seamless, color_balance, print_readiness, resolution, note) "
+                    "VALUES (?, ?, ?, ?, 1, ?, 1, ?) ON CONFLICT(project_id) DO UPDATE SET "
+                    "score=excluded.score, label=excluded.label, tile_seamless=excluded.tile_seamless, "
+                    "color_balance=excluded.color_balance, print_readiness=excluded.print_readiness, "
+                    "resolution=excluded.resolution, note=excluded.note",
+                    (project_id, score_pct, label, tile_seamless, 1 if tile_seamless else 0, note)
+                )
+                conn.commit()
+            finally:
+                conn.close()
             best_filename = best_url.split('/')[-1]
             input_fn = filename if filename else (image_url.split('/')[-1] if image_url else None)
             log_export(

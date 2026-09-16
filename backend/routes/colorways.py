@@ -102,7 +102,12 @@ def generate_colorways():
     palette = data.get('palette', [])
     locked_indices = set(data.get('lockedIndices', []))
     strategy = data.get('strategy', 'complementary')
-    count = int(data.get('count', 4))
+    # Each colourway is a full-resolution recolour written to disk and synced to storage,
+    # so an unbounded count is an unbounded amount of work for a fixed price per item.
+    try:
+        count = max(1, min(12, int(data.get('count', 4))))
+    except (TypeError, ValueError):
+        count = 4
     project_id, access_error = project_access_from_payload(data)
     if access_error:
         return access_error

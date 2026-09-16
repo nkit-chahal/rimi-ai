@@ -16,6 +16,15 @@ import storage
 bp = Blueprint('repeat', __name__)
 
 
+def _clamp_float(value, default, low, high):
+    """Coerce a requested dimension into a range a printer would actually accept."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    return max(low, min(high, value))
+
+
 def _load_source_image(filename, image_url):
     if image_url and image_url.startswith('http'):
         content = safe_fetch_url(image_url, timeout=30)
@@ -72,13 +81,15 @@ def create_repeat_set():
     data = request.get_json() or {}
     filename = os.path.basename(data.get('filename', '') or '')
     image_url = data.get('imageUrl', '')
-    repeat_width = float(data.get('repeatWidth') or data.get('printWidth') or 12)
-    repeat_height = float(data.get('repeatHeight') or data.get('printHeight') or repeat_width)
-    fabric_width = float(data.get('fabricWidth') or 54)
-    scale = float(data.get('scale', 100))
+    # These multiply: the tile is repeat_width * dpi across, then tiled by the grid. 100in
+    # at 1200dpi asked for a 120,000px tile before the grid was even applied.
+    repeat_width = _clamp_float(data.get('repeatWidth') or data.get('printWidth'), 12, 1, 120)
+    repeat_height = _clamp_float(data.get('repeatHeight') or data.get('printHeight'), repeat_width, 1, 120)
+    fabric_width = _clamp_float(data.get('fabricWidth'), 54, 1, 600)
+    scale = _clamp_float(data.get('scale'), 100, 1, 400)
     repeat_type = data.get('repeatType', 'block')
-    rotation = int(data.get('rotation', 0))
-    dpi = int(data.get('dpi', 300))
+    rotation = int(data.get('rotation', 0) or 0) % 360
+    dpi = int(_clamp_float(data.get('dpi'), 300, 72, 600))
     out_format = (data.get('format') or 'PNG').upper()
     project_id, access_error = project_access_from_payload(data)
     if access_error:

@@ -86,13 +86,15 @@ def recolor_api():
         storage.sync_to_s3(local_filepath)
         local_url = f"/results/{local_filename}"
         conn = db()
-        created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        conn.execute(
-            "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, project_id, local_filename, filename, "Colorways", json.dumps({"mapping": color_mapping}), created_at)
-        )
-        conn.commit()
-        conn.close()
+        try:
+            created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+            conn.execute(
+                "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, project_id, local_filename, filename, "Colorways", json.dumps({"mapping": color_mapping}), created_at)
+            )
+            conn.commit()
+        finally:
+            conn.close()
         updated_credits = get_updated_credits(user_id)
         return jsonify({
             'success': True,
@@ -120,9 +122,11 @@ def generate_tech_pack_api():
     if not filepath:
         return jsonify({'error': 'File not found'}), 404
     conn = db()
-    project_row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
-    controls_row = conn.execute("SELECT * FROM project_controls WHERE project_id = ?", (project_id,)).fetchone()
-    conn.close()
+    try:
+        project_row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        controls_row = conn.execute("SELECT * FROM project_controls WHERE project_id = ?", (project_id,)).fetchone()
+    finally:
+        conn.close()
     if not project_row:
         return jsonify({'error': 'Project not found'}), 404
     user_id, required_credits, error_response, status_code = require_credits(project_id, None, 'techPack', 2, 'export')
@@ -145,13 +149,15 @@ def generate_tech_pack_api():
         print(f"Failed to generate PDF: {e}")
         return jsonify({'error': 'Failed to generate Tech Pack PDF'}), 500
     conn = db()
-    created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-    conn.execute(
-        "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (user_id, project_id, pdf_filename, filename, "Tech Pack", json.dumps(tech_pack_options), created_at)
-    )
-    conn.commit()
-    conn.close()
+    try:
+        created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        conn.execute(
+            "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, project_id, pdf_filename, filename, "Tech Pack", json.dumps(tech_pack_options), created_at)
+        )
+        conn.commit()
+    finally:
+        conn.close()
     updated_credits = get_updated_credits(user_id)
     return jsonify({'success': True, 'resultUrl': f"/results/{pdf_filename}", **updated_credits})
 
@@ -245,13 +251,15 @@ def color_reduce_api():
         storage.sync_to_s3(local_filepath)
         local_url = f"/results/{local_filename}"
         conn = db()
-        created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        conn.execute(
-            "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, project_id, local_filename, filename, "Color Reduce", json.dumps({"numColors": n_colors}), created_at)
-        )
-        conn.commit()
-        conn.close()
+        try:
+            created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+            conn.execute(
+                "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, project_id, local_filename, filename, "Color Reduce", json.dumps({"numColors": n_colors}), created_at)
+            )
+            conn.commit()
+        finally:
+            conn.close()
         updated_credits = get_updated_credits(user_id)
         return jsonify({'success': True, 'resultUrl': local_url, 'palette': palette, **updated_credits})
     except Exception as e:
@@ -294,13 +302,15 @@ def layer_export_api():
         storage.sync_to_s3(out_filepath)
         local_url = f"/results/{out_filename}"
         conn = db()
-        created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        conn.execute(
-            "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, project_id, out_filename, filename, f"Layer Export ({export_format.upper()})", json.dumps({"numColors": n_colors, "format": export_format}), created_at)
-        )
-        conn.commit()
-        conn.close()
+        try:
+            created_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+            conn.execute(
+                "INSERT INTO exports (user_id, project_id, filename, input_filename, tool_type, settings_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, project_id, out_filename, filename, f"Layer Export ({export_format.upper()})", json.dumps({"numColors": n_colors, "format": export_format}), created_at)
+            )
+            conn.commit()
+        finally:
+            conn.close()
         updated_credits = get_updated_credits(user_id)
         return jsonify({'success': True, 'resultUrl': local_url, 'palette': palette, **updated_credits})
     except Exception as e:

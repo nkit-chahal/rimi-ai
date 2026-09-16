@@ -8,6 +8,7 @@ from security_utils import authorize_file_request, validate_upload_file, issue_f
 
 from config import UPLOAD_DIR, RESULTS_DIR, allowed_file, USE_S3
 from db import db
+from watermark import apply_watermark, is_free_plan
 import storage
 
 bp = Blueprint('upload', __name__)
@@ -223,6 +224,63 @@ def serve_upload(filename):
     abort(404)
 
 
+WATERMARK_DIR = os.path.join(RESULTS_DIR, 'watermarked')
+
+
+def _owner_plan(user_id):
+    conn = db()
+    try:
+        row = conn.execute("SELECT plan FROM users WHERE id = ?", (user_id,)).fetchone()
+        return row["plan"] if row else None
+    finally:
+        conn.close()
+
+
+def _free_plan_watermark(filename, source_bytes_loader):
+    """Watermarked bytes when the file belongs to a free-plan account, else None.
+
+    The download proxy and the public share links already watermark free-tier output, but
+    /results/<file> handed back the original, so the studio's own preview was a clean copy
+    that could simply be saved from the browser. Watermarking on every request would
+    re-encode a full-resolution image for every <img> the studio renders, so the result is
+    cached on disk and reused until the source changes.
+    """
+    if filename.endswith('.svg'):
+        return None
+
+    owner = _lookup_file_owner(filename)
+    if owner is None:
+        return None
+    if not is_free_plan(_owner_plan(owner)):
+        return None
+
+    os.makedirs(WATERMARK_DIR, exist_ok=True)
+    cached = os.path.join(WATERMARK_DIR, f"wm_{filename.rsplit('.', 1)[0]}.png")
+    source_path = os.path.join(RESULTS_DIR, filename)
+    if os.path.exists(cached):
+        fresh = (
+            not os.path.exists(source_path)
+            or os.path.getmtime(cached) >= os.path.getmtime(source_path)
+        )
+        if fresh:
+            with open(cached, 'rb') as handle:
+                return handle.read()
+
+    source_bytes = source_bytes_loader()
+    if not source_bytes:
+        return None
+    try:
+        stamped = apply_watermark(source_bytes)
+    except Exception as exc:
+        # A watermark failure must not turn into a broken image for the customer; log it and
+        # fall through to the original rather than serving nothing.
+        print(f"  [Watermark] Could not stamp {filename}: {exc}")
+        return None
+    with open(cached, 'wb') as handle:
+        handle.write(stamped)
+    return stamped
+
+
 @bp.route('/results/<filename>')
 def serve_result(filename):
     filename = os.path.basename(filename)
@@ -230,6 +288,20 @@ def serve_result(filename):
 
     mimetype = 'image/svg+xml' if filename.endswith('.svg') else None
     local_path = os.path.join(RESULTS_DIR, filename)
+
+    def _load():
+        if os.path.exists(local_path):
+            with open(local_path, 'rb') as handle:
+                return handle.read()
+        if USE_S3:
+            data, _ct = storage.get_file('results', filename)
+            return data
+        return None
+
+    stamped = _free_plan_watermark(filename, _load)
+    if stamped:
+        return Response(stamped, mimetype='image/png')
+
     if os.path.exists(local_path):
         return send_from_directory(RESULTS_DIR, filename, mimetype=mimetype)
     if USE_S3:
@@ -251,6 +323,20 @@ def serve_preview(filename):
         if source and source != filename:
             from routes.exports import get_preview
             get_preview(source)
+    def _load():
+        if os.path.exists(local_path):
+            with open(local_path, 'rb') as handle:
+                return handle.read()
+        if USE_S3:
+            data, _ct = storage.get_file('results', f'previews/{filename}')
+            return data
+        return None
+
+    # The gallery thumbnail is smaller but still a clean copy, so it carries the mark too.
+    stamped = _free_plan_watermark(filename, _load)
+    if stamped:
+        return Response(stamped, mimetype='image/png')
+
     if os.path.exists(local_path):
         return send_from_directory(previews_dir, filename)
     if USE_S3:

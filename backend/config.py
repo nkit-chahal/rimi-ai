@@ -18,6 +18,22 @@ RESULTS_DIR = os.path.join(BASE_DIR, 'results')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
+# Generated-image limits. A request names the canvas it wants, so without a ceiling one
+# call can ask for something large enough to exhaust the worker's memory. 8192px square is
+# far beyond any print tile the studio produces and still only ~256 MB in RGBA.
+MAX_CANVAS_PX = int(os.getenv('MAX_CANVAS_PX', '8192'))
+MIN_CANVAS_PX = 16
+
+
+def clamp_canvas(value, default=1024):
+    """Coerce a requested canvas dimension into a sane pixel range."""
+    try:
+        value = int(float(value))
+    except (TypeError, ValueError):
+        return default
+    return max(MIN_CANVAS_PX, min(MAX_CANVAS_PX, value))
+
+
 # File constraints
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB

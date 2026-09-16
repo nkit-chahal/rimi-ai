@@ -21,7 +21,7 @@ from auth import (
     rgba_layer_to_green_matte,
     save_rgba_content_layer,
 )
-from config import RESULTS_DIR, UPLOAD_DIR
+from config import RESULTS_DIR, UPLOAD_DIR, clamp_canvas
 from security_utils import media_access_token
 import storage
 
@@ -333,8 +333,8 @@ def execute_inpaint_layer(payload, on_progress=None):
     filename = os.path.basename(payload.get('filename', '') or '')
     user_prompt = (payload.get('prompt') or '').strip()
     mask_data_url = payload.get('mask', '')
-    canvas_width = int(payload.get('canvasWidth', 1024))
-    canvas_height = int(payload.get('canvasHeight', 1024))
+    canvas_width = clamp_canvas(payload.get('canvasWidth'), 1024)
+    canvas_height = clamp_canvas(payload.get('canvasHeight'), 1024)
     transform = payload.get('transform', {}) or {}
     project_id = int(payload.get('projectId') or 0)
     user_id = int(payload.get('userId') or 0)

@@ -179,40 +179,42 @@ def list_exports():
         user_id = current_user["id"]
         is_admin = current_user.get("role") == "admin"
         conn = db()
-        project_id = request.args.get('project_id', type=int)
-        if is_admin and not project_id:
-            rows = conn.execute("SELECT e.* FROM exports e WHERE e.deleted_at IS NULL ORDER BY e.created_at DESC").fetchall()
-        elif is_admin and project_id:
-            rows = conn.execute(
-                "SELECT e.* FROM exports e WHERE e.project_id = ? AND e.deleted_at IS NULL ORDER BY e.created_at DESC",
-                (project_id,),
-            ).fetchall()
-        elif project_id:
-            rows = conn.execute(
-                """
-                SELECT e.*
-                FROM exports e
-                LEFT JOIN projects p ON p.id = e.project_id
-                WHERE e.project_id = ?
-                  AND e.deleted_at IS NULL
-                  AND (e.user_id = ? OR (e.user_id IS NULL AND p.user_id = ?))
-                ORDER BY e.created_at DESC
-                """,
-                (project_id, user_id, user_id),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """
-                SELECT e.*
-                FROM exports e
-                LEFT JOIN projects p ON p.id = e.project_id
-                WHERE e.deleted_at IS NULL
-                  AND (e.user_id = ? OR (e.user_id IS NULL AND p.user_id = ?))
-                ORDER BY e.created_at DESC
-                """,
-                (user_id, user_id),
-            ).fetchall()
-        conn.close()
+        try:
+            project_id = request.args.get('project_id', type=int)
+            if is_admin and not project_id:
+                rows = conn.execute("SELECT e.* FROM exports e WHERE e.deleted_at IS NULL ORDER BY e.created_at DESC").fetchall()
+            elif is_admin and project_id:
+                rows = conn.execute(
+                    "SELECT e.* FROM exports e WHERE e.project_id = ? AND e.deleted_at IS NULL ORDER BY e.created_at DESC",
+                    (project_id,),
+                ).fetchall()
+            elif project_id:
+                rows = conn.execute(
+                    """
+                    SELECT e.*
+                    FROM exports e
+                    LEFT JOIN projects p ON p.id = e.project_id
+                    WHERE e.project_id = ?
+                      AND e.deleted_at IS NULL
+                      AND (e.user_id = ? OR (e.user_id IS NULL AND p.user_id = ?))
+                    ORDER BY e.created_at DESC
+                    """,
+                    (project_id, user_id, user_id),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT e.*
+                    FROM exports e
+                    LEFT JOIN projects p ON p.id = e.project_id
+                    WHERE e.deleted_at IS NULL
+                      AND (e.user_id = ? OR (e.user_id IS NULL AND p.user_id = ?))
+                    ORDER BY e.created_at DESC
+                    """,
+                    (user_id, user_id),
+                ).fetchall()
+        finally:
+            conn.close()
         
         files = []
         for row in rows:

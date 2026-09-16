@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify, g
 from middleware import login_required, project_access_from_payload
 from plan_tiers import require_pro_or_error, current_user_record
 
-from config import UPLOAD_DIR, RESULTS_DIR, groq_client, GROQ_VISION_MODEL
+from config import UPLOAD_DIR, RESULTS_DIR, groq_client, GROQ_VISION_MODEL, clamp_canvas
 from auth import (
     log_export,
     check_credits,
@@ -406,8 +406,8 @@ def compose_layers():
   """
   data = request.get_json() or {}
   layer_data = data.get('layers', [])
-  canvas_width = int(data.get('width', 1024))
-  canvas_height = int(data.get('height', 1024))
+  canvas_width = clamp_canvas(data.get('width'), 1024)
+  canvas_height = clamp_canvas(data.get('height'), 1024)
   session_id = data.get('sessionId')
   project_id, access_error = project_access_from_payload(data)
   if access_error:

@@ -21,14 +21,16 @@ def create_pipeline_run():
         return access_error
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn = db()
-    cur = conn.execute(
-        "INSERT INTO pipeline_runs (project_id, name, steps_json, settings_json, status, created_at) VALUES (?, ?, ?, ?, 'running', ?)",
-        (project_id, data.get('name', 'Custom Pipeline'),
-         json.dumps(data.get('steps', [])), json.dumps(data.get('settings', {})), now)
-    )
-    run_id = cur.lastrowid
-    conn.commit()
-    conn.close()
+    try:
+        cur = conn.execute(
+            "INSERT INTO pipeline_runs (project_id, name, steps_json, settings_json, status, created_at) VALUES (?, ?, ?, ?, 'running', ?)",
+            (project_id, data.get('name', 'Custom Pipeline'),
+             json.dumps(data.get('steps', [])), json.dumps(data.get('settings', {})), now)
+        )
+        run_id = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({'success': True, 'runId': run_id})
 
 
@@ -38,33 +40,35 @@ def update_pipeline_run(run_id):
     """Update a pipeline run's status and results."""
     data = request.get_json() or {}
     conn = db()
+    try:
     
-    # Fetch run details before updating
-    run = conn.execute("SELECT * FROM pipeline_runs WHERE id = ?", (run_id,)).fetchone()
-    if not run:
-        conn.close()
-        return jsonify({'success': False, 'error': 'Pipeline run not found'}), 404
-    denied = assert_project_access(run['project_id'])
-    if denied:
-        conn.close()
-        return denied
+        # Fetch run details before updating
+        run = conn.execute("SELECT * FROM pipeline_runs WHERE id = ?", (run_id,)).fetchone()
+        if not run:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Pipeline run not found'}), 404
+        denied = assert_project_access(run['project_id'])
+        if denied:
+            conn.close()
+            return denied
     
-    sets = []
-    vals = []
-    if 'status' in data:
-        sets.append('status = ?')
-        vals.append(data['status'])
-    if 'results' in data:
-        sets.append('results_json = ?')
-        vals.append(json.dumps(data['results']))
-    if data.get('status') in ('completed', 'failed'):
-        sets.append('completed_at = ?')
-        vals.append(datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
-    if sets:
-        vals.append(run_id)
-        conn.execute(f"UPDATE pipeline_runs SET {', '.join(sets)} WHERE id = ?", vals)
-        conn.commit()
-    conn.close()
+        sets = []
+        vals = []
+        if 'status' in data:
+            sets.append('status = ?')
+            vals.append(data['status'])
+        if 'results' in data:
+            sets.append('results_json = ?')
+            vals.append(json.dumps(data['results']))
+        if data.get('status') in ('completed', 'failed'):
+            sets.append('completed_at = ?')
+            vals.append(datetime.now(timezone.utc).replace(tzinfo=None).isoformat())
+        if sets:
+            vals.append(run_id)
+            conn.execute(f"UPDATE pipeline_runs SET {', '.join(sets)} WHERE id = ?", vals)
+            conn.commit()
+    finally:
+        conn.close()
     
     # If run has successfully completed, capture the final output and initial input, plus full pipeline steps logs
     if run and data.get('status') == 'completed':
@@ -134,38 +138,40 @@ def list_pipeline_runs():
     user_id = current_user["id"]
     is_admin = current_user.get("role") == "admin"
     conn = db()
-    if is_admin and project_id:
-        rows = conn.execute(
-            "SELECT * FROM pipeline_runs WHERE project_id = ? ORDER BY created_at DESC LIMIT 20",
-            (project_id,)
-        ).fetchall()
-    elif is_admin:
-        rows = conn.execute(
-            "SELECT * FROM pipeline_runs ORDER BY created_at DESC LIMIT 20"
-        ).fetchall()
-    elif project_id:
-        rows = conn.execute(
-            """
-            SELECT pr.*
-            FROM pipeline_runs pr
-            JOIN projects p ON p.id = pr.project_id
-            WHERE pr.project_id = ? AND p.user_id = ?
-            ORDER BY pr.created_at DESC LIMIT 20
-            """,
-            (project_id, user_id),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            SELECT pr.*
-            FROM pipeline_runs pr
-            JOIN projects p ON p.id = pr.project_id
-            WHERE p.user_id = ?
-            ORDER BY pr.created_at DESC LIMIT 20
-            """,
-            (user_id,),
-        ).fetchall()
-    conn.close()
+    try:
+        if is_admin and project_id:
+            rows = conn.execute(
+                "SELECT * FROM pipeline_runs WHERE project_id = ? ORDER BY created_at DESC LIMIT 20",
+                (project_id,)
+            ).fetchall()
+        elif is_admin:
+            rows = conn.execute(
+                "SELECT * FROM pipeline_runs ORDER BY created_at DESC LIMIT 20"
+            ).fetchall()
+        elif project_id:
+            rows = conn.execute(
+                """
+                SELECT pr.*
+                FROM pipeline_runs pr
+                JOIN projects p ON p.id = pr.project_id
+                WHERE pr.project_id = ? AND p.user_id = ?
+                ORDER BY pr.created_at DESC LIMIT 20
+                """,
+                (project_id, user_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT pr.*
+                FROM pipeline_runs pr
+                JOIN projects p ON p.id = pr.project_id
+                WHERE p.user_id = ?
+                ORDER BY pr.created_at DESC LIMIT 20
+                """,
+                (user_id,),
+            ).fetchall()
+    finally:
+        conn.close()
     runs = []
     for r in rows_to_dicts(rows):
         runs.append({
@@ -189,14 +195,16 @@ def save_workflow():
     user_id = current_user_id()
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     conn = db()
-    cur = conn.execute(
-        "INSERT INTO saved_workflows (user_id, name, steps_json, settings_json, created_at) VALUES (?, ?, ?, ?, ?)",
-        (user_id, data.get('name', 'My Workflow'), json.dumps(data.get('steps', [])),
-         json.dumps(data.get('settings', {})), now)
-    )
-    wf_id = cur.lastrowid
-    conn.commit()
-    conn.close()
+    try:
+        cur = conn.execute(
+            "INSERT INTO saved_workflows (user_id, name, steps_json, settings_json, created_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, data.get('name', 'My Workflow'), json.dumps(data.get('steps', [])),
+             json.dumps(data.get('settings', {})), now)
+        )
+        wf_id = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({'success': True, 'workflowId': wf_id})
 
 
@@ -206,11 +214,13 @@ def list_workflows():
     """List saved workflows for the current user."""
     user_id = current_user_id()
     conn = db()
-    rows = conn.execute(
-        "SELECT * FROM saved_workflows WHERE user_id = ? ORDER BY created_at DESC",
-        (user_id,),
-    ).fetchall()
-    conn.close()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM saved_workflows WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+    finally:
+        conn.close()
     workflows = []
     for r in rows_to_dicts(rows):
         workflows.append({
@@ -229,12 +239,14 @@ def delete_workflow(wf_id):
     """Delete a saved workflow owned by the current user."""
     user_id = current_user_id()
     conn = db()
-    cur = conn.execute(
-        "DELETE FROM saved_workflows WHERE id = ? AND user_id = ?",
-        (wf_id, user_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        cur = conn.execute(
+            "DELETE FROM saved_workflows WHERE id = ? AND user_id = ?",
+            (wf_id, user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
     if cur.rowcount == 0:
         return jsonify({'success': False, 'error': 'Workflow not found'}), 404
     return jsonify({'success': True})
