@@ -15,7 +15,7 @@ With the dev server running it is also at `http://localhost:5173/website/`. Note
 server only** route: `website/` is outside `public/` and is not an entry point, so it is not part
 of `npm run build` and will not appear on a production deploy.
 
-Total weight is about 810 KB — 782 KB of that is the six prints. The only external request is the
+Total weight is about 1.1 MB — the six prints plus the two fabric photographs. The only external request is the
 Google font, which falls back to a system sans cleanly offline.
 
 ## The three-colour system
@@ -41,6 +41,10 @@ without also removing that claim.
 
 To regenerate or extend the set, the prompts are in the session history; the pattern is a flat-2D
 seamless brief plus a style sentence, rendered at 2K and saved as 1024px WebP.
+
+`hero_deco.webp` and `hero_bloom.webp` are two of those prints rendered onto bolts of cloth by
+`google/nano-banana-2` — the same model the Mappings tool uses — at about $0.07 each. That is why
+the hero caption can say "generated **and rendered on cloth** in RIMI AI": both steps really were.
 
 The hero texture and the two large bento tiles reuse `deco.webp` and `palm.webp` as CSS
 backgrounds. They tile correctly because they are genuine seamless repeats — which is itself a

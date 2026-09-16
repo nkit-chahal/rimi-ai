@@ -88,9 +88,23 @@ header{position:sticky;top:0;z-index:50;background:rgba(11,9,16,.72);
 .tex{position:absolute;inset:0;background-image:url("assets/deco.webp");background-size:340px;
   opacity:.07;pointer-events:none;mix-blend-mode:luminosity}
 
-.hero{padding-block:clamp(72px,10vw,132px) 0}
-.hero .wrap{position:relative;z-index:2}
-.hero h1{font-size:clamp(2.6rem,6.6vw,5.1rem);max-width:15ch}
+.hero{min-height:clamp(600px,82vh,860px);display:flex;align-items:center;
+  padding-block:clamp(56px,7vw,96px)}
+.hero .wrap{position:relative;z-index:2;width:100%}
+.hero-copy{max-width:min(50%,600px)}
+.hero h1{font-size:clamp(2.6rem,5.8vw,4.7rem);max-width:15ch}
+/* The photograph: one of our generated prints rendered onto bolts of cloth by the same model the
+   Mappings tool uses. It bleeds off the right edge and fades into the ink on its left and bottom so
+   the copy never fights it. */
+.hero-fabric{position:absolute;top:0;right:0;bottom:0;width:min(50vw,780px);margin:0;z-index:1}
+.hero-fabric img{width:100%;height:100%;object-fit:cover;object-position:62% 40%}
+.hero-fabric::before{content:"";position:absolute;inset:0;z-index:1;
+  background:linear-gradient(90deg,var(--ink) 0%,rgba(11,9,16,.55) 16%,rgba(11,9,16,0) 42%),
+             linear-gradient(180deg,rgba(11,9,16,.25) 0%,rgba(11,9,16,0) 22%,rgba(11,9,16,0) 72%,var(--ink) 100%)}
+.hero-fabric figcaption{position:absolute;left:clamp(16px,14%,120px);bottom:26px;z-index:2;
+  font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--on-dark-2);background:rgba(11,9,16,.55);border:1px solid var(--line-dark);
+  backdrop-filter:blur(8px);border-radius:999px;padding:.4rem .85rem}
 .hero h1 em{font-style:normal;
   background:linear-gradient(100deg,var(--violet-lt) 0%,var(--coral-lt) 62%,var(--emerald-lt) 100%);
   -webkit-background-clip:text;background-clip:text;color:transparent}
@@ -100,16 +114,6 @@ header{position:sticky;top:0;z-index:50;background:rgba(11,9,16,.72);
   font-size:.83rem;color:var(--on-dark-3);font-weight:600}
 .hero-meta b{color:var(--on-dark-2);font-weight:700}
 
-.fan{position:relative;z-index:2;margin-top:clamp(56px,7vw,88px);display:flex;
-  justify-content:center;padding-bottom:clamp(60px,8vw,100px)}
-.fan figure{margin:0;width:min(26vw,270px);aspect-ratio:1;border-radius:var(--r-lg);
-  overflow:hidden;border:1px solid rgba(247,244,242,.16);
-  box-shadow:0 34px 70px -22px rgba(0,0,0,.8);background:var(--ink-3)}
-.fan figure:nth-child(1){transform:rotate(-7deg) translateY(16px)}
-.fan figure:nth-child(2){transform:rotate(-2.5deg) translateY(-6px);z-index:2;margin-inline:-26px}
-.fan figure:nth-child(3){transform:rotate(3deg) translateY(10px);z-index:3;margin-right:-26px}
-.fan figure:nth-child(4){transform:rotate(8deg) translateY(28px)}
-.fan img{width:100%;height:100%;object-fit:cover}
 
 /* Marquee shows more output than fits on screen. Pauses on hover and under reduced motion. */
 .marq{background:var(--ink-2);border-block:1px solid var(--line-dark);
@@ -238,13 +242,19 @@ header{position:sticky;top:0;z-index:50;background:rgba(11,9,16,.72);
   border-radius:999px;padding:.24rem .66rem;margin-left:10px;vertical-align:middle}
 
 .cta{position:relative;overflow:hidden;border-radius:28px;padding:clamp(48px,6.5vw,80px);
-  text-align:center;background:var(--ink);color:var(--on-dark)}
-.cta h2{color:#fff;max-width:17ch;margin-inline:auto}
-.cta p{color:var(--on-dark-2);margin:20px auto 0;max-width:50ch}
+  text-align:left;background:var(--ink);color:var(--on-dark)}
+.cta h2{color:#fff;max-width:14ch}
+.cta p{color:var(--on-dark-2);margin:20px 0 0;max-width:44ch}
+.cta-copy{max-width:52%}
 .cta .btn{margin-top:34px}
 .cta .glow::before{width:520px;height:520px;top:-240px;left:12%}
 .cta .glow::after{width:440px;height:440px;bottom:-220px;right:10%}
 .cta > *{position:relative;z-index:2}
+.cta-fabric{position:absolute;inset:0 0 0 auto;width:52%;z-index:1;pointer-events:none}
+.cta-fabric img{width:100%;height:100%;object-fit:cover;object-position:center 30%;opacity:.55}
+.cta-fabric::before{content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,var(--ink) 0%,rgba(11,9,16,.85) 22%,rgba(11,9,16,.25) 60%,rgba(11,9,16,.05) 100%)}
+.cta .glow{z-index:1}
 
 footer{background:var(--ink);color:var(--on-dark-3);padding-block:38px;font-size:.84rem;
   border-top:1px solid var(--line-dark)}
@@ -270,8 +280,17 @@ footer{background:var(--ink);color:var(--on-dark-3);padding-block:38px;font-size
   .flow > div:nth-child(2){border-right:0}
   .flow > div:nth-child(1),.flow > div:nth-child(2){border-bottom:1px solid var(--line)}
   .nav menu{display:none}
-  .fan figure{width:min(40vw,210px)}
-  .fan figure:nth-child(4){display:none}
+  .hero{min-height:0;display:block;padding-bottom:0}
+  .hero-copy{max-width:100%}
+  .hero-fabric{position:relative;width:100%;height:auto;aspect-ratio:4/3;margin-top:44px;
+    border-radius:var(--r-lg) var(--r-lg) 0 0;overflow:hidden}
+  /* Fill the aspect-ratio box explicitly: a percentage height inside it is not reliable. */
+  .hero-fabric img{position:absolute;inset:0;object-position:center 45%}
+  .cta{text-align:center}
+  .cta-copy{max-width:100%}
+  .cta h2,.cta p{margin-inline:auto}
+  .cta-fabric{display:none}
+  .hero-fabric::before{background:linear-gradient(180deg,rgba(11,9,16,0) 55%,var(--ink) 100%)}
 }
 @media(max-width:620px){
   .bento,.stats,.plans,.flow,.road{grid-template-columns:1fr}
@@ -283,8 +302,6 @@ footer{background:var(--ink);color:var(--on-dark-3);padding-block:38px;font-size
   .c2,.c3{grid-column:span 1}
   .flow > div{border-right:0;border-bottom:1px solid var(--line)}
   .flow > div:last-child{border-bottom:0}
-  .fan figure:nth-child(1){display:none}
-  .fan figure{width:min(52vw,210px)}
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
@@ -314,7 +331,8 @@ footer{background:var(--ink);color:var(--on-dark-3);padding-block:38px;font-size
   <section class="hero on-ink">
     <div class="glow"></div><div class="tex"></div>
     <div class="wrap">
-      <span class="eyebrow">AI studio for textile &amp; surface design</span>
+     <div class="hero-copy">
+      <span class="eyebrow">Built in India &middot; AI studio for textile design</span>
       <h1>From a reference image to <em>print-ready artwork.</em></h1>
       <p class="lede">
         Bring a photograph, a swatch or a sketch. Leave with a true seamless repeat,
@@ -331,13 +349,13 @@ footer{background:var(--ink);color:var(--on-dark-3);padding-block:38px;font-size
         <span><b>31</b> mockup products</span>
         <span><b>No</b> install</span>
       </div>
+     </div>
     </div>
-    <div class="fan">
-      <figure><img src="assets/botanical.webp" alt="Watercolour botanical repeat" decoding="async"></figure>
-      <figure><img src="assets/deco.webp" alt="Art-deco geometric repeat" decoding="async"></figure>
-      <figure><img src="assets/bloom.webp" alt="Painterly floral repeat" decoding="async"></figure>
-      <figure><img src="assets/palm.webp" alt="Tropical foliage repeat" decoding="async"></figure>
-    </div>
+    <figure class="hero-fabric">
+      <img src="assets/hero_deco.webp" width="896" height="1200" decoding="sync" fetchpriority="high"
+           alt="Bolts of fabric printed with an art-deco repeat generated in RIMI AI">
+      <figcaption>Print generated and rendered on cloth in RIMI AI</figcaption>
+    </figure>
   </section>
 
   <div class="marq" id="work">
@@ -615,13 +633,16 @@ footer{background:var(--ink);color:var(--on-dark-3);padding-block:38px;font-size
 
   <section class="wrap" id="contact" style="padding-top:0">
     <div class="cta rv">
+      <div class="cta-fabric" aria-hidden="true"><img src="assets/hero_bloom.webp" alt="" loading="lazy" decoding="async"></div>
       <div class="glow"></div>
-      <h2>See it run on your own artwork</h2>
-      <p>
-        Bring a print you are working on. We will take it through the studio with you — repeat,
-        colourways, mockups and tech pack — and you keep everything it produces.
-      </p>
-      <a class="btn btn-primary" href="mailto:hello@rimiai.pro">Book a demo</a>
+      <div class="cta-copy">
+        <h2>See it run on your own artwork</h2>
+        <p>
+          Bring a print you are working on. We will take it through the studio with you — repeat,
+          colourways, mockups and tech pack — and you keep everything it produces.
+        </p>
+        <a class="btn btn-primary" href="mailto:hello@rimiai.pro">Book a demo</a>
+      </div>
     </div>
   </section>
 
