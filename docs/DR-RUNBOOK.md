@@ -71,6 +71,14 @@ Verify from outside: `GET /api/health/ready` reports `checks.rq_worker`, `checks
 workers are missing or crashed; a healthy queue with a climbing `queueDepth` means jobs are
 arriving faster than `RQ_WORKER_COUNT` workers can drain them.
 
+`checks.workers` counts workers **registered in Redis**, which is not quite the same as workers
+running. A worker that exits cleanly deregisters at once, but one that is SIGKILLed — an OOM kill,
+or a container stopped without its shutdown reaching it — leaves its registration for up to the
+420s RQ worker TTL. So a count above `RQ_WORKER_COUNT` shortly after a redeploy is normally the
+previous container's ghosts ageing out, not extra workers; it should settle within about seven
+minutes. A count that stays high after that is worth investigating, since it means something is
+still heartbeating.
+
 ## Rollback deploy
 1. Revert to previous Docker image / git tag
 2. Run `alembic downgrade -1` only if the latest migration is reversible

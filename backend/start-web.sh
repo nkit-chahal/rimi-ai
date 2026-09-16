@@ -29,19 +29,41 @@ case "$RQ_WORKER_COUNT" in
     ;;
 esac
 
-# The worker is respawned on exit so a crash doesn't silently leave the queue unattended — gunicorn
-# would keep the container "healthy" while nothing processed jobs. /api/health/ready reports
-# rq_worker, workers and queueDepth to catch the case where it stays down anyway.
+# Each worker is respawned on exit so a crash doesn't silently leave the queue unattended —
+# gunicorn would keep the container "healthy" while nothing processed jobs. /api/health/ready
+# reports rq_worker, workers and queueDepth to catch the case where it stays down anyway.
+#
+# The supervisor forwards the container's shutdown to the worker itself. A runtime signals only
+# PID 1, so while this script exec'd into gunicorn the workers never saw SIGTERM: they were
+# SIGKILLed with the container, never ran RQ's warm shutdown, and left their Redis registration to
+# rot for the full 420s worker TTL. Those ghosts are counted by /api/health/ready, so a deploy
+# whose workers failed to start could pass its healthcheck on the registrations of the container
+# it replaced. A signalled worker deregisters and its key expires in 60s instead.
+supervisors=""
 n=1
 while [ "$n" -le "$RQ_WORKER_COUNT" ]; do
   (
+    rq_pid=""
+    # Stop respawning once we are shutting down, or the loop would start a worker the container is
+    # about to kill anyway.
+    trap 'kill -TERM "$rq_pid" 2>/dev/null; wait "$rq_pid" 2>/dev/null; exit 0' TERM INT
     while true; do
-      rq worker -c rqsettings rimi-ai
+      rq worker -c rqsettings rimi-ai &
+      rq_pid=$!
+      wait "$rq_pid"
       echo "[start-web] rq worker $n exited ($?); restarting in 5s" >&2
       sleep 5
     done
   ) &
+  supervisors="$supervisors $!"
   n=$((n + 1))
 done
 
-exec gunicorn -c gunicorn_config.py server:app
+# Not exec'd, so this script stays PID 1 and can fan the signal out. gunicorn is still the process
+# whose exit ends the container: if it dies, wait returns and we stop, leaving Railway to restart.
+gunicorn -c gunicorn_config.py server:app &
+gunicorn_pid=$!
+
+trap 'echo "[start-web] shutting down" >&2; kill -TERM $supervisors "$gunicorn_pid" 2>/dev/null; wait "$gunicorn_pid" 2>/dev/null; exit 0' TERM INT
+
+wait "$gunicorn_pid"
