@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RIMI AI — AI studio for textile and surface design</title>
+<meta name="description" content="RIMI AI turns a reference image into print-ready textile artwork: seamless repeats, colorways, vector files, product mockups and tech packs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Palette lifted from the product's own tokens.css so the page and the studio feel related. */
+  :root{
+    --bg:#F3F0EC; --bg2:#EBE7E2; --card:#FAF8F5;
+    --text:#1C1917; --text2:#44403C; --muted:#78716C;
+    --primary:#8B5CF6; --primary-dark:#6D3EE8;
+    --border:rgba(68,64,60,.14); --border-soft:rgba(68,64,60,.08);
+    --maxw:1120px;
+    --font:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);
+       font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  img{max-width:100%;display:block}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding-inline:24px}
+  .eyebrow{font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--muted);margin:0 0 14px}
+  h1,h2,h3{letter-spacing:-.02em;margin:0}
+  h2{font-size:clamp(1.6rem,3.2vw,2.3rem);font-weight:800;line-height:1.2}
+  h3{font-size:1.02rem;font-weight:700}
+  p{margin:0}
+  section{padding-block:clamp(56px,8vw,96px)}
+  .lede{color:var(--text2);font-size:1.05rem;max-width:62ch;margin-top:14px}
+  .note{margin-top:18px;font-size:.84rem;color:var(--muted)}
+
+  header{position:sticky;top:0;z-index:20;background:rgba(243,240,236,.88);
+         backdrop-filter:blur(10px);border-bottom:1px solid var(--border-soft)}
+  .nav{display:flex;align-items:center;gap:28px;height:64px}
+  .logo{font-weight:800;font-size:1.06rem;letter-spacing:-.03em;text-decoration:none;color:inherit}
+  .logo span{color:var(--primary)}
+  .nav nav{margin-left:auto;display:flex;gap:26px}
+  .nav nav a{color:var(--text2);text-decoration:none;font-size:.9rem;font-weight:600}
+  .nav nav a:hover{color:var(--text)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;padding:.72rem 1.3rem;
+       border-radius:10px;font-weight:700;font-size:.9rem;text-decoration:none;
+       border:1px solid transparent;transition:transform .12s ease,background .12s ease}
+  .btn-primary{background:var(--primary);color:#fff;box-shadow:0 6px 18px rgba(139,92,246,.24)}
+  .btn-primary:hover{background:var(--primary-dark);transform:translateY(-1px)}
+  .btn-ghost{border-color:var(--border);color:var(--text);background:var(--card)}
+  .btn-ghost:hover{border-color:var(--primary);color:var(--primary)}
+
+  .hero{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center;
+        padding-block:clamp(48px,7vw,84px)}
+  .hero h1{font-size:clamp(2.1rem,4.6vw,3.35rem);font-weight:800;line-height:1.08}
+  .hero .lede{font-size:1.12rem;margin-top:20px}
+  .hero-cta{display:flex;gap:12px;margin-top:30px;flex-wrap:wrap}
+  .stage{position:relative;border-radius:18px;overflow:hidden;border:1px solid var(--border);
+         box-shadow:0 22px 50px rgba(28,25,23,.09);background:var(--card);aspect-ratio:1/1;margin:0}
+  .stage img{width:100%;height:100%;object-fit:cover}
+  .stage figcaption{position:absolute;left:14px;bottom:14px;background:rgba(250,248,245,.94);
+             border:1px solid var(--border);border-radius:999px;padding:.34rem .78rem;
+             font-size:.74rem;font-weight:700;color:var(--text2)}
+
+  .strip{border-block:1px solid var(--border-soft);background:var(--bg2)}
+  .strip .wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:28px;padding-block:30px}
+  .stat b{display:block;font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
+  .stat span{font-size:.82rem;color:var(--muted);font-weight:600}
+
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:38px}
+  .step{background:var(--card);border:1px solid var(--border-soft);border-radius:14px;padding:22px}
+  .step b{display:block;font-size:.72rem;letter-spacing:.1em;color:var(--primary);
+          font-weight:800;margin-bottom:9px}
+  .step p{font-size:.9rem;color:var(--text2);margin-top:6px}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
+  .card{background:var(--card);border:1px solid var(--border-soft);border-radius:14px;padding:24px;
+        transition:border-color .15s ease,box-shadow .15s ease}
+  .card:hover{border-color:rgba(139,92,246,.35);box-shadow:0 10px 26px rgba(28,25,23,.06)}
+  .card h3{margin-bottom:8px}
+  .card p{font-size:.9rem;color:var(--text2)}
+  .card .kicker{font-size:.7rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+                color:var(--muted);display:block;margin-bottom:12px}
+
+  .shots{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:38px}
+  .shot{border-radius:14px;overflow:hidden;border:1px solid var(--border);background:var(--card);margin:0}
+  .shot img{aspect-ratio:1/1;object-fit:cover}
+  .shot figcaption{padding:13px 16px;font-size:.82rem;color:var(--text2);font-weight:600;
+                   border-top:1px solid var(--border-soft)}
+
+  .tech{background:var(--bg2);border-block:1px solid var(--border-soft)}
+  .tech-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:52px;align-items:start}
+  .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:26px}
+  .chip{background:var(--card);border:1px solid var(--border);border-radius:999px;
+        padding:.44rem .9rem;font-size:.82rem;font-weight:600;color:var(--text2)}
+
+  .plans{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:38px}
+  .plan{background:var(--card);border:1px solid var(--border-soft);border-radius:14px;padding:24px}
+  .plan.featured{border-color:var(--primary);box-shadow:0 12px 30px rgba(139,92,246,.12)}
+  /* Every card reserves the badge's slot at a fixed height, so plan names and prices sit on one
+     line across the row even though only one card carries a badge. */
+  .plan .badge,
+  .plan:not(.featured)::before{display:block;height:24px;margin-bottom:12px}
+  .plan:not(.featured)::before{content:""}
+  .plan .badge{width:fit-content;background:var(--primary);color:#fff;font-size:.66rem;
+               font-weight:800;letter-spacing:.08em;text-transform:uppercase;line-height:24px;
+               padding-inline:.6rem;border-radius:999px}
+  .plan h3{color:var(--muted);text-transform:uppercase;letter-spacing:.08em;
+           font-size:.72rem;font-weight:800}
+  .price{font-size:1.85rem;font-weight:800;letter-spacing:-.03em;margin:10px 0 0}
+  .credits{font-size:.82rem;font-weight:600;color:var(--muted);margin-top:2px}
+  .plan ul{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:9px}
+  .plan li{font-size:.85rem;color:var(--text2);padding-left:20px;position:relative}
+  .plan li::before{content:"";position:absolute;left:0;top:.52em;width:9px;height:9px;
+                   border-radius:50%;background:rgba(139,92,246,.22);
+                   box-shadow:inset 0 0 0 2px var(--primary)}
+
+  .road{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:34px}
+  .road .card{border-style:dashed;border-color:var(--border)}
+  .tag-soon{display:inline-block;font-size:.66rem;font-weight:800;letter-spacing:.08em;
+            text-transform:uppercase;color:var(--muted);border:1px solid var(--border);
+            border-radius:999px;padding:.2rem .58rem;margin-left:8px;vertical-align:middle}
+
+  .cta{background:var(--text);color:#F6F4F1;border-radius:20px;
+       padding:clamp(36px,5vw,58px);text-align:center}
+  .cta h2{color:#fff}
+  .cta p{color:rgba(246,244,241,.76);margin:14px auto 0;max-width:52ch}
+  .cta .btn-primary{margin-top:28px}
+
+  footer{border-top:1px solid var(--border-soft);padding-block:30px;color:var(--muted);font-size:.83rem}
+  .foot{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}
+
+  @media(max-width:900px){
+    .hero,.tech-grid{grid-template-columns:1fr;gap:36px}
+    .grid,.shots,.plans,.steps,.strip .wrap,.road{grid-template-columns:repeat(2,1fr)}
+    .nav nav{display:none}
+  }
+  @media(max-width:560px){
+    .grid,.shots,.plans,.steps,.strip .wrap,.road{grid-template-columns:1fr}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *{transition:none !important;animation:none !important}
+    html{scroll-behavior:auto}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="#top">RIMI<span> AI</span></a>
+    <nav>
+      <a href="#what">Product</a>
+      <a href="#tools">Tools</a>
+      <a href="#tech">Technology</a>
+      <a href="#pricing">Pricing</a>
+    </nav>
+    <a class="btn btn-primary" href="#contact">Book a demo</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <div class="wrap hero">
+    <div>
+      <p class="eyebrow">AI studio for textile &amp; surface design</p>
+      <h1>From a reference image to print-ready artwork.</h1>
+      <p class="lede">
+        RIMI AI is a working studio for textile designers. Bring a photograph, a swatch or a
+        sketch — get a true seamless repeat, alternate colourways, vector files, product mockups
+        and a tech pack the mill can actually use.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#contact">Book a demo</a>
+        <a class="btn btn-ghost" href="#tools">See the tools</a>
+      </div>
+      <p class="note">Browser-based. Nothing to install. Credits, not seats.</p>
+    </div>
+    <figure class="stage">
+      <img src="../public/demo_floral.webp" alt="Watercolour floral print produced in RIMI AI"
+           width="1024" height="1024" decoding="async">
+      <figcaption>Seamless repeat produced in RIMI AI</figcaption>
+    </figure>
+  </div>
+
+  <div class="strip">
+    <div class="wrap">
+      <div class="stat"><b>15+</b><span>Studio tools</span></div>
+      <div class="stat"><b>31</b><span>Mockup products</span></div>
+      <div class="stat"><b>7</b><span>Generation models</span></div>
+      <div class="stat"><b>Seconds</b><span>Per iteration, not days</span></div>
+    </div>
+  </div>
+
+  <section id="what" class="wrap">
+    <p class="eyebrow">The workflow</p>
+    <h2>The whole pipeline, in one place</h2>
+    <p class="lede">
+      Textile design normally spans four or five tools and a lot of waiting. RIMI AI covers the
+      path from idea to production file without leaving the browser.
+    </p>
+    <div class="steps">
+      <div class="step">
+        <b>01</b><h3>Capture</h3>
+        <p>Upload a photo, scan or swatch — or describe the print you want and generate options.</p>
+      </div>
+      <div class="step">
+        <b>02</b><h3>Build the repeat</h3>
+        <p>Extract a flat tile, heal the seams, and check the repeat at real fabric scale.</p>
+      </div>
+      <div class="step">
+        <b>03</b><h3>Develop</h3>
+        <p>Alternate colourways against Pantone, vectorise for screen print, isolate motifs.</p>
+      </div>
+      <div class="step">
+        <b>04</b><h3>Present &amp; hand off</h3>
+        <p>Product mockups, 3D garment preview, and a tech pack with the print specification.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="tools" class="wrap" style="padding-top:0">
+    <p class="eyebrow">Capabilities</p>
+    <h2>What is in the studio</h2>
+    <div class="grid">
+      <article class="card">
+        <span class="kicker">Create</span>
+        <h3>Inspirations</h3>
+        <p>Generate print directions from a brief or a reference, across several models at once,
+           and compare them side by side.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Create</span>
+        <h3>Extract Design</h3>
+        <p>Pull a clean, flat repeat tile out of a photograph — no perspective, no shadows, no
+           background.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Production</span>
+        <h3>Make Seamless</h3>
+        <p>Heal the seams on an existing tile, or generate one that tiles natively. Every result
+           is measured on how closely its edges actually meet.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Production</span>
+        <h3>Repeat &amp; Measurement</h3>
+        <p>Preview the repeat and check the design at true physical scale, with yardage
+           estimates for a given fabric width.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Colour</span>
+        <h3>Colourways</h3>
+        <p>Recolour a design into a full colour story, matched against Pantone TCX rather than
+           eyeballed.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Output</span>
+        <h3>Vectorize</h3>
+        <p>Convert raster artwork to clean vectors for screen printing and engraving, with
+           control over colour count and detail.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Output</span>
+        <h3>Product Mockups</h3>
+        <p>Apply a print to 31 real products across bedding, apparel and accessories — or paint
+           your own mask on any product photo.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Output</span>
+        <h3>3D Garment Preview</h3>
+        <p>See the repeat on a garment in three dimensions before anything is sampled.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Advanced</span>
+        <h3>Layer Studio</h3>
+        <p>Decompose artwork into editable layers, then move, recolour or replace individual
+           motifs and flatten back at full source resolution.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Advanced</span>
+        <h3>Print Advisor</h3>
+        <p>Guidance on print method and cost for a given fabric and production volume, based on
+           the design's actual colour palette.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Hand-off</span>
+        <h3>Tech Packs &amp; Exports</h3>
+        <p>Export production files and a specification sheet — palette, repeat size, print
+           readiness — as a single PDF.</p>
+      </article>
+      <article class="card">
+        <span class="kicker">Utility</span>
+        <h3>Remove Background &amp; Library</h3>
+        <p>Isolate motifs from any artwork and keep a reusable library across projects.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap" style="padding-top:0">
+    <p class="eyebrow">Output</p>
+    <h2>Work made in the studio</h2>
+    <div class="shots">
+      <figure class="shot">
+        <img src="../public/demo_floral.webp" alt="Watercolour floral repeat" decoding="async" loading="lazy">
+        <figcaption>Watercolour floral — seamless repeat</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="../public/demo_geometric.webp" alt="Geometric repeat" decoding="async" loading="lazy">
+        <figcaption>Geometric — extracted from a photograph</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="../public/demo_botanical.webp" alt="Botanical repeat" decoding="async" loading="lazy">
+        <figcaption>Botanical — alternate colourway</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="tech" class="tech">
+    <div class="wrap tech-grid">
+      <div>
+        <p class="eyebrow">Technology</p>
+        <h2>Models chosen per job</h2>
+        <p class="lede">
+          No single model is best at everything. RIMI AI routes each task to the model that suits
+          it — fast drafts on one, photoreal mockups on another, layer decomposition on a third —
+          and every generation is metered, so you always know what a run costs before you start it.
+        </p>
+        <div class="chips">
+          <span class="chip">FLUX Schnell</span>
+          <span class="chip">FLUX 2 Pro</span>
+          <span class="chip">FLUX Fill Pro</span>
+          <span class="chip">Nano Banana 2</span>
+          <span class="chip">Seedream 4.5</span>
+          <span class="chip">GPT Image 2</span>
+          <span class="chip">Qwen Image Layered</span>
+          <span class="chip">Real-ESRGAN</span>
+          <span class="chip">Pantone TCX matching</span>
+        </div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr;margin-top:44px;gap:14px">
+        <article class="card">
+          <h3>Credits, not seats</h3>
+          <p>Pay for what you generate. Every tool shows its cost before you run it, and a failed
+             generation is refunded automatically.</p>
+        </article>
+        <article class="card">
+          <h3>Your work stays yours</h3>
+          <p>Projects, exports and motif libraries are private to your account, with commercial
+             use on every paid plan.</p>
+        </article>
+        <article class="card">
+          <h3>Built for production</h3>
+          <p>Repeats are measured rather than assumed, colour is matched to Pantone, and exports
+             carry the specification a mill needs.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing" class="wrap">
+    <p class="eyebrow">Pricing</p>
+    <h2>Plans</h2>
+    <p class="lede">Buy credits as you need them. Every plan includes commercial use.</p>
+    <div class="plans">
+      <div class="plan">
+        <h3>Starter</h3>
+        <p class="price">₹528</p>
+        <p class="credits">3,960 credits</p>
+        <ul>
+          <li>Small runs and evaluation</li>
+          <li>Flux Schnell, Grok, Nano Banana</li>
+          <li>Seamless, Repeat, Colourways, Vectorize</li>
+          <li>Product mockups</li>
+        </ul>
+      </div>
+      <div class="plan featured">
+        <span class="badge">Popular</span>
+        <h3>Creator</h3>
+        <p class="price">₹1,936</p>
+        <p class="credits">14,520 credits</p>
+        <ul>
+          <li>Best value for active studios</li>
+          <li>Everything in Starter</li>
+          <li>Built for continuous production</li>
+        </ul>
+      </div>
+      <div class="plan">
+        <h3>Pro</h3>
+        <p class="price">₹8,712</p>
+        <p class="credits">65,340 credits</p>
+        <ul>
+          <li>GPT Image 2, Flux 2 Pro</li>
+          <li>Nano Banana 2 and Seedream 4.5</li>
+          <li>Layer Studio and 3D Mockup</li>
+        </ul>
+      </div>
+      <div class="plan">
+        <h3>Scale</h3>
+        <p class="price">₹26,312</p>
+        <p class="credits">197,340 credits</p>
+        <ul>
+          <li>For agencies and high volume</li>
+          <li>All Pro models and tools</li>
+          <li>Priority support</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">A trial account includes 50 credits. Prices in INR, exclusive of taxes.</p>
+  </section>
+
+  <section class="wrap" style="padding-top:0">
+    <p class="eyebrow">Roadmap</p>
+    <h2>Beyond print</h2>
+    <p class="lede">
+      The studio today covers printed textiles end to end. Two further product lines are in
+      development, sharing the same project, colour and library system.
+    </p>
+    <div class="road">
+      <article class="card">
+        <h3>Embroidery <span class="tag-soon">In development</span></h3>
+        <p>Placement studio, motif library, thread shade matching against supplier cards, stitch
+           style rendering, appliqué, and embroidery tech packs.</p>
+      </article>
+      <article class="card">
+        <h3>Woven <span class="tag-soon">In development</span></h3>
+        <p>Checks and stripes, weave and jacquard design, yarn libraries, and woven structure
+           visualisation.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="contact" class="wrap" style="padding-top:0">
+    <div class="cta">
+      <h2>See it on your own artwork</h2>
+      <p>
+        Bring a print you are working on. We will run it through the studio with you — repeat,
+        colourways, mockups and tech pack — and you keep the output.
+      </p>
+      <a class="btn btn-primary" href="mailto:hello@rimiai.pro">Book a demo</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>© 2026 RIMI AI</span>
+    <span>rimiai.pro · hello@rimiai.pro</span>
+  </div>
+</footer>
+
+</body>
+</html>
