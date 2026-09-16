@@ -29,19 +29,20 @@ const navLabel = (id) => t(`nav.${id}`) || id;
 
 /** Tools that render their own upload/preview UI — hide the global compact dropzone. */
 const COMPACT_UPLOAD_EXCLUDED_TOOLS = new Set([
-    'dashboard', 'exports', 'billing', 'workspace',
+    'home', 'dashboard', 'exports', 'billing', 'workspace',
     'pattern', 'inspire', 'seamless', 'mappings', 'vectorize', 'upscale', 'removebg', 'imagelayers',
     'colorways', 'colorway-manager', 'vectorpro', 'repeat',
 ]);
 
-const NAV = [
-    { section: '', items: [
-        { id: 'home', label: 'Home', icon: 'M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-7H9v7H5a2 2 0 01-2-2z' },
-        { id: 'dashboard', label: 'Pipeline Studio', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
-    ] },
-    {
-        section: 'AI DESIGN TOOLS',
-        items: [
+const GLOBAL_NAV = { section: '', items: [
+    { id: 'home', label: 'Home', icon: 'M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-7H9v7H5a2 2 0 01-2-2z' },
+    { id: 'workspace', label: 'Projects', icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z' },
+    { id: 'library', label: 'Libraries', icon: 'M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z', comingSoon: true },
+    { id: 'exports', label: 'Exports', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3' },
+    { id: 'settings', label: 'Settings', icon: 'M12 15.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7zM19.4 15a1.7 1.7 0 00.34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 00-1.88-.34 1.7 1.7 0 00-1.03 1.55V20h-3v-.09a1.7 1.7 0 00-1.03-1.55 1.7 1.7 0 00-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 007 14.7a1.7 1.7 0 00-1.55-1.03H5.3v-3h.09A1.7 1.7 0 007 9.64a1.7 1.7 0 00-.34-1.88L6.6 7.7l2.12-2.12.06.06A1.7 1.7 0 0010.66 6a1.7 1.7 0 001.03-1.55V4.3h3v.09A1.7 1.7 0 0015.72 6a1.7 1.7 0 001.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0019.38 9.66a1.7 1.7 0 001.55 1.03H21v3h-.09A1.7 1.7 0 0019.4 15z', comingSoon: true },
+] };
+
+const ALL_PRINT_TOOLS = [
             { id: 'pattern', label: 'Pattern Extraction', icon: 'M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z' },
             { id: 'seamless', label: 'Make Seamless', icon: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z' },
             { id: 'repeat', label: 'Repeat Set', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
@@ -55,18 +56,36 @@ const NAV = [
             { id: 'colorway-manager', label: 'Colorway Manager', icon: 'M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83' },
             { id: 'vectorpro', label: 'Vector Pro', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485' },
             { id: 'mockup3d', label: '3D Mockup', icon: 'M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.3 7l8.7 5 8.7-5M12 22V12', requiresPro: true },
+];
+
+const PRINT_TOOL_IDS = new Set(ALL_PRINT_TOOLS.map((item) => item.id));
+const OTHER_TOOLS_NAV = { section: 'MORE', items: [
+    { id: 'dashboard', label: 'Pipeline Studio', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
+    { id: 'measurement', label: 'Measurement', icon: 'M2 2h6v6H2zM16 2h6v6h-6zM2 16h6v6H2zM16 16h6v6h-6zM8 5h8M8 19h8M5 8v8M19 8v8', comingSoon: true },
+    { id: 'billing', label: 'Billing', icon: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM12 6v12M8 10h6a2 2 0 010 4h-4a2 2 0 000 4h6' },
+] };
+const NAV = [GLOBAL_NAV, { section: 'PRINT STUDIO', items: ALL_PRINT_TOOLS }, OTHER_TOOLS_NAV];
+const PRINT_STUDIO_NAV = [
+    {
+        section: '',
+        items: [
+            GLOBAL_NAV.items.find((item) => item.id === 'home'),
+            OTHER_TOOLS_NAV.items.find((item) => item.id === 'dashboard'),
         ],
     },
+    { section: 'AI DESIGN TOOLS', items: ALL_PRINT_TOOLS },
     {
         section: 'ASSETS & LIBRARY',
         items: [
-            { id: 'library', label: 'Brand Library', icon: 'M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z', comingSoon: true },
-            { id: 'measurement', label: 'Measurement', icon: 'M2 2h6v6H2zM16 2h6v6h-6zM2 16h6v6H2zM16 16h6v6h-6zM8 5h8M8 19h8M5 8v8M19 8v8', comingSoon: true },
-            { id: 'exports', label: 'Exports', icon: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3' },
-            { id: 'billing', label: 'Billing', icon: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM12 6v12M8 10h6a2 2 0 010 4h-4a2 2 0 000 4h6' },
+            { ...GLOBAL_NAV.items.find((item) => item.id === 'library'), contextLabel: 'Brand Library' },
+            OTHER_TOOLS_NAV.items.find((item) => item.id === 'measurement'),
+            GLOBAL_NAV.items.find((item) => item.id === 'exports'),
+            OTHER_TOOLS_NAV.items.find((item) => item.id === 'billing'),
         ],
     },
 ];
+const PRINT_CONTEXT_ENTRY_TOOLS = new Set([...PRINT_TOOL_IDS, 'dashboard', 'measurement']);
+const GLOBAL_CONTEXT_ENTRY_TOOLS = new Set(['home', 'workspace', 'settings']);
 
 const ADMIN_NAV = [
     {
@@ -94,9 +113,9 @@ const emptyState = {
 
 const BOOT_SPLASH_MIN_MS = 400;
 
-export default function Studio({ onBack, currentUser, currentToken, onLogout, isBootEntry = false, onBootComplete }) {
+export default function Studio({ currentUser, currentToken, onLogout, isBootEntry = false, onBootComplete }) {
     const adminTools = ['admin-dashboard', 'admin-users', 'admin-projects', 'admin-logs', 'admin-credits'];
-    const userTools = ['home', 'dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'removebg', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace'];
+    const userTools = ['home', 'dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'removebg', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace', 'settings'];
     const isAdmin = currentUser?.role === 'admin';
 
     useEffect(() => {
@@ -126,6 +145,9 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         if (allowed.includes(fromPath)) return fromPath;
         return isAdmin ? 'admin-dashboard' : 'home';
     });
+    const [navigationContext, setNavigationContext] = useState(() => (
+        PRINT_CONTEXT_ENTRY_TOOLS.has(readToolFromPath()) ? 'print' : 'global'
+    ));
 
     useEffect(() => {
         const allowed = isAdmin ? adminTools : userTools;
@@ -138,6 +160,10 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const setTool = useCallback((t) => {
         const allowed = isAdmin ? adminTools : userTools;
         if (!allowed.includes(t)) t = isAdmin ? 'admin-dashboard' : 'home';
+        if (!isAdmin) {
+            if (PRINT_CONTEXT_ENTRY_TOOLS.has(t)) setNavigationContext('print');
+            else if (GLOBAL_CONTEXT_ENTRY_TOOLS.has(t)) setNavigationContext('global');
+        }
         _setTool(t);
         window.history.replaceState(null, '', `/studio/${t}`);
     }, [isAdmin]);
@@ -146,7 +172,13 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         const onPopState = () => {
             const fromPath = readToolFromPath();
             const allowed = isAdmin ? adminTools : userTools;
-            if (allowed.includes(fromPath)) _setTool(fromPath);
+            if (allowed.includes(fromPath)) {
+                if (!isAdmin) {
+                    if (PRINT_CONTEXT_ENTRY_TOOLS.has(fromPath)) setNavigationContext('print');
+                    else if (GLOBAL_CONTEXT_ENTRY_TOOLS.has(fromPath)) setNavigationContext('global');
+                }
+                _setTool(fromPath);
+            }
         };
         window.addEventListener('popstate', onPopState);
         return () => window.removeEventListener('popstate', onPopState);
@@ -530,7 +562,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                 comingSoon: Boolean(it.comingSoon),
             }))
         );
-        if (!isAdmin) {
+        if (!isAdmin && !items.some((item) => item.id === 'workspace')) {
             items.push({
                 id: 'workspace',
                 label: navLabel('workspace'),
@@ -975,7 +1007,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
     const toolLabel = useMemo(() => {
         if (tool === 'workspace') return navLabel('workspace');
-        const items = [...NAV[0].items, ...NAV[1].items, ...NAV[2].items, ...ADMIN_NAV[0].items];
+        const items = [...NAV.flatMap((section) => section.items), ...ADMIN_NAV[0].items];
         return navLabel(items.find(it => it.id === tool)?.id || tool) || 'Studio';
     }, [tool]);
 
@@ -986,11 +1018,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         || tool.startsWith('admin')
         || comingSoonToolIds.has(tool)
     ), [tool, comingSoonToolIds]);
+    const isHome = !isAdmin && tool === 'home';
 
     return (
         <ProjectProvider activeProject={activeProject} projects={state.projects} setActiveProjectId={setActiveProjectId}>
             <CreditsProvider creditPricing={creditPricing} refreshPricing={fetchCreditPricing}>
-        <div className={`studio ${isSidebarHidden ? 'sidebar-hidden' : ''}`}>
+        <div className={`studio ${isSidebarHidden ? 'sidebar-hidden' : ''}${isHome ? ' home-shell' : ''}`}>
             <ReactSuspense fallback={null}>
             <StudioBootSplash
                 visible={showBootSplash}
@@ -1005,13 +1038,13 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             />
             </ReactSuspense>
             {/* Sidebar nav */}
-            {!isSidebarHidden && (
+            {!isHome && !isSidebarHidden && (
                 <aside className="st-sidebar">
                     <div className="st-sidebar-top">
                         <div className="st-sidebar-head">
-                            <div className="st-logo" onClick={onBack} style={{ cursor: 'pointer' }}>
+                            <button type="button" className="st-logo" onClick={() => setTool('home')} aria-label="Go to Home">
                                 <span className="ln-logo-badge">RI</span> RIMI AI
-                            </div>
+                            </button>
                             <button
                                 className="st-sidebar-toggle"
                                 type="button"
@@ -1046,7 +1079,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                             </>
                         ) : (
                             <>
-                                {NAV.map((section, idx) => (
+                                {(navigationContext === 'print' ? PRINT_STUDIO_NAV : [GLOBAL_NAV]).map((section, idx) => (
                                     <div key={idx}>
                                         {section.section && <div className="st-nav-section">{section.section === 'AI DESIGN TOOLS' ? t('navSections.aiTools') : section.section === 'ASSETS & LIBRARY' ? t('navSections.assets') : section.section}</div>}
                                         {section.items.map(it => (
@@ -1058,7 +1091,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                                 onClick={() => { setTool(it.id); setError(''); }}
                                             >
                                                 <I d={it.icon} s={18} />
-                                                <span>{navLabel(it.id)}</span>
+                                                <span>{it.contextLabel || navLabel(it.id)}</span>
                                                 {it.comingSoon && <span className="st-nav-soon-badge">Soon</span>}
                                                 {it.requiresPro && !user?.isPro && <span className="st-nav-pro-badge">Pro</span>}
                                             </button>
@@ -1131,16 +1164,24 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
             {/* Main Content Area */}
             <div className="st-main">
-                <header className={`st-topbar ${isSidebarHidden ? 'sidebar-toggle-visible' : ''}`}>
-                    <button
-                        type="button"
-                        className="st-mobile-menu-btn"
-                        aria-label="Open navigation"
-                        onClick={() => setMobileNavOpen(true)}
-                    >
-                        <I d="M4 6h16M4 12h16M4 18h16" s={18} />
-                    </button>
-                    {isSidebarHidden && (
+                <header className={`st-topbar ${isSidebarHidden && !isHome ? 'sidebar-toggle-visible' : ''}${isHome ? ' home-topbar' : ''}`}>
+                    {!isHome && (
+                        <button
+                            type="button"
+                            className="st-mobile-menu-btn"
+                            aria-label="Open navigation"
+                            onClick={() => setMobileNavOpen(true)}
+                        >
+                            <I d="M4 6h16M4 12h16M4 18h16" s={18} />
+                        </button>
+                    )}
+                    {isHome && (
+                        <button type="button" className="st-home-brand" aria-label="RIMI AI Home" onClick={() => setTool('home')}>
+                            <span className="ln-logo-badge">RI</span>
+                            <span>RIMI AI</span>
+                        </button>
+                    )}
+                    {isSidebarHidden && !isHome && (
                         <button
                             className="st-sidebar-toggle topbar"
                             type="button"
@@ -1390,7 +1431,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                     <div className="st-mobile-nav-overlay" onClick={() => setMobileNavOpen(false)} role="presentation" />
                     <nav className="st-mobile-nav-drawer" aria-label="Mobile navigation">
                         <div className="st-mobile-nav-head">
-                            <span>RIMI AI</span>
+                            <button type="button" onClick={() => { setTool('home'); setMobileNavOpen(false); }} style={{ color: 'inherit', font: 'inherit' }}>RIMI AI</button>
                             <button
                                 type="button"
                                 className="st-mobile-nav-close"
@@ -1400,7 +1441,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                 <I d="M6 18L18 6M6 6l12 12" s={18} />
                             </button>
                         </div>
-                        {(isAdmin ? ADMIN_NAV : NAV).map((section, idx) => (
+                        {(isAdmin ? ADMIN_NAV : (navigationContext === 'print' ? PRINT_STUDIO_NAV : [GLOBAL_NAV])).map((section, idx) => (
                             <div key={idx}>
                                 {section.section && <div className="st-mobile-nav-section">{section.section}</div>}
                                 {section.items.map((it) => (
@@ -1412,23 +1453,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                         onClick={() => { setTool(it.id); setError(''); setMobileNavOpen(false); }}
                                     >
                                         <I d={it.icon} s={18} />
-                                        <span>{navLabel(it.id)}</span>
+                                        <span>{it.contextLabel || navLabel(it.id)}</span>
                                         {it.comingSoon && <span className="st-nav-soon-badge">Soon</span>}
                                     </button>
                                 ))}
                             </div>
                         ))}
-                        {!isAdmin && (
-                            <button
-                                type="button"
-                                className={`st-mobile-nav-item ${tool === 'workspace' ? 'active' : ''}`}
-                                aria-current={tool === 'workspace' ? 'page' : undefined}
-                                onClick={() => { setTool('workspace'); setError(''); setMobileNavOpen(false); }}
-                            >
-                                <I d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" s={18} />
-                                <span>{navLabel('workspace')}</span>
-                            </button>
-                        )}
                     </nav>
                 </>
             )}

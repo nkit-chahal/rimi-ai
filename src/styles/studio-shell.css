@@ -2589,6 +2589,20 @@
 .st-topbar.sidebar-toggle-visible {
   grid-template-columns: 42px 280px minmax(260px, 1fr) auto;
 }
+.st-topbar.home-topbar {
+  grid-template-columns: 190px 250px minmax(280px, 1fr) auto;
+  min-height: 72px;
+  height: 72px;
+  padding-inline: clamp(1rem, 2.6vw, 2.75rem);
+  background: rgba(255, 255, 255, 0.94);
+}
+.st-home-brand {
+  min-height: 44px; width: fit-content; padding: 0; border: 0; background: transparent;
+  display: inline-flex; align-items: center; gap: 10px; color: #111827; font: inherit;
+  font-size: 1.08rem; font-weight: 850; letter-spacing: -0.025em; cursor: pointer;
+}
+.st-home-brand .ln-logo-badge { width: 38px; height: 38px; border-radius: 11px; }
+.st-home-brand:focus-visible { outline: 3px solid rgba(109, 62, 232, .28); outline-offset: 3px; border-radius: 10px; }
 .st-project-select {
   height: 42px;
   border: 1px solid rgba(0,0,0,0.08);
@@ -4045,6 +4059,16 @@
   .st-topbar.sidebar-toggle-visible {
     grid-template-columns: 42px minmax(0, 1fr) auto;
   }
+  .st-topbar.home-topbar {
+    height: auto;
+    grid-template-columns: auto minmax(150px, 1fr) auto;
+    grid-template-areas: "brand project user" "search search search";
+    padding: .75rem 1rem;
+  }
+  .st-topbar.home-topbar .st-home-brand { grid-area: brand; }
+  .st-topbar.home-topbar .st-project-dropdown-wrap { grid-area: project; }
+  .st-topbar.home-topbar .st-search { grid-area: search; }
+  .st-topbar.home-topbar .st-user-actions { grid-area: user; }
   .st-search {
     grid-column: 1 / -1;
     max-width: none;

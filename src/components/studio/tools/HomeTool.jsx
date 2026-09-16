@@ -14,29 +14,47 @@ import '../../../styles/tools/home.css';
 const STUDIOS = [
     {
         id: 'print',
+        shortLabel: 'Print',
         label: 'Print Design Studio',
+        category: 'Surface and print design',
         blurb: 'Extract a repeat, make it seamless, build colourways and preview it on 31 products.',
         cta: 'Open Print Studio',
         tool: 'pattern',
         tone: 'violet',
+        preview: '/studio-card-print.webp',
+        previewAlt: 'Floral surface print preview',
+        tagline: 'Turn ideas into beautiful prints',
+        capabilities: ['Pattern Extraction', 'Make Seamless', 'Repeat Set', 'Mappings', '+9 more'],
         icon: 'M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z',
         live: true,
     },
     {
         id: 'embroidery',
+        shortLabel: 'Embroidery',
         label: 'Embroidery Studio',
+        category: 'Motifs, threads and placement',
         blurb: 'Placement, motif library, thread shade matching and stitch rendering.',
         cta: 'Coming soon',
         tone: 'coral',
+        preview: '/studio-card-embroidery.webp',
+        previewAlt: 'Botanical embroidery motif preview',
+        tagline: 'Craft details that matter',
+        capabilities: ['Placement', 'Motif Library', 'Thread Shades', 'Stitch Rendering'],
         icon: 'M3 12l3-4 3 8 3-8 3 8 3-8 3 4',
         live: false,
     },
     {
         id: 'woven',
+        shortLabel: 'Woven',
         label: 'Woven Design Studio',
+        category: 'Checks, dobby and jacquard',
         blurb: 'Checks and stripes, dobby and jacquard drafting, yarn libraries.',
         cta: 'Coming soon',
         tone: 'emerald',
+        preview: '/studio-card-woven.webp',
+        previewAlt: 'Geometric woven textile preview',
+        tagline: 'Weave new possibilities',
+        capabilities: ['Checks & Stripes', 'Dobby Drafting', 'Jacquard', 'Yarn Library'],
         icon: 'M4 6h16M4 12h16M4 18h16M6 4v16M12 4v16M18 4v16',
         live: false,
     },
@@ -45,6 +63,17 @@ const STUDIOS = [
 // Quick Start is the subset of tools a new user is most likely to reach for first, in the order
 // the workflow actually runs. Ids must exist in the studio's tool registry.
 const QUICK_START = ['pattern', 'seamless', 'inspire', 'colorways', 'repeat', 'vectorize', 'mappings', 'imagelayers'];
+
+const QUICK_DESCRIPTIONS = {
+    pattern: 'Turn any image into a pattern',
+    seamless: 'Create tileable repeats in one click',
+    inspire: 'Explore styles and trends',
+    colorways: 'Generate beautiful colour variations',
+    repeat: 'Adjust and refine pattern repeats',
+    vectorize: 'Convert artwork to clean vectors',
+    mappings: 'Visualize designs on products',
+    imagelayers: 'Separate and edit artwork with AI',
+};
 
 function greetingFor(date = new Date()) {
     const h = date.getHours();
@@ -159,7 +188,7 @@ export default function HomeTool({
 }) {
     const name = firstName(user);
     const greeting = greetingFor();
-    const remaining = Math.max(0, (user?.creditsLimit || 0) - (user?.creditsUsed || 0));
+    const [quickFilter, setQuickFilter] = useState('all');
 
     const quick = useMemo(() => {
         const byId = new Map(quickTools.map((t) => [t.id, t]));
@@ -171,18 +200,58 @@ export default function HomeTool({
     return (
         <div className="hm">
             <div className="hm-main">
-                <header className="hm-greet">
-                    <h1>{greeting}{name ? `, ${name}` : ''}<span aria-hidden="true"> 👋</span></h1>
-                    <p>What would you like to design today?</p>
-                </header>
+                <nav className="hm-studio-tabs" aria-label="Design studios">
+                    {STUDIOS.map((studio) => (
+                        <button
+                            key={studio.id}
+                            type="button"
+                            className={`hm-studio-tab tone-${studio.tone} ${studio.id === 'print' ? 'is-active' : ''}`}
+                            disabled={!studio.live}
+                            aria-current={studio.id === 'print' ? 'page' : undefined}
+                            onClick={() => setQuickFilter('print')}
+                        >
+                            <I d={studio.icon} s={19} />
+                            <span>{studio.shortLabel}</span>
+                            {!studio.live && <span className="hm-tab-soon">Soon</span>}
+                        </button>
+                    ))}
+                </nav>
+
+                <div className="hm-welcome">
+                    <header className="hm-greet">
+                        <span className="hm-greet-kicker">{greeting}</span>
+                        <h1>Hi there{name ? `, ${name}` : ''}</h1>
+                        <p>What would you like to design today?</p>
+                    </header>
+                    <p className="hm-manifesto">Design a more<br />colorful tomorrow.</p>
+                </div>
 
                 <section className="hm-studios" aria-label="Studios">
-                    {STUDIOS.map((s) => (
+                    {STUDIOS.map((s, index) => (
                         <article key={s.id} className={`hm-studio tone-${s.tone} ${s.live ? '' : 'is-soon'}`}>
-                            <div className="hm-studio-art" aria-hidden="true"><I d={s.icon} s={30} /></div>
+                            <div className="hm-studio-preview">
+                                <img
+                                    src={s.preview}
+                                    alt={s.previewAlt}
+                                    width="640"
+                                    height="320"
+                                    loading={index === 0 ? 'eager' : 'lazy'}
+                                    decoding="async"
+                                />
+                                <span className={`hm-studio-status ${s.live ? 'is-live' : ''}`}>
+                                    {s.live ? 'Available' : 'Coming soon'}
+                                </span>
+                            </div>
                             <div className="hm-studio-body">
-                                <h3>{s.label}{!s.live && <span className="hm-soon">Coming soon</span>}</h3>
+                                <div className="hm-studio-title">
+                                    <span className="hm-studio-title-icon" aria-hidden="true"><I d={s.icon} s={19} /></span>
+                                    <h3>{s.label}</h3>
+                                </div>
+                                <strong className="hm-studio-category">{s.category}</strong>
                                 <p>{s.blurb}</p>
+                                <div className="hm-studio-capabilities" aria-label={`${s.shortLabel} capabilities`}>
+                                    {s.capabilities.map((capability) => <span key={capability}>{capability}</span>)}
+                                </div>
                                 {s.live ? (
                                     <button type="button" className="hm-studio-cta" onClick={() => setTool?.(s.tool)}>
                                         {s.cta} <I d="M5 12h14M13 6l6 6-6 6" s={14} />
@@ -190,6 +259,7 @@ export default function HomeTool({
                                 ) : (
                                     <span className="hm-studio-cta is-disabled" aria-disabled="true">In development</span>
                                 )}
+                                <span className="hm-studio-tagline">{s.tagline}</span>
                             </div>
                         </article>
                     ))}
@@ -198,13 +268,19 @@ export default function HomeTool({
                 <section className="hm-block" aria-labelledby="hm-quick-title">
                     <div className="hm-block-head">
                         <h2 id="hm-quick-title">Quick start</h2>
-                        <span className="hm-block-note">Print studio</span>
+                        <div className="hm-filter-tabs" role="group" aria-label="Filter quick tools">
+                            <button type="button" className={quickFilter === 'all' ? 'is-active' : ''} onClick={() => setQuickFilter('all')}>All</button>
+                            <button type="button" className={quickFilter === 'print' ? 'is-active' : ''} onClick={() => setQuickFilter('print')}>Print</button>
+                            <button type="button" disabled title="Embroidery Studio is coming soon">Embroidery</button>
+                            <button type="button" disabled title="Woven Design Studio is coming soon">Woven</button>
+                        </div>
                     </div>
                     <div className="hm-quick">
                         {quick.map((t) => (
                             <button key={t.id} type="button" className="hm-quick-tile" onClick={() => setTool?.(t.id)}>
                                 <span className="hm-quick-icon" aria-hidden="true"><I d={t.icon} s={22} /></span>
                                 <span className="hm-quick-label">{t.label}</span>
+                                <span className="hm-quick-description">{QUICK_DESCRIPTIONS[t.id]}</span>
                                 {t.requiresPro && <span className="hm-pro">Pro</span>}
                             </button>
                         ))}
@@ -213,10 +289,13 @@ export default function HomeTool({
 
                 <section className="hm-block" aria-labelledby="hm-projects-title">
                     <div className="hm-block-head">
-                        <h2 id="hm-projects-title">Projects</h2>
-                        <button type="button" className="hm-link-btn" onClick={onNewProject}>
-                            <I d="M12 5v14M5 12h14" s={14} /> New project
-                        </button>
+                        <h2 id="hm-projects-title">Recent projects</h2>
+                        <div className="hm-project-actions">
+                            <button type="button" className="hm-link-btn" onClick={onNewProject}>
+                                <I d="M12 5v14M5 12h14" s={14} /> New project
+                            </button>
+                            <button type="button" className="hm-link-btn" onClick={() => setTool?.('workspace')}>View all</button>
+                        </div>
                     </div>
                     {recent.length === 0 ? (
                         <div className="hm-empty">
@@ -225,10 +304,6 @@ export default function HomeTool({
                         </div>
                     ) : (
                         <div className="hm-projects">
-                            <button type="button" className="hm-project hm-project-new" onClick={onNewProject}>
-                                <span className="hm-project-new-icon" aria-hidden="true"><I d="M12 5v14M5 12h14" s={22} /></span>
-                                <span>New project</span>
-                            </button>
                             {recent.map((p) => (
                                 <ProjectCard
                                     key={p.id}
@@ -245,35 +320,18 @@ export default function HomeTool({
                         </div>
                     )}
                 </section>
-            </div>
 
-            <aside className="hm-rail" aria-label="Quick actions">
-                <section className="hm-card">
-                    <h3>Working in</h3>
-                    <p className="hm-current">{activeProject?.name || 'No project selected'}</p>
-                    <p className="hm-muted">{activeProject?.updatedLabel || 'Pick a project or create one.'}</p>
-                </section>
-
-                <section className="hm-card">
-                    <h3>Quick actions</h3>
-                    <ul className="hm-actions">
-                        <li><button type="button" onClick={() => setTool?.('pattern')}><I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" s={16} /> Upload artwork</button></li>
-                        <li><button type="button" onClick={onNewProject}><I d="M12 5v14M5 12h14" s={16} /> Create new project</button></li>
-                        <li><button type="button" onClick={() => setTool?.('seamless')}><I d="M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2z" s={16} /> Make a tile seamless</button></li>
-                        <li><button type="button" onClick={() => setTool?.('colorways')}><I d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" s={16} /> Build colourways</button></li>
-                        <li><button type="button" onClick={() => setTool?.('exports')}><I d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" s={16} /> Export designs</button></li>
-                    </ul>
-                </section>
-
-                <section className="hm-card hm-plan">
-                    <h3>Your plan</h3>
-                    <p className="hm-current">{user?.plan || '—'}</p>
-                    <p className="hm-muted">{remaining.toLocaleString()} credits remaining</p>
-                    <button type="button" className="hm-link-btn" onClick={() => setTool?.('billing')}>
-                        Manage billing <I d="M5 12h14M13 6l6 6-6 6" s={14} />
+                <section className="hm-ai-banner" aria-label="RIMI AI tools">
+                    <div>
+                        <h2>Design better, faster with RIMI AI</h2>
+                        <p>Explore AI-powered tools that support your creative workflow from artwork to production.</p>
+                    </div>
+                    <div className="hm-ai-orbit" aria-hidden="true"><span /><span /><span /></div>
+                    <button type="button" onClick={() => setTool?.('inspire')}>
+                        Explore AI tools <I d="M5 12h14M13 6l6 6-6 6" s={15} />
                     </button>
                 </section>
-            </aside>
+            </div>
         </div>
     );
 }

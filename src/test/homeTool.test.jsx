@@ -43,12 +43,39 @@ describe('HomeTool', () => {
     expect(screen.queryByRole('button', { name: /Open Woven/ })).toBeNull();
   });
 
+  it('keeps upload inside Print Studio and uses visual previews for all three studios', () => {
+    renderHome();
+    expect(screen.queryByText('Upload artwork')).toBeNull();
+    const previews = screen.getAllByRole('img', { name: /preview/i });
+    expect(previews).toHaveLength(3);
+    expect(previews.map((preview) => preview.getAttribute('src'))).toEqual([
+      '/studio-card-print.webp',
+      '/studio-card-embroidery.webp',
+      '/studio-card-woven.webp',
+    ]);
+    expect(screen.getByRole('navigation', { name: 'Design studios' })).toBeInTheDocument();
+    expect(screen.getByText(/Design a more/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Design better, faster with RIMI AI/i })).toBeInTheDocument();
+  });
+
   it('shows Quick Start tiles for real tools only, with a Pro badge where the tool needs it', () => {
     const { props } = renderHome();
     fireEvent.click(screen.getByRole('button', { name: /Make Seamless/ }));
     expect(props.setTool).toHaveBeenCalledWith('seamless');
     expect(screen.getByRole('button', { name: /Qwen Studio/ }).textContent).toMatch(/Pro/);
     expect(screen.queryByRole('button', { name: /^Exports$/ })).toBeNull();
+    expect(screen.getByText('Turn any image into a pattern')).toBeInTheDocument();
+    expect(screen.getByText('Create tileable repeats in one click')).toBeInTheDocument();
+  });
+
+  it('explains each studio while keeping coming-soon studios non-interactive', () => {
+    renderHome();
+    expect(screen.getByText('Surface and print design')).toBeInTheDocument();
+    expect(screen.getByText('Motifs, threads and placement')).toBeInTheDocument();
+    expect(screen.getByText('Checks, dobby and jacquard')).toBeInTheDocument();
+    expect(screen.getAllByText('Coming soon')).toHaveLength(2);
+    expect(screen.getByText('Pattern Extraction', { selector: '.hm-studio-capabilities span' })).toBeInTheDocument();
+    expect(screen.getByText('Yarn Library')).toBeInTheDocument();
   });
 
   it('lists projects newest first, opens one on click, and offers New project', () => {
