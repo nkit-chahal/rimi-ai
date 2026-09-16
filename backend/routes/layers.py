@@ -111,6 +111,7 @@ def image_layers():
 # --------------- Caption Layer (Groq Vision) ---------------
 @bp.route('/api/caption-layer', methods=['POST'])
 @login_required
+@generation_rate_limit
 def caption_layer():
   """
   Auto-name a layer image using Groq Vision.
@@ -179,6 +180,7 @@ def caption_layer():
 # --------------- OCR text on layer ---------------
 @bp.route('/api/layer-ocr', methods=['POST'])
 @login_required
+@generation_rate_limit
 def layer_ocr():
   """Detect text content in a layer for text-aware revise."""
   data = request.get_json() or {}

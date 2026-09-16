@@ -10,6 +10,7 @@ from flask import Blueprint, jsonify, make_response, redirect, request
 
 from auth import credit_expiry_reset_at
 from db import db
+from signup_guard import get_client_ip
 from jwt_tokens import issue_access_token
 
 bp = Blueprint('google_auth', __name__)
@@ -88,7 +89,7 @@ def record_login(conn, user_id, provider):
         (
             user_id,
             provider,
-            request.headers.get("X-Forwarded-For", request.remote_addr),
+            get_client_ip(),
             request.headers.get("User-Agent", ""),
             now,
         ),

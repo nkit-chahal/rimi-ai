@@ -161,9 +161,9 @@ export default function RepeatTool(props) {
                 updateCreditsFromResponse?.(d);
                 setRepeatUrl(d.resultUrl);
                 forceDownload({ preventDefault: () => { } }, mediaUrl(d.resultUrl), undefined, currentToken);
-            } else setError(d.error);
-        } catch {
-            setError('Backend is not reachable. Start Flask on port 3001.');
+            } else setError(d.error || 'Repeat export failed. Please try again.');
+        } catch (err) {
+            setError(err?.message || 'Repeat export failed. Please try again.');
         } finally {
             setIsRepeat(false);
         }

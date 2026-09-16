@@ -16,6 +16,7 @@ from db import DEFAULT_CREDIT_PRICING, db, rows_to_dicts
 from jwt_tokens import issue_access_token
 from middleware import admin_required, login_required
 from plan_tiers import is_pro, is_pro_plan, pro_until_from
+from signup_guard import get_client_ip
 from rate_limits import login_rate_limit, signup_request_rate_limit, signup_verify_rate_limit
 
 bp = Blueprint('admin', __name__)
@@ -112,7 +113,7 @@ def _record_admin_audit(conn, action, target_user_id=None, details=None):
             target_user_id,
             action,
             json.dumps(details or {}, sort_keys=True),
-            request.headers.get("X-Forwarded-For", request.remote_addr),
+            get_client_ip(),
             request.headers.get("User-Agent", ""),
             created_at,
         ),
@@ -131,7 +132,7 @@ def _record_login_event(conn, user_id, provider):
         (
             user_id,
             provider,
-            request.headers.get("X-Forwarded-For", request.remote_addr),
+            get_client_ip(),
             request.headers.get("User-Agent", ""),
             now,
         ),

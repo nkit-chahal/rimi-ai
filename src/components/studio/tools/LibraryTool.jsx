@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API } from '../shared/helpers';
+import { apiFetch } from '../shared/helpers';
 
 export default function LibraryTool(props) {
     const { activeProject, setError, currentToken } = props;
@@ -14,10 +14,7 @@ export default function LibraryTool(props) {
     const fetchBrandPalettes = useCallback(async () => {
         setBrandPalettesLoading(true);
         try {
-            const r = await fetch(`${API}/api/brand-palettes?project_id=${activeProject.id}`, {
-                headers: { Authorization: `Bearer ${currentToken}` }
-            });
-            const d = await r.json();
+            const d = await apiFetch(`/api/brand-palettes?project_id=${activeProject.id}`, {}, currentToken);
             if (d.success) setBrandPalettes(d.palettes);
         } catch (err) {
             console.error(err);
@@ -30,19 +27,14 @@ export default function LibraryTool(props) {
         if (!newPaletteName.trim()) return;
         setIsSavingPalette(true);
         try {
-            const r = await fetch(`${API}/api/brand-palettes`, {
+            const d = await apiFetch('/api/brand-palettes', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${currentToken}`
-                },
                 body: JSON.stringify({
                     projectId: activeProject.id,
                     name: newPaletteName,
                     colors: newPaletteColors
                 })
-            });
-            const d = await r.json();
+            }, currentToken);
             if (d.success) {
                 setNewPaletteName('');
                 setNewPaletteColors(['#000000', '#ffffff']);
@@ -50,8 +42,8 @@ export default function LibraryTool(props) {
             } else {
                 setError(d.error || 'Failed to save palette');
             }
-        } catch {
-            setError('Failed to save palette');
+        } catch (err) {
+            setError(err?.message || 'Failed to save palette');
         } finally {
             setIsSavingPalette(false);
         }
@@ -59,14 +51,10 @@ export default function LibraryTool(props) {
 
     const deleteBrandPalette = async (id) => {
         try {
-            const r = await fetch(`${API}/api/brand-palettes/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${currentToken}` }
-            });
-            const d = await r.json();
+            const d = await apiFetch(`/api/brand-palettes/${id}`, { method: 'DELETE' }, currentToken);
             if (d.success) fetchBrandPalettes();
-        } catch {
-            setError('Failed to delete palette');
+        } catch (err) {
+            setError(err?.message || 'Failed to delete palette');
         }
     };
 

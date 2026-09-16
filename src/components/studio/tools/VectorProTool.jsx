@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
+import { API, apiFetch, forceDownload } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
@@ -57,9 +57,8 @@ export default function VectorProTool(props) {
         setIsVpReducing(true);
         setError('');
         try {
-            const res = await fetch(`${API}/api/color-reduce`, {
+            const d = await apiFetch('/api/color-reduce', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: uploaded.filename,
                     numColors: vpNumColors,
@@ -67,8 +66,8 @@ export default function VectorProTool(props) {
                     userId: user.id,
                     brandPaletteId: vpBrandPaletteId ? parseInt(vpBrandPaletteId) : null
                 }),
-            });
-            const d = await res.json();
+                timeoutMs: 300000,
+            }, currentToken);
             if (d.success) {
                 setVpReducedUrl(d.resultUrl);
                 setVpPalette(d.palette);
@@ -86,17 +85,15 @@ export default function VectorProTool(props) {
     const lookupPantone = async (hexVal) => {
         setIsVpLooking(true);
         try {
-            const res = await fetch(`${API}/api/pantone-match`, {
+            const d = await apiFetch('/api/pantone-match', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({ hex: hexVal }),
-            });
-            const d = await res.json();
+            }, currentToken);
             if (d.success) {
                 setVpLookupResults(d.matches);
             }
         } catch (e) {
-            setError('Pantone lookup failed');
+            setError(e.message || 'Pantone lookup failed');
         } finally {
             setIsVpLooking(false);
         }
@@ -111,9 +108,8 @@ export default function VectorProTool(props) {
         setLayerExportLoading(format);
         setError('');
         try {
-            const res = await fetch(`${API}/api/layer-export`, {
+            const d = await apiFetch('/api/layer-export', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: uploaded.filename,
                     numColors: vpNumColors,
@@ -121,16 +117,12 @@ export default function VectorProTool(props) {
                     projectId: activeProject.id,
                     userId: user.id,
                 }),
-            });
-            const d = await res.json();
+                timeoutMs: 300000,
+            }, currentToken);
             if (d.success) {
                 updateCreditsFromResponse(d);
-                const link = document.createElement('a');
-                link.href = `${API}${d.resultUrl}`;
-                link.download = `layers_${uploaded.filename.replace(/\.[^.]+$/, '')}.${format === 'zip' ? 'zip' : 'tiff'}`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                const downloadName = `layers_${uploaded.filename.replace(/\.[^.]+$/, '')}.${format === 'zip' ? 'zip' : 'tiff'}`;
+                await forceDownload(null, d.resultUrl, downloadName, currentToken);
             } else {
                 throw new Error(d.error);
             }

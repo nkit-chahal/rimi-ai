@@ -8,6 +8,7 @@ from flask import Flask, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from db import init_db
 from logging_config import configure_logging
@@ -81,6 +82,20 @@ def _init_rate_limiter(app):
 
 def create_app():
     app = Flask(__name__)
+
+    # Behind Railway or nginx every request arrives from the proxy, so request.remote_addr
+    # is the proxy's own address. Two things break as a result: Flask-Limiter keys every
+    # limit on that single address, so "10 logins per minute" applies to the whole user
+    # base at once instead of per attacker; and anything reading X-Forwarded-For directly
+    # is trusting a header the client sets, which defeats the signup IP cooldown.
+    # ProxyFix rewrites remote_addr from a fixed number of trusted hops, which a client
+    # cannot forge past. Set TRUSTED_PROXY_COUNT to the number of proxies actually in
+    # front of this app (Railway is 1); 0 disables it for direct local runs.
+    _proxy_hops = int(os.getenv("TRUSTED_PROXY_COUNT", "1" if _is_production() else "0"))
+    if _proxy_hops > 0:
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app, x_for=_proxy_hops, x_proto=_proxy_hops, x_host=_proxy_hops
+        )
     jwt_secret = os.getenv("JWT_SECRET", "")
     if os.getenv("FLASK_ENV") == "production" and (
         not jwt_secret or jwt_secret == "rimi-ai-dev-secret-change-in-production"
@@ -132,6 +147,17 @@ def create_app():
         if (path.startswith("/results/") or path.startswith("/uploads/")) and response.status_code == 200:
             response.headers.setdefault("Cache-Control", "public, max-age=86400, immutable")
         return response
+
+    # A configured gateway with no webhook secret is the shape that loses money: the
+    # webhook rejects every delivery, so the only path that grants credits is the
+    # customer's browser returning from checkout. Say so loudly rather than at the
+    # moment a customer complains.
+    if os.getenv("RAZORPAY_KEY_ID", "").strip() and not os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip():
+        logger.error(
+            "RAZORPAY_WEBHOOK_SECRET is not set: payment webhooks will be rejected and "
+            "orders will only be credited if the customer's browser returns from checkout. "
+            "Run POST /api/admin/reconcile-payments to recover any that did not."
+        )
 
     # Security: enforce max upload size (25 MB)
     app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024

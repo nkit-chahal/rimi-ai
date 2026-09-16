@@ -95,9 +95,12 @@ def record_signup_guard(user_id: int, ip_address: str, fingerprint: str, email: 
 
 
 def get_client_ip():
-    """Extract the real client IP from the request, respecting proxy headers."""
+    """The client address as established by the WSGI stack.
+
+    Deliberately not read from X-Forwarded-For here. A client can send any value it
+    likes, so taking the left-most entry let anyone defeat the signup IP cooldown by
+    changing the header on each request. server.create_app installs ProxyFix with a
+    trusted hop count, so remote_addr is already the real client behind a proxy.
+    """
     from flask import request
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
     return request.remote_addr or ""

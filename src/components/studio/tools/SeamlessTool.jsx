@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, runAsyncJob, jsonAuthHeaders, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
+import { apiFetch, forceDownload, runAsyncJob, cacheMediaFromResponse, mediaUrl } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import ImageDropzone from '../shared/ImageDropzone';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
@@ -94,20 +94,27 @@ export default function SeamlessTool({
                 projectId: activeProject.id,
                 userId: user.id,
             };
-            const result = await runAsyncJob('/api/make-seamless', payload, currentToken, {
-                onJobCreated: jobId => reportProgress?.(1, 'Queued…', { jobId }),
-                onProgress: (job) => {
-                    setSeamlessProgress(job.progressPct || 0);
-                    setSeamlessStatus(job.stage || 'Working…');
-                    reportProgress?.(job.progressPct || 0, job.stage);
-                },
-            });
-            cacheMediaFromResponse(result);
-            const resultUrl = result.resultUrl?.startsWith('http') ? result.resultUrl : result.resultUrl;
-            setSeamlessUrl(resultUrl);
-            updateCreditsFromResponse(result);
-            setIsSeamless(false);
-            return { url: resultUrl };
+            try {
+                const result = await runAsyncJob('/api/make-seamless', payload, currentToken, {
+                    onJobCreated: jobId => reportProgress?.(1, 'Queued…', { jobId }),
+                    onProgress: (job) => {
+                        setSeamlessProgress(job.progressPct || 0);
+                        setSeamlessStatus(job.stage || 'Working…');
+                        reportProgress?.(job.progressPct || 0, job.stage);
+                    },
+                });
+                cacheMediaFromResponse(result);
+                const resultUrl = result.resultUrl?.startsWith('http') ? result.resultUrl : result.resultUrl;
+                setSeamlessUrl(resultUrl);
+                updateCreditsFromResponse(result);
+                return { url: resultUrl };
+            } catch (err) {
+                // Without this the spinner stayed on forever and the user saw no reason why.
+                setError(err?.message || 'Seamless fix failed. Please try again.');
+                throw err;
+            } finally {
+                setIsSeamless(false);
+            }
         };
         addBgTask('seamless', 'Make Seamless', filename || 'hero_image', trigger, {
             modelId: 'rimi/seamless-fix',
@@ -137,9 +144,8 @@ export default function SeamlessTool({
                 reportProgress?.(pct, 'Generating…');
             }, 120);
             try {
-                const res = await fetch(`${API}/api/generate-seamless`, {
+                const d = await apiFetch('/api/generate-seamless', {
                     method: 'POST',
-                    headers: jsonAuthHeaders(currentToken),
                     body: JSON.stringify({
                         prompt: seamlessPrompt,
                         filename: uploaded?.filename || null,
@@ -147,9 +153,8 @@ export default function SeamlessTool({
                         projectId: activeProject.id,
                         userId: user.id,
                     }),
-                });
-                const d = await res.json();
-                window.clearInterval(tick);
+                    timeoutMs: 300000,
+                }, currentToken);
                 if (d.success) {
                     const tiles = d.tiles || [];
                     setSeamlessTiles(tiles);
@@ -157,17 +162,17 @@ export default function SeamlessTool({
                         setSeamlessUrl(tiles[0].url);
                     }
                     updateCreditsFromResponse(d);
-                    setIsSeamless(false);
                     setSeamlessProgress(100);
                     return { url: tiles[0]?.url, urls: tiles.map(t => t.url) };
                 } else {
-                    setIsSeamless(false);
                     throw new Error(d.error || 'Generation failed');
                 }
             } catch (err) {
+                setError(err?.message || 'Seamless generation failed. Please try again.');
+                throw err;
+            } finally {
                 window.clearInterval(tick);
                 setIsSeamless(false);
-                throw err;
             }
         };
         addBgTask('seamless', 'Generate Seamless Tiles', uploaded?.filename || 'text-prompt', trigger, {

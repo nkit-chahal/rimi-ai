@@ -1,12 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, jsonAuthHeaders, bearerAuthHeaders, cacheMediaFromResponse } from '../shared/helpers';
+import { apiFetch, forceDownload, cacheMediaFromResponse } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
 import { createPortal } from 'react-dom';
 import { useImageDropzone } from '../shared/useImageDropzone';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
+
+// Pipeline step types are not all pricing keys - map the ones that differ so the
+// up-front estimate matches what the backend actually charges.
+const STEP_CREDIT_KEYS = {
+    decompose: 'imageLayers',
+    'edit-layer': 'imageLayerEdit',
+    // The pipeline runs the local vectorizer (see the vectorize step below).
+    vectorize: 'vectorizeLocal',
+};
 
 export default function DashboardTool(props) {
     const {
@@ -50,7 +59,8 @@ export default function DashboardTool(props) {
         extract: { label: 'Pattern Extract', cost: creditPricing?.extract || 148 },
         seamless: { label: 'Make Seamless', cost: creditPricing?.seamless || 58 },
         repeat: { label: 'Repeat Set', cost: creditPricing?.repeat || 5 },
-        vectorize: { label: 'Vectorize SVG', cost: creditPricing?.vectorize || 12 },
+        // The pipeline runs the local vectorizer, so quote the local price.
+        vectorize: { label: 'Vectorize SVG', cost: creditPricing?.vectorizeLocal || 3 },
         upscale: { label: 'Super Resolution', cost: creditPricing?.upscale || 23 },
         decompose: { label: 'Qwen Decompose', cost: creditPricing?.imageLayers || 69 },
         'edit-layer': { label: 'Qwen Edit Layer', cost: creditPricing?.imageLayerEdit || 35 },
@@ -98,7 +108,7 @@ export default function DashboardTool(props) {
                     .then((d) => { if (d.success) setPipelineRuns(d.runs); })
                     .catch(() => { });
             }
-            fetch(`${API}/api/workflows`, { headers: bearerAuthHeaders(currentToken) }).then(r => r.json()).then(d => {
+            apiFetch('/api/workflows', {}, currentToken).then(d => {
                 if (d.success) setSavedProfiles(d.workflows);
             }).catch(() => { });
         }
@@ -122,8 +132,7 @@ export default function DashboardTool(props) {
     const deleteProfile = async (id) => {
         if (!window.confirm('Are you sure you want to delete this profile?')) return;
         try {
-            const r = await fetch(`${API}/api/workflows/${id}`, { method: 'DELETE', headers: bearerAuthHeaders(currentToken) });
-            const d = await r.json();
+            const d = await apiFetch(`/api/workflows/${id}`, { method: 'DELETE' }, currentToken);
             if (d.success) {
                 setSavedProfiles(prev => prev.filter(p => p.id !== id));
             }
@@ -195,7 +204,8 @@ export default function DashboardTool(props) {
 
     const estimatedCredits = useMemo(() => {
         return pipelineSteps.reduce((sum, s) => {
-            return sum + (creditPricing[s.type] || 0);
+            const key = STEP_CREDIT_KEYS[s.type] || s.type;
+            return sum + (creditPricing[key] || 0);
         }, 0);
     }, [pipelineSteps, creditPricing]);
 
@@ -208,8 +218,7 @@ export default function DashboardTool(props) {
         fd.append('image', file);
         fd.append('projectId', String(activeProject?.id || 1));
         if (user?.id) fd.append('userId', String(user.id));
-        fetch(`${API}/api/upload`, { method: 'POST', body: fd, headers: bearerAuthHeaders(currentToken) })
-            .then(r => r.json())
+        apiFetch('/api/upload', { method: 'POST', body: fd, timeoutMs: 120000 }, currentToken)
             .then(d => {
                 if (d.success) {
                     setPipelineFile(d);
@@ -219,9 +228,9 @@ export default function DashboardTool(props) {
                     setError(d.error || 'Upload failed');
                 }
             })
-            .catch(() => {
+            .catch((err) => {
                 setPipelineUploadStatus('error');
-                setError('Upload failed');
+                setError(err?.message || 'Upload failed');
             });
     };
 
@@ -268,17 +277,15 @@ export default function DashboardTool(props) {
         // Create run record
         let runId = null;
         try {
-            const rr = await fetch(`${API}/api/pipeline-runs`, {
+            const rd = await apiFetch('/api/pipeline-runs', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     projectId: activeProject.id,
                     name: PIPELINE_TEMPLATES.find(t => t.id === selectedTemplate)?.name || 'Custom Pipeline',
                     steps: pipelineSteps.map(s => s.type),
                     settings: pipelineSteps.reduce((acc, s) => ({ ...acc, [s.type]: s.settings }), {}),
                 }),
-            });
-            const rd = await rr.json();
+            }, currentToken);
             if (rd.success) runId = rd.runId;
         } catch { }
 
@@ -296,11 +303,11 @@ export default function DashboardTool(props) {
                     // Already handled by handlePipelineUpload
                     resultUrl = pipelineFile ? `/uploads/${pipelineFile.filename}` : null;
                 } else if (step.type === 'extract') {
-                    const r = await fetch(`${API}/api/extract-design`, {
-                        method: 'POST', headers: jsonAuthHeaders(currentToken),
+                    const d = await apiFetch('/api/extract-design', {
+                        method: 'POST',
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, userId: user?.id }),
-                    });
-                    const d = await r.json();
+                        timeoutMs: 300000,
+                    }, currentToken);
                     if (d.success && (d.resultUrl || d.resultUrls?.[0])) {
                         resultUrl = d.resultUrl || d.resultUrls[0];
                         currentInput = resultUrl.split('/').pop();
@@ -309,40 +316,42 @@ export default function DashboardTool(props) {
                     }
                     else throw new Error(d.error || 'Extraction failed');
                 } else if (step.type === 'seamless') {
-                    const r = await fetch(`${API}/api/make-seamless`, {
-                        method: 'POST', headers: jsonAuthHeaders(currentToken),
+                    const d = await apiFetch('/api/make-seamless', {
+                        method: 'POST',
                         body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, userId: user?.id }),
-                    });
-                    const d = await r.json();
+                        timeoutMs: 300000,
+                    }, currentToken);
                     if (d.success && d.resultUrl) { resultUrl = d.resultUrl; currentInput = d.resultUrl.split('/').pop(); cacheMediaFromResponse(d); updateCreditsFromResponse(d); }
                     else throw new Error(d.error || 'Seamless failed');
                 } else if (step.type === 'repeat') {
-                    const r = await fetch(`${API}/api/create-repeat-set`, {
-                        method: 'POST', headers: jsonAuthHeaders(currentToken),
+                    const d = await apiFetch('/api/create-repeat-set', {
+                        method: 'POST',
                         body: JSON.stringify({
                             projectId: activeProject.id, filename: currentInput, userId: user?.id,
                             gridSize: step.settings?.gridSize || 3, scale: 100,
                             repeatType: step.settings?.repeatType || 'block',
                             dpi: outDpi, format: outFormat,
                         }),
-                    });
-                    const d = await r.json();
+                        timeoutMs: 300000,
+                    }, currentToken);
                     if (d.success && d.resultUrl) { resultUrl = d.resultUrl; currentInput = d.resultUrl.split('/').pop(); cacheMediaFromResponse(d); updateCreditsFromResponse(d); }
                     else throw new Error(d.error || 'Repeat failed');
                 } else if (step.type === 'upscale') {
-                    const r = await fetch(`${API}/api/upscale`, {
-                        method: 'POST', headers: jsonAuthHeaders(currentToken),
-                        body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, factor: step.settings?.upscaleFactor || 'x4', userId: user?.id }),
-                    });
-                    const d = await r.json();
+                    const d = await apiFetch('/api/upscale', {
+                        method: 'POST',
+                        // The backend reads `upscaleFactor`; sending `factor` silently ignored the 2x/4x choice.
+                        body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, upscaleFactor: step.settings?.upscaleFactor || 'x4', userId: user?.id }),
+                        timeoutMs: 300000,
+                    }, currentToken);
                     if (d.success && d.resultUrl) { resultUrl = d.resultUrl; currentInput = d.resultUrl.split('/').pop(); cacheMediaFromResponse(d); updateCreditsFromResponse(d); }
                     else throw new Error(d.error || 'Upscale failed');
                 } else if (step.type === 'vectorize') {
-                    const r = await fetch(`${API}/api/vectorize`, {
-                        method: 'POST', headers: jsonAuthHeaders(currentToken),
-                        body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, userId: user?.id }),
-                    });
-                    const d = await r.json();
+                    const d = await apiFetch('/api/vectorize', {
+                        method: 'POST',
+                        // Priced as vectorizeLocal in the estimate - ask for the local engine explicitly.
+                        body: JSON.stringify({ projectId: activeProject.id, filename: currentInput, engine: 'local', userId: user?.id }),
+                        timeoutMs: 300000,
+                    }, currentToken);
                     if (d.success && d.resultUrl) { resultUrl = d.resultUrl; currentInput = d.resultUrl.split('/').pop(); cacheMediaFromResponse(d); updateCreditsFromResponse(d); }
                     else throw new Error(d.error || 'Vectorize failed');
                 } else if (step.type === 'decompose') {
@@ -401,13 +410,13 @@ export default function DashboardTool(props) {
         // Update run record
         const finalStatus = results.every(r => r.status === 'done') ? 'completed' : 'failed';
         if (runId) {
-            fetch(`${API}/api/pipeline-runs/${runId}`, {
-                method: 'PATCH', headers: jsonAuthHeaders(currentToken),
+            apiFetch(`/api/pipeline-runs/${runId}`, {
+                method: 'PATCH',
                 body: JSON.stringify({ status: finalStatus, results }),
-            }).catch(() => { });
+            }, currentToken).catch(() => { });
         }
         // Refresh runs list
-        fetch(`${API}/api/pipeline-runs`, { headers: bearerAuthHeaders(currentToken) }).then(r => r.json()).then(d => {
+        apiFetch('/api/pipeline-runs', {}, currentToken).then(d => {
             if (d.success) setPipelineRuns(d.runs);
         }).catch(() => { });
 
@@ -415,19 +424,17 @@ export default function DashboardTool(props) {
         const finalResult = results[results.length - 1];
         if (finalStatus === 'completed' && finalResult?.resultUrl) {
             try {
-                const resp = await fetch(finalResult.resultUrl);
-                const blob = await resp.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
                 const ext = outFormat?.toLowerCase() || 'png';
-                a.download = `rimi_pipeline_result_${Date.now()}.${ext}`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                // /results/ is authenticated - go through the download proxy or this 401s.
+                await forceDownload(
+                    null,
+                    finalResult.resultUrl,
+                    `rimi_pipeline_result_${Date.now()}.${ext}`,
+                    currentToken,
+                );
             } catch (e) {
                 console.error('Auto-download failed:', e);
+                setError(e?.message || 'Pipeline finished, but the download could not start.');
             }
         }
 
@@ -441,16 +448,14 @@ export default function DashboardTool(props) {
             return;
         }
         try {
-            const rr = await fetch(`${API}/api/workflows`, {
+            const rd = await apiFetch('/api/workflows', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     name: pipelineName.trim(),
                     steps: pipelineSteps.map(s => s.type),
                     settings: pipelineSteps.reduce((acc, s) => ({ ...acc, [s.type]: s.settings }), {}),
                 }),
-            });
-            const rd = await rr.json();
+            }, currentToken);
             if (rd.success) {
                 setNotice?.('Pipeline profile saved successfully.');
                 setSavedProfiles([{

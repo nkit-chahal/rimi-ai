@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders } from '../shared/helpers';
+import { API, apiFetch, forceDownload } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
@@ -10,6 +10,15 @@ import { getModelTiming } from '../shared/modelTimings';
 import { isProUser, isProModel } from '../shared/planTiers';
 import ProUpgradeModal from '../shared/ProUpgradeModal';
 import '../../../styles/tools/inspire.css';
+
+// Pricing keys served by /api/credit-pricing (backend/db.py CREDIT_PRICING seed).
+// Models without an inspire_* key fall back to the hardcoded numbers below.
+const INSPIRE_CREDIT_KEYS = {
+    'openai/gpt-image-2': 'inspire_gpt_image_2',
+    'black-forest-labs/flux-2-pro': 'inspire_flux_2_pro',
+};
+// Flux 2 Pro is billed higher when a reference image is attached.
+const INSPIRE_FLUX_2_PRO_REF_KEY = 'inspire_flux_2_pro_ref';
 
 export default function InspireTool({
     uploaded,
@@ -56,14 +65,26 @@ export default function InspireTool({
     // backend/routes/generation.py and Replicate's actual model slugs.
     // Pricing rule (Option A, 4 credits per INR 1, ~57% gross margin):
     //   credits = ceil(cost_usd * 1150)
+    // Live pricing from /api/credit-pricing wins; the literals are only a fallback
+    // for when the pricing call has not resolved (or has no key for that model).
+    const hasReferenceImage = Boolean(uploaded?.filename);
+    const modelCreditKey = (modelId) => (
+        modelId === 'black-forest-labs/flux-2-pro' && hasReferenceImage
+            ? INSPIRE_FLUX_2_PRO_REF_KEY
+            : INSPIRE_CREDIT_KEYS[modelId]
+    );
+    const resolveModelCredits = (modelId, fallback) => {
+        const key = modelCreditKey(modelId);
+        return (key && creditPricing?.[key]) || fallback || creditPricing?.inspire || 45;
+    };
     const allAvailableModels = [
-        { id: 'black-forest-labs/flux-schnell', name: 'Flux Schnell', sub: 'Black Forest', brand: 'bfl', logo: 'FS', credits: 4, tier: 'normal', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'xai/grok-imagine-image', name: 'Grok Imagine', sub: 'xAI', brand: 'xai', logo: 'GR', credits: 23, tier: 'normal', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'google/nano-banana', name: 'Nano Banana', sub: 'Google', brand: 'google', logo: 'NB', credits: 45, tier: 'normal', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: 46, tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest', brand: 'bfl', logo: 'F2', credits: uploaded?.filename ? 52 : 35, tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', credits: 78, tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
-        { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'G2', credits: 148, tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'black-forest-labs/flux-schnell', name: 'Flux Schnell', sub: 'Black Forest', brand: 'bfl', logo: 'FS', credits: resolveModelCredits('black-forest-labs/flux-schnell', 4), tier: 'normal', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'xai/grok-imagine-image', name: 'Grok Imagine', sub: 'xAI', brand: 'xai', logo: 'GR', credits: resolveModelCredits('xai/grok-imagine-image', 23), tier: 'normal', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/nano-banana', name: 'Nano Banana', sub: 'Google', brand: 'google', logo: 'NB', credits: resolveModelCredits('google/nano-banana', 45), tier: 'normal', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', sub: 'ByteDance', brand: 'bytedance', logo: 'SD', credits: resolveModelCredits('bytedance/seedream-4.5', 46), tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'black-forest-labs/flux-2-pro', name: 'Flux 2 Pro', sub: 'Black Forest', brand: 'bfl', logo: 'F2', credits: resolveModelCredits('black-forest-labs/flux-2-pro', hasReferenceImage ? 52 : 35), tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'google/nano-banana-2', name: 'Nano Banana 2', sub: 'Google', brand: 'google', logo: 'N2', credits: resolveModelCredits('google/nano-banana-2', 78), tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
+        { id: 'openai/gpt-image-2', name: 'GPT Image 2', sub: 'OpenAI', brand: 'openai', logo: 'G2', credits: resolveModelCredits('openai/gpt-image-2', 148), tier: 'pro', icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z' },
     ];
 
     const userIsPro = isProUser(user);
@@ -101,22 +122,21 @@ export default function InspireTool({
         setIsDesc(true);
         setError('');
         try {
-            const r = await fetch(`${API}/api/describe-image`, {
+            const d = await apiFetch('/api/describe-image', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: uploaded.filename,
                     projectId: activeProject.id,
                     creativity
-                })
-            });
-            const d = await r.json();
+                }),
+                timeoutMs: 300000,
+            }, currentToken);
             if (d.success) {
                 setAnalysis(d.analysis);
                 setPrompt(d.description);
-            } else setError(d.error);
-        } catch {
-            setError('Backend is not reachable.');
+            } else setError(d.error || 'Could not describe this image.');
+        } catch (err) {
+            setError(err?.message || 'Could not describe this image.');
         } finally {
             setIsDesc(false);
         }
@@ -162,9 +182,8 @@ export default function InspireTool({
 
             const fetchPromises = inspireModels.map(async (modelId) => {
                 try {
-                    const r = await fetch(`${API}/api/generate-inspirations`, {
+                    const d = await apiFetch('/api/generate-inspirations', {
                         method: 'POST',
-                        headers: jsonAuthHeaders(currentToken),
                         body: JSON.stringify({
                             prompt: finalPrompt,
                             creativity,
@@ -176,9 +195,9 @@ export default function InspireTool({
                             filename: safeFilename,
                             imageUrl: safeUrl,
                             userId: user?.id
-                        })
-                    });
-                    const d = await r.json();
+                        }),
+                        timeoutMs: 300000,
+                    }, currentToken);
                     if (d.success) {
                         setGeneratedVariations(prev => [...prev, ...d.variations]);
                         updateCreditsFromResponse(d);
@@ -186,7 +205,10 @@ export default function InspireTool({
                         setError(d.error);
                     }
                 } catch (e) {
-                    console.error(`Error with model ${modelId}:`, e);
+                    // Surface the real reason (credits, rate limit, timeout) instead of hiding it.
+                    if (completedModels === 0) {
+                        setError(e?.message || `Generation failed for ${modelId}.`);
+                    }
                 } finally {
                     completedModels++;
                     setInspireProgress(Math.round((completedModels / totalModels) * 100));
@@ -194,8 +216,8 @@ export default function InspireTool({
             });
 
             await Promise.all(fetchPromises);
-        } catch {
-            setError('Backend is not reachable.');
+        } catch (err) {
+            setError(err?.message || 'Inspiration generation failed. Please try again.');
         } finally {
             setIsGen(false);
         }

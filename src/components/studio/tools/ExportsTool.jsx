@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload, jsonAuthHeaders, mediaUrl, cacheFileAccessToken } from '../shared/helpers';
+import { apiFetch, forceDownload, mediaUrl, cacheFileAccessToken } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import '../../../styles/tools/exports.css';
 import OpenInQwenButton from '../shared/OpenInQwenButton';
@@ -196,25 +196,24 @@ export default function ExportsTool(props) {
         setTechPackLoading(filename);
         setError('');
         try {
-            const res = await fetch(`${API}/api/tech-pack`, {
+            const d = await apiFetch('/api/tech-pack', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename,
                     projectId: activeProject.id,
                     userId: user.id,
                 }),
-            });
-            const d = await res.json();
+                timeoutMs: 300000,
+            }, currentToken);
             if (d.success) {
                 updateCreditsFromResponse(d);
-                // Trigger PDF download
-                const link = document.createElement('a');
-                link.href = `${API}${d.resultUrl}`;
-                link.download = `techpack_${filename.replace(/\.[^.]+$/, '')}.pdf`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                // Trigger PDF download through the authenticated /api/download proxy
+                await forceDownload(
+                    null,
+                    d.resultUrl,
+                    `techpack_${filename.replace(/\.[^.]+$/, '')}.pdf`,
+                    currentToken,
+                );
             } else {
                 throw new Error(d.error || 'Failed to generate tech pack');
             }

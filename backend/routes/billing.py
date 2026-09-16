@@ -5,17 +5,23 @@ import os
 import time
 from datetime import datetime, timezone
 
+import logging
+from datetime import timedelta
+
 import requests
 from flask import Blueprint, g, jsonify, request
 
 from auth import expire_credits_if_needed, extend_credit_expiry, _parse_reset_at
 from db import db, db_lock
-from middleware import login_required
+from middleware import admin_required, login_required
 from plan_tiers import attach_tier_fields, is_pro, parse_pro_until, pro_until_from
 
 bp = Blueprint("billing", __name__)
 
 RAZORPAY_ORDERS_URL = "https://api.razorpay.com/v1/orders"
+RAZORPAY_ORDER_PAYMENTS_URL = "https://api.razorpay.com/v1/orders/{order_id}/payments"
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Billing plans  (7.5 credits per INR 1, ~22% gross margin after Razorpay)
@@ -397,6 +403,7 @@ def razorpay_config():
         "success": True,
         "configured": bool(key_id and key_secret),
         "keyId": key_id if key_id else "",
+        "webhookConfigured": bool(os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip()),
     })
 
 
@@ -514,6 +521,7 @@ def razorpay_webhook():
     payment_id = entity.get("id")
     if not order_id:
         return jsonify({"success": False, "error": "Missing order_id in webhook payload"}), 400
+    captured_amount = entity.get("amount")
 
     paid_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     with db_lock:
@@ -525,6 +533,16 @@ def razorpay_webhook():
             ).fetchone()
             if not payment:
                 return jsonify({"success": False, "error": "Payment order was not found"}), 404
+
+            # Grant what the order says, but only if Razorpay captured that amount. The
+            # signature proves the message came from Razorpay, not that it refers to the
+            # sum this order was created for.
+            if captured_amount is not None and int(captured_amount) != int(payment["amount"] or 0):
+                logger.error(
+                    "Razorpay webhook amount %s does not match order %s amount %s",
+                    captured_amount, order_id, payment["amount"],
+                )
+                return jsonify({"success": False, "error": "Captured amount does not match the order"}), 400
 
             _grant_payment_credits(conn, payment, paid_at, provider_payment_id=payment_id)
             conn.commit()
@@ -600,3 +618,105 @@ def verify_payment():
         "payment_id": payment_id,
         **credits_payload,
     })
+
+
+def reconcile_pending_payments(max_age_minutes=10, limit=50, max_age_days=7):
+    """Grant packs that Razorpay captured but this app never recorded.
+
+    verify-payment only runs if the customer's browser makes it back from checkout, and
+    the webhook only helps once RAZORPAY_WEBHOOK_SECRET is configured. Without a sweep
+    like this, someone who closes the tab after paying is charged and receives nothing,
+    while the order sits at 'created' forever with nothing to notice it.
+
+    Only orders older than max_age_minutes are considered, so a checkout still in flight
+    is left alone. Granting goes through _grant_payment_credits, so an order the webhook
+    picks up in the meantime is not paid twice.
+    """
+    key_id, key_secret = _razorpay_credentials()
+    if not key_id or not key_secret:
+        return {"success": False, "error": "Razorpay is not configured",
+                "checked": 0, "granted": [], "errors": []}
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff = (now - timedelta(minutes=int(max_age_minutes))).isoformat()
+    floor = (now - timedelta(days=int(max_age_days))).isoformat()
+
+    with db_lock:
+        conn = db()
+        try:
+            rows = conn.execute(
+                """
+                SELECT * FROM payments
+                WHERE status = 'created' AND created_at <= ? AND created_at >= ?
+                ORDER BY id DESC LIMIT ?
+                """,
+                (cutoff, floor, int(limit)),
+            ).fetchall()
+            pending = [dict(row) for row in rows]
+        finally:
+            conn.close()
+
+    granted, errors = [], []
+    for payment in pending:
+        order_id = payment["provider_order_id"]
+        try:
+            response = requests.get(
+                RAZORPAY_ORDER_PAYMENTS_URL.format(order_id=order_id),
+                auth=(key_id, key_secret),
+                timeout=20,
+            )
+            if response.status_code >= 400:
+                errors.append(f"{order_id}: Razorpay returned {response.status_code}")
+                continue
+            items = response.json().get("items") or []
+        except (requests.RequestException, ValueError) as exc:
+            errors.append(f"{order_id}: {exc}")
+            continue
+
+        captured = next((item for item in items if item.get("status") == "captured"), None)
+        if not captured:
+            continue
+        if int(captured.get("amount") or 0) != int(payment["amount"] or 0):
+            errors.append(f"{order_id}: captured amount does not match the order")
+            continue
+
+        paid_at = now.isoformat()
+        with db_lock:
+            conn = db()
+            try:
+                current = conn.execute(
+                    "SELECT * FROM payments WHERE id = ?", (payment["id"],)
+                ).fetchone()
+                if current is not None and _grant_payment_credits(
+                    conn, current, paid_at, provider_payment_id=captured.get("id")
+                ):
+                    conn.commit()
+                    granted.append(order_id)
+                    logger.warning(
+                        "Reconciled Razorpay order %s for user %s (%s credits)",
+                        order_id, payment["user_id"], payment["credits"],
+                    )
+                else:
+                    conn.rollback()
+            except Exception as exc:
+                conn.rollback()
+                errors.append(f"{order_id}: {exc}")
+            finally:
+                conn.close()
+
+    return {"success": True, "checked": len(pending), "granted": granted, "errors": errors}
+
+
+@bp.route("/api/admin/reconcile-payments", methods=["POST"])
+@admin_required
+def admin_reconcile_payments():
+    """Sweep orders that were paid but never credited. Safe to run on a schedule."""
+    data = request.get_json(silent=True) or {}
+    try:
+        older_than = int(data.get("olderThanMinutes", 10))
+        limit = max(1, min(200, int(data.get("limit", 50))))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "olderThanMinutes and limit must be integers"}), 400
+
+    result = reconcile_pending_payments(max_age_minutes=older_than, limit=limit)
+    return jsonify(result), 200 if result.get("success") else 500

@@ -117,8 +117,9 @@ def quantize_image(image_path, n_colors=6, brand_palette=None):
     pixels = img_np.reshape((h * w, d)).astype(np.float32)
     
     if brand_palette and len(brand_palette) > 0:
-        # Convert hex to RGB array
-        from color_utils import _hex_to_rgb
+        # color_utils exports hex_to_rgb, not _hex_to_rgb. Importing the private name
+        # raised ImportError, so every colour reduction with a brand palette failed.
+        # The local helper above is identical, so there is nothing to reach across for.
         brand_colors = np.array([_hex_to_rgb(hx) for hx in brand_palette], dtype=np.float32)
         n_colors = len(brand_colors)
         
@@ -144,13 +145,17 @@ def quantize_image(image_path, n_colors=6, brand_palette=None):
         r, g, b = int(color[0]), int(color[1]), int(color[2])
         pantone_matches = match_to_pantone((r, g, b), top_n=3)
         palette_list.append({
+            # The cluster label this entry describes, i.e. the value that appears in
+            # labels_2d. The sort below reorders the list, so anything that splits the
+            # image by label must follow this index rather than the list position.
+            'index': i,
             'hex': _rgb_to_hex(color),
             'rgb': [r, g, b],
             'weight': round(float(weight), 4),
             'pantoneMatches': pantone_matches
         })
-    
-    # Sort by weight descending (but keep original index mapping)
+
+    # Most-used colours first, for display.
     palette_list.sort(key=lambda x: x['weight'], reverse=True)
     
     return quantized, palette_list, labels_2d

@@ -27,16 +27,19 @@ import storage
 
 
 def _resolve_filepath(filename):
-    filename = os.path.basename(filename) if filename else ''
-    if not filename:
+    """Local path for a layer file the caller is allowed to read.
+
+    Goes through file_access so two rules hold everywhere this is used: the requester
+    must own the file, and a file that currently only exists in object storage is
+    fetched rather than reported missing. Denial returns None so every caller keeps
+    its existing "File not found" response.
+    """
+    from file_access import FileAccessError, resolve_readable_path
+
+    try:
+        return resolve_readable_path(filename)
+    except FileAccessError:
         return None
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if os.path.exists(filepath):
-        return filepath
-    filepath = os.path.join(RESULTS_DIR, filename)
-    if os.path.exists(filepath):
-        return filepath
-    return None
 
 
 def _build_edit_prompt(user_prompt, edit_type):

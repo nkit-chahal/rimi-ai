@@ -77,17 +77,20 @@ def remove_background():
         return access_error
     user_id = g.current_user['id']
 
-    required_credits = credit_requirement('removeBg', 2)
-    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
-    if not ok:
-        return jsonify(err), 403
-
+    # Resolve the input before reserving. Reserving first meant a request naming a file
+    # that does not exist returned 404 having already taken the credits, with no refund
+    # on that path.
     try:
         source_name, filepath = _resolve_image_path(filename, image_url)
     except FileNotFoundError as exc:
         return jsonify({'error': str(exc)}), 404
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
+
+    required_credits = credit_requirement('removeBg', 2)
+    ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
+    if not ok:
+        return jsonify(err), 403
 
     try:
         print(f"  [RemoveBG] Processing {source_name} with {REMOVE_BG_MODEL}...")

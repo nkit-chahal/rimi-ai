@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders, resolveImagePayload, cacheMediaFromResponse, openFileInTool } from '../shared/helpers';
+import { API, apiFetch, forceDownload, resolveImagePayload, openFileInTool } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
@@ -117,20 +117,18 @@ export default function PatternTool({
         // Fire individual requests per model so results stream in
         modelsToRun.forEach(async (modelDef) => {
             try {
-                const r = await fetch(`${API}/api/extract-design-single`, {
+                const d = await apiFetch('/api/extract-design-single', {
                     method: 'POST',
-                    headers: jsonAuthHeaders(currentToken),
                     body: JSON.stringify({
                         filename: imagePayload.filename,
                         imageUrl: imagePayload.imageUrl,
                         projectId: activeProject.id,
                         userId: user?.id,
                         modelId: modelDef.id
-                    })
-                });
-                const d = await r.json();
-                cacheMediaFromResponse(d);
-                if (r.ok && d.success) {
+                    }),
+                    timeoutMs: 300000,
+                }, currentToken);
+                if (d.success) {
                     setExtractResults(prev => prev.map(m =>
                         m.id === modelDef.id
                             ? { ...m, loading: false, url: d.resultUrl, error: d.error, duration: d.duration }
@@ -140,7 +138,7 @@ export default function PatternTool({
                 } else {
                     setExtractResults(prev => prev.map(m =>
                         m.id === modelDef.id
-                            ? { ...m, loading: false, error: d.error || `HTTP ${r.status}` }
+                            ? { ...m, loading: false, error: d.error || 'Extraction failed' }
                             : m
                     ));
                 }
@@ -175,20 +173,18 @@ export default function PatternTool({
         }));
 
         try {
-            const r = await fetch(`${API}/api/extract-edit`, {
+            const d = await apiFetch('/api/extract-edit', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     imageUrl: model.url,
                     prompt: userMsg,
                     modelId: model.id,
                     projectId: activeProject.id,
                     userId: user?.id
-                })
-            });
-            const d = await r.json().catch(() => ({}));
-            cacheMediaFromResponse(d);
-            if (r.ok && d.success && d.resultUrl) {
+                }),
+                timeoutMs: 300000,
+            }, currentToken);
+            if (d.success && d.resultUrl) {
                 setExtractChatMessages(prev => ({
                     ...prev,
                     [model.id]: [...(prev[model.id] || []), { role: 'ai', content: 'Updated tile', imageUrl: d.resultUrl }]
@@ -198,7 +194,7 @@ export default function PatternTool({
                 ));
                 updateCreditsFromResponse(d);
             } else {
-                const message = d.error || d.message || `Edit failed (${r.status})`;
+                const message = d.error || d.message || 'Edit failed';
                 setExtractChatMessages(prev => ({
                     ...prev,
                     [model.id]: [...(prev[model.id] || []), { role: 'ai', error: true, content: message }]

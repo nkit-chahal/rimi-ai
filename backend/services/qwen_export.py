@@ -2,11 +2,10 @@
 import io
 import json
 import os
-import shutil
-import subprocess
 import tempfile
 import uuid
 import zipfile
+from xml.sax.saxutils import quoteattr
 
 from PIL import Image
 
@@ -155,18 +154,35 @@ def export_session_psd(document, canvas_width, canvas_height):
 
 
 def _vectorize_layer_to_svg(png_path):
-    """Run vtracer on a PNG layer."""
-    bin_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'bin')
-    vtracer = os.path.join(bin_dir, 'vtracer.exe' if os.name == 'nt' else 'vtracer')
-    if not os.path.exists(vtracer):
-        vtracer = shutil.which('vtracer') or 'vtracer'
+    """Trace one PNG layer to SVG.
+
+    Uses the vtracer Python bindings from requirements.txt, the same ones
+    routes/vectorize.py traces with. This previously shelled out to a `vtracer`
+    executable that is not shipped in backend/bin and is not installed by the pip
+    package, so every layer raised, each one was skipped, and the export returned an
+    empty SVG that the caller still charged for.
+    """
+    import vtracer
 
     with tempfile.TemporaryDirectory() as tmp:
         out_svg = os.path.join(tmp, 'out.svg')
-        cmd = [vtracer, '--input', png_path, '--output', out_svg]
-        subprocess.run(cmd, check=True, capture_output=True, timeout=120)
-        with open(out_svg, 'r', encoding='utf-8') as f:
-            return f.read()
+        vtracer.convert_image_to_svg_py(
+            image_path=png_path,
+            out_path=out_svg,
+            colormode="color",
+            hierarchical="stacked",
+            mode="spline",
+            filter_speckle=4,
+            color_precision=6,
+            layer_difference=16,
+            corner_threshold=60,
+            length_threshold=4.0,
+            max_iterations=10,
+            splice_threshold=45,
+            path_precision=3,
+        )
+        with open(out_svg, 'r', encoding='utf-8') as handle:
+            return handle.read()
 
 
 def export_session_svg(document, canvas_width, canvas_height):
@@ -174,6 +190,8 @@ def export_session_svg(document, canvas_width, canvas_height):
     svg_parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{canvas_width}" height="{canvas_height}" viewBox="0 0 {canvas_width} {canvas_height}">',
     ]
+    traced = 0
+    skipped = []
     for layer in document.get('layers', []):
         if not layer.get('visible', True):
             continue
@@ -192,12 +210,21 @@ def export_session_svg(document, canvas_width, canvas_height):
             y = int(float(layer.get('y', 0)))
             opacity = float(layer.get('opacity', 1.0))
             name = layer.get('name') or f"layer-{layer.get('local_id', 0)}"
+            # Layer names are user input and /results/*.svg is served as image/svg+xml,
+            # so an unescaped name here is both malformed XML and a script vector.
             svg_parts.append(
-                f'<g id="{name}" transform="translate({x},{y})" opacity="{opacity}">{inner}</g>'
+                f'<g id={quoteattr(name)} transform="translate({x},{y})" opacity="{opacity}">{inner}</g>'
             )
+            traced += 1
         except Exception as exc:
+            skipped.append(f"{fname}: {exc}")
             print(f"  [SVG Export] Skipping layer {fname}: {exc}")
     svg_parts.append('</svg>')
+    if not traced:
+        # The caller records the export charge only after this returns, so raising is
+        # what stops the user paying for an empty file.
+        detail = f" ({'; '.join(skipped[:3])})" if skipped else ''
+        raise RuntimeError(f'SVG export traced no layers{detail}')
     return '\n'.join(svg_parts).encode('utf-8')
 
 

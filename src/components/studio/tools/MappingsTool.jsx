@@ -288,6 +288,13 @@ export default function MappingsTool(props) {
         setMappingResults([]);
         setError('');
 
+        // The backend fans products out over a 3-worker pool at roughly 11s each, so a
+        // fixed 30s client timeout aborted 4+ product batches while the server kept
+        // generating (and charging). Budget per wave, with headroom for slow models.
+        const productCount = mappingSelectedProducts.size;
+        const mockupWaves = Math.ceil(productCount / 3);
+        const mockupTimeoutMs = Math.min(900000, Math.max(120000, mockupWaves * 30000 + 60000));
+
         const trigger = async () => {
             const payload = {
                 patternFilename: mappingPrint.filename,
@@ -303,25 +310,31 @@ export default function MappingsTool(props) {
             if (mappingCustomReferencePreview) payload.productReferenceDataUri = mappingCustomReferencePreview;
             if (mappingCustomMask) payload.maskDataUri = mappingCustomMask;
 
-            const d = await apiFetch('/api/generate-mockups-batch', {
-                method: 'POST',
-                body: JSON.stringify(payload),
-            }, currentToken);
+            try {
+                const d = await apiFetch('/api/generate-mockups-batch', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                    timeoutMs: mockupTimeoutMs,
+                }, currentToken);
 
-            if (d.success && d.mockups?.length) {
-                setMappingResults(d.mockups);
-                setMappingStep(4);
-                setIsMappingGenerating(false);
-                updateCreditsFromResponse(d);
-                if (d.errors?.length) {
-                    setError(`Some mockups failed: ${d.errors.map((e) => e.productType).join(', ')}`);
+                if (d.success && d.mockups?.length) {
+                    setMappingResults(d.mockups);
+                    setMappingStep(4);
+                    updateCreditsFromResponse(d);
+                    if (d.errors?.length) {
+                        setError(`Some mockups failed: ${d.errors.map((e) => e.productType).join(', ')}`);
+                    }
+                    return { url: d.mockups[0]?.mockupUrl, urls: d.mockups.map((m) => m.mockupUrl) };
                 }
-                return { url: d.mockups[0]?.mockupUrl, urls: d.mockups.map((m) => m.mockupUrl) };
-            }
 
-            setIsMappingGenerating(false);
-            const detail = d.errors?.[0]?.error;
-            throw new Error(d.error || detail || 'Failed to generate mockups');
+                const detail = d.errors?.[0]?.error;
+                throw new Error(d.error || detail || 'Failed to generate mockups');
+            } catch (err) {
+                setError(err?.message || 'Failed to generate mockups');
+                throw err;
+            } finally {
+                setIsMappingGenerating(false);
+            }
         };
 
         addBgTask('mappings', `Product Mockup: ${mappingSelectedProducts.size} item(s)`, mappingPrint.filename, trigger, {

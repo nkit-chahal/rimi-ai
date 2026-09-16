@@ -36,10 +36,12 @@ logger = logging.getLogger(__name__)
 
 API_ROOT = "https://api.replicate.com/v1"
 
-# How long we are willing to wait for one prediction end to end. Matches the gunicorn worker
-# timeout in gunicorn_config.py so the HTTP worker and this client agree on the ceiling; mockups
-# are documented at 60-120s per product, so this needs real headroom.
-DEFAULT_TIMEOUT = float(os.getenv("REPLICATE_RUN_TIMEOUT", "600"))
+# How long we are willing to wait for one prediction end to end. This must stay BELOW the
+# gunicorn worker timeout in gunicorn_config.py (300s). It used to be 600s, which the
+# comment claimed matched gunicorn but did not: gunicorn killed the worker at 300s, the
+# route never reached its refund path, and the reserved credits stayed spent on work the
+# user never received. Giving up first means the failure is handled in our own code.
+DEFAULT_TIMEOUT = float(os.getenv("REPLICATE_RUN_TIMEOUT", "240"))
 
 # Per-request timeouts. These are short because every request here returns immediately — we poll
 # rather than asking the server to hold a connection open, which is the bug we are working around.

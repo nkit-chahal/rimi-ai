@@ -215,6 +215,30 @@ def color_reduce_api():
         filepath = os.path.join(RESULTS_DIR, filename)
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
+    # Resolve the brand palette before reserving. These two returns used to sit inside the
+    # charged section, so asking for a palette that does not exist, or one belonging to
+    # someone else, cost the caller credits.
+    brand_palette = None
+    if brand_palette_id:
+        conn = db()
+        try:
+            row = conn.execute(
+                """
+                SELECT bp.colors_json, p.user_id AS project_user_id
+                FROM brand_palettes bp
+                JOIN projects p ON p.id = bp.project_id
+                WHERE bp.id = ?
+                """,
+                (brand_palette_id,),
+            ).fetchone()
+            if not row:
+                return jsonify({'error': 'Brand palette not found'}), 404
+            if row['project_user_id'] != g.current_user['id'] and g.current_user.get('role') != 'admin':
+                return jsonify({'error': 'Forbidden'}), 403
+            brand_palette = json.loads(row['colors_json'])
+        finally:
+            conn.close()
+
     user_id, required_credits, error_response, status_code = require_credits(project_id, None, 'colorReduction', 3)
     if error_response:
         return error_response, status_code
@@ -224,26 +248,6 @@ def color_reduce_api():
         ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'png'
         local_filename = f"quantized_{local_uuid}.{ext}"
         local_filepath = os.path.join(RESULTS_DIR, local_filename)
-        brand_palette = None
-        if brand_palette_id:
-            conn = db()
-            try:
-                row = conn.execute(
-                    """
-                    SELECT bp.colors_json, p.user_id AS project_user_id
-                    FROM brand_palettes bp
-                    JOIN projects p ON p.id = bp.project_id
-                    WHERE bp.id = ?
-                    """,
-                    (brand_palette_id,),
-                ).fetchone()
-                if not row:
-                    return jsonify({'error': 'Brand palette not found'}), 404
-                if row['project_user_id'] != user_id and g.current_user.get('role') != 'admin':
-                    return jsonify({'error': 'Forbidden'}), 403
-                brand_palette = json.loads(row['colors_json'])
-            finally:
-                conn.close()
         palette = quantize_and_save(filepath, n_colors, local_filepath, brand_palette)
         storage.sync_to_s3(local_filepath)
         local_url = f"/results/{local_filename}"

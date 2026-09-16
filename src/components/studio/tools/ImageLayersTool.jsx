@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders, cacheMediaFromResponse, resolveMediaUrl, mediaUrl, runAsyncJob, apiFetch } from '../shared/helpers';
+import { forceDownload, cacheMediaFromResponse, resolveMediaUrl, mediaUrl, runAsyncJob, apiFetch } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import { createPortal } from 'react-dom';
 import * as fabric from 'fabric';
@@ -152,6 +152,8 @@ export default function ImageLayersTool(props) {
         canvasWidth: canvasInstanceRef.current?.getWidth?.() || 1024,
         canvasHeight: canvasInstanceRef.current?.getHeight?.() || 1024,
         uploaded, qwenLaunch, clearQwenLaunch, onSessionLoaded,
+        // Session/autosave failures must reach the user, not just the console.
+        onError: setError,
     });
 
     const { pushHistory, undo, redo, canUndo, canRedo } = useLayerHistory();
@@ -216,12 +218,11 @@ export default function ImageLayersTool(props) {
         setTimeout(() => initFabricCanvas(d.layers), 100);
         d.layers.forEach(async (layer) => {
             try {
-                const capRes = await fetch(`${API}/api/caption-layer`, {
+                const capData = await apiFetch('/api/caption-layer', {
                     method: 'POST',
-                    headers: jsonAuthHeaders(currentToken),
                     body: JSON.stringify({ filename: layer.filename }),
-                });
-                const capData = await capRes.json();
+                    timeoutMs: 120000,
+                }, currentToken);
                 if (capData.success) {
                     setLayersList((prev) => prev.map((pl) =>
                         pl.id === layer.index ? { ...pl, name: capData.name, loadingName: false } : pl
@@ -326,18 +327,20 @@ export default function ImageLayersTool(props) {
         form.append('image', file);
         form.append('projectId', String(activeProject.id));
         form.append('userId', String(user?.id || ''));
-        const r = await fetch(`${API}/api/upload`, {
-            method: 'POST',
-            headers: currentToken ? { Authorization: `Bearer ${currentToken}` } : {},
-            body: form,
-        });
-        const d = await r.json();
-        if (d.success && d.filename) {
-            cacheMediaFromResponse(d);
-            setReferenceFilename(d.filename);
-            setReferencePreview(d.fileUrl || `/uploads/${d.filename}`);
-        } else {
-            setError(d.error || 'Reference upload failed');
+        try {
+            const d = await apiFetch('/api/upload', {
+                method: 'POST',
+                body: form,
+                timeoutMs: 120000,
+            }, currentToken);
+            if (d.success && d.filename) {
+                setReferenceFilename(d.filename);
+                setReferencePreview(d.fileUrl || `/uploads/${d.filename}`);
+            } else {
+                setError(d.error || 'Reference upload failed');
+            }
+        } catch (err) {
+            setError(err?.message || 'Reference upload failed');
         }
     };
 
@@ -396,6 +399,8 @@ export default function ImageLayersTool(props) {
                 setIsLayerMaskMode(true);
                 setEditType('inpaint');
                 cacheMediaFromResponse(d);
+                // Smart mask is a billed call — refresh the header balance.
+                updateCreditsFromResponse(d);
                 // Convert smart mask into inpaint brush strokes (white = paint region)
                 const maskImg = await loadFabricFromPath(d.maskUrl, currentToken);
                 if (maskImg && canvas) {
@@ -873,12 +878,11 @@ export default function ImageLayersTool(props) {
                     }
                     setLayersList(prev => prev.map(pl => pl.id === child.id ? { ...pl, fabricId: img } : pl));
                 }).catch(err => console.error('Error loading recursive layer', err));
-                fetch(`${API}/api/caption-layer`, {
+                apiFetch('/api/caption-layer', {
                     method: 'POST',
-                    headers: jsonAuthHeaders(currentToken),
-                    body: JSON.stringify({ filename: child.filename })
-                })
-                    .then(r => r.json())
+                    body: JSON.stringify({ filename: child.filename }),
+                    timeoutMs: 120000,
+                }, currentToken)
                     .then(capData => {
                         if (capData.success) {
                             setLayersList(prev => prev.map(pl =>
@@ -1286,19 +1290,17 @@ export default function ImageLayersTool(props) {
 
         setIsExportingLayers(true);
         try {
-            const res = await fetch(`${API}/api/compose-layers`, {
+            const data = await apiFetch('/api/compose-layers', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     ...payload,
                     projectId: activeProject.id,
                     userId: user.id,
                     sessionId,
                 }),
-            });
-            const data = await res.json();
+                timeoutMs: 300000,
+            }, currentToken);
             if (!data.success) throw new Error(data.error || 'Layer export failed');
-            cacheMediaFromResponse(data);
             updateCreditsFromResponse(data);
             setLastComposedUrl(data.resultUrl);
             await forceDownload(null, mediaUrl(data.resultUrl), data.resultUrl.split('/').pop() || 'composed_layers.png', currentToken);
@@ -1326,19 +1328,17 @@ export default function ImageLayersTool(props) {
             const payload = buildComposePayload();
             if (!payload) return;
 
-            const res = await fetch(`${API}/api/compose-layers`, {
+            const data = await apiFetch('/api/compose-layers', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     ...payload,
                     projectId: activeProject.id,
                     userId: user.id,
                     sessionId,
                 }),
-            });
-            const data = await res.json();
+                timeoutMs: 300000,
+            }, currentToken);
             if (!data.success) throw new Error(data.error || 'Save failed');
-            cacheMediaFromResponse(data);
             updateCreditsFromResponse(data);
             setLastComposedUrl(data.resultUrl);
             if (setState) {
@@ -1755,7 +1755,7 @@ export default function ImageLayersTool(props) {
                                                 }}>
                                                     {layerVersionsFor(layer.id).map((v) => (
                                                         <button key={v.id} type="button" className="st-layer-version-item" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 6px', fontSize: '0.7rem', background: 'none', border: 'none', color: '#e2e8f0', cursor: 'pointer' }} onClick={() => handleRevertVersion(v.id, layer.id)}>
-                                                            v{v.versionNum} — {v.editType} ({new Date(v.createdAt).toLocaleString()})
+                                                            v{v.version} — {v.editType} ({new Date(v.createdAt).toLocaleString()})
                                                         </button>
                                                     ))}
                                                 </div>

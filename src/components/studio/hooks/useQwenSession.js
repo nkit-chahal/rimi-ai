@@ -14,13 +14,27 @@ export function useQwenSession({
     qwenLaunch,
     clearQwenLaunch,
     onSessionLoaded,
+    onError,
 }) {
     const [sessionId, setSessionId] = useState(null);
     const [sessions, setSessions] = useState([]);
     const [versions, setVersions] = useState([]);
     const [sessionsOpen, setSessionsOpen] = useState(false);
+    const [sessionError, setSessionError] = useState('');
     const autosaveTimer = useRef(null);
     const skipNextAutosave = useRef(false);
+
+    // Session problems (especially a failed autosave) used to be console-only, so people
+    // kept working believing the session was saved. Surface them without breaking the canvas.
+    const reportSessionError = useCallback((summary, err) => {
+        const detail = err?.message ? ` ${err.message}` : '';
+        const message = `${summary}${detail}`.trim();
+        console.error(summary, err);
+        setSessionError(message);
+        onError?.(message);
+    }, [onError]);
+
+    const clearSessionError = useCallback(() => setSessionError(''), []);
 
     const buildDocument = useCallback(() => ({
         layers: layersList.map((layer) => ({
@@ -50,9 +64,9 @@ export function useQwenSession({
             const data = await apiFetch(`/api/qwen-sessions?projectId=${activeProject.id}`, {}, currentToken);
             if (data.success) setSessions(data.sessions || []);
         } catch (e) {
-            console.error('Failed to load Qwen sessions', e);
+            reportSessionError('Could not load your saved Qwen sessions.', e);
         }
-    }, [activeProject?.id, currentToken]);
+    }, [activeProject?.id, currentToken, reportSessionError]);
 
     const loadSession = useCallback(async (id) => {
         if (!id || !currentToken) return null;
@@ -65,10 +79,10 @@ export function useQwenSession({
                 return data.session;
             }
         } catch (e) {
-            console.error('Failed to load session', e);
+            reportSessionError('Could not open that Qwen session.', e);
         }
         return null;
-    }, [currentToken, onSessionLoaded]);
+    }, [currentToken, onSessionLoaded, reportSessionError]);
 
     const createSession = useCallback(async (sourceFilename) => {
         if (!activeProject?.id || !currentToken) return null;
@@ -89,10 +103,10 @@ export function useQwenSession({
                 return data.session;
             }
         } catch (e) {
-            console.error('Failed to create Qwen session', e);
+            reportSessionError('Could not create a Qwen session.', e);
         }
         return null;
-    }, [activeProject?.id, currentToken, user?.id, uploaded, canvasWidth, canvasHeight, refreshSessions]);
+    }, [activeProject?.id, currentToken, user?.id, uploaded, canvasWidth, canvasHeight, refreshSessions, reportSessionError]);
 
     const autosaveSession = useCallback(async () => {
         if (!sessionId || !currentToken || skipNextAutosave.current) return;
@@ -101,10 +115,11 @@ export function useQwenSession({
                 method: 'PATCH',
                 body: JSON.stringify({ document: buildDocument() }),
             }, currentToken);
+            setSessionError('');
         } catch (e) {
-            console.error('Autosave failed', e);
+            reportSessionError('Autosave failed — your latest layer changes are not saved.', e);
         }
-    }, [sessionId, currentToken, buildDocument]);
+    }, [sessionId, currentToken, buildDocument, reportSessionError]);
 
     const revertLayerVersion = useCallback(async (versionId, layerLocalId) => {
         if (!sessionId || !currentToken) return null;
@@ -193,5 +208,7 @@ export function useQwenSession({
         semanticSelect,
         exportSession,
         buildDocument,
+        sessionError,
+        clearSessionError,
     };
 }

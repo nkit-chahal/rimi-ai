@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, forceDownload, jsonAuthHeaders, cacheMediaFromResponse } from '../shared/helpers';
+import { apiFetch, forceDownload } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import UploadStatusBadge from '../shared/UploadStatusBadge';
 import UploadImageFrame from '../shared/UploadImageFrame';
@@ -59,21 +59,24 @@ export default function VectorizeTool(props) {
         setVecUrl(null);
 
         const trigger = async () => {
-            const r = await fetch(`${API}/api/vectorize`, {
-                method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
-                body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, engine: vecEngine, numColors: vecColors, projectId: activeProject.id, userId: user?.id })
-            });
-            const d = await r.json();
-            cacheMediaFromResponse(d);
-            if (d.success) {
-                setVecUrl(d.resultUrl);
-                setIsVec(false);
-                updateCreditsFromResponse(d);
-                return { url: d.resultUrl };
-            } else {
-                setIsVec(false);
+            try {
+                const d = await apiFetch('/api/vectorize', {
+                    method: 'POST',
+                    body: JSON.stringify({ filename: safeFilename, imageUrl: safeUrl, engine: vecEngine, numColors: vecColors, projectId: activeProject.id, userId: user?.id }),
+                    timeoutMs: 300000,
+                }, currentToken);
+                if (d.success) {
+                    setVecUrl(d.resultUrl);
+                    updateCreditsFromResponse(d);
+                    return { url: d.resultUrl };
+                }
                 throw new Error(d.error || 'Vectorization failed');
+            } catch (err) {
+                // Keep the button usable and tell the user what went wrong.
+                setError(err?.message || 'Vectorization failed. Please try again.');
+                throw err;
+            } finally {
+                setIsVec(false);
             }
         };
 
@@ -97,21 +100,23 @@ export default function VectorizeTool(props) {
         setUpscaleUrl(null);
 
         const trigger = async () => {
-            const r = await fetch(`${API}/api/upscale`, {
-                method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
-                body: JSON.stringify({ filename: uploaded.filename, upscaleFactor, projectId: activeProject.id, userId: user?.id })
-            });
-            const d = await r.json();
-            cacheMediaFromResponse(d);
-            if (d.success) {
-                setUpscaleUrl(d.resultUrl);
-                setIsUpscaling(false);
-                updateCreditsFromResponse(d);
-                return { url: d.resultUrl };
-            } else {
-                setIsUpscaling(false);
+            try {
+                const d = await apiFetch('/api/upscale', {
+                    method: 'POST',
+                    body: JSON.stringify({ filename: uploaded.filename, upscaleFactor, projectId: activeProject.id, userId: user?.id }),
+                    timeoutMs: 300000,
+                }, currentToken);
+                if (d.success) {
+                    setUpscaleUrl(d.resultUrl);
+                    updateCreditsFromResponse(d);
+                    return { url: d.resultUrl };
+                }
                 throw new Error(d.error || 'Upscaling failed');
+            } catch (err) {
+                setError(err?.message || 'Upscaling failed. Please try again.');
+                throw err;
+            } finally {
+                setIsUpscaling(false);
             }
         };
 

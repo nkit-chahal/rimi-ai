@@ -19,9 +19,13 @@ def create_color_layers(image_path, n_colors=6):
     quantized, palette, labels_2d = quantize_image(image_path, n_colors)
     h, w = labels_2d.shape
 
+    # Walk the palette rather than the raw cluster labels: quantize_image sorts the
+    # palette by weight, so palette[i] is not cluster i. Callers zip layers with the
+    # palette by position, and before this every exported layer was labelled with
+    # another colour's hex and Pantone match.
     layers = []
-    for i in range(n_colors):
-        mask = (labels_2d == i)
+    for position, entry in enumerate(palette):
+        mask = (labels_2d == entry.get('index', position))
 
         rgba = np.zeros((h, w, 4), dtype=np.uint8)
         rgba[mask, 0] = img_np[mask, 0]

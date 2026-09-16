@@ -86,23 +86,29 @@ export default function RemoveBgTool(props) {
         setRemoveBgUrl(null);
 
         const trigger = async () => {
-            const data = await apiFetch('/api/remove-bg', {
-                method: 'POST',
-                body: JSON.stringify({
-                    ...payload,
-                    projectId: activeProject.id,
-                    userId: user?.id,
-                }),
-            }, currentToken);
+            try {
+                const data = await apiFetch('/api/remove-bg', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        ...payload,
+                        projectId: activeProject.id,
+                        userId: user?.id,
+                    }),
+                    timeoutMs: 300000,
+                }, currentToken);
 
-            if (data.success) {
-                setRemoveBgUrl(data.resultUrl);
+                if (data.success) {
+                    setRemoveBgUrl(data.resultUrl);
+                    updateCreditsFromResponse(data);
+                    return { url: data.resultUrl };
+                }
+                throw new Error(data.error || 'Background removal failed');
+            } catch (err) {
+                setError(err?.message || 'Background removal failed. Please try again.');
+                throw err;
+            } finally {
                 setIsProcessing(false);
-                updateCreditsFromResponse(data);
-                return { url: data.resultUrl };
             }
-            setIsProcessing(false);
-            throw new Error(data.error || 'Background removal failed');
         };
 
         addBgTask('removebg', 'Remove Background', payload.filename || 'image.png', trigger, {

@@ -45,12 +45,14 @@ def generate_seamless():
     if access_error:
         return access_error
     user_id = g.current_user['id']
+    # Validate before reserving: an empty prompt used to return 400 after taking 84
+    # credits, and nothing refunded them.
+    if not user_prompt:
+        return jsonify({'error': 'Prompt is required'}), 400
     required_credits = credit_requirement('seamless_texture', 84)
     ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', count)
     if not ok:
         return jsonify(err), 403
-    if not user_prompt:
-        return jsonify({'error': 'Prompt is required'}), 400
     try:
         print(f"  [Generate Seamless] Enhancing prompt with Groq LLM (Creativity: {creativity})...")
         system_instruction = (

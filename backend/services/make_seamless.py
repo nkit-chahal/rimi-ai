@@ -81,12 +81,14 @@ def execute_make_seamless(data, on_progress=None):
     project_id = int(data["projectId"])
     user_id = int(data["userId"])
 
+    # Validate before reserving: this raise used to happen after the credits were taken,
+    # and the caller has no refund path for an input error.
+    if not filename and not image_url:
+        raise ValueError("Filename or imageUrl is required")
     required_credits = credit_requirement("seamless", 58)
     ok, err = reserve_credits_or_error(user_id, project_id, required_credits, "generation", 1)
     if not ok:
         raise ValueError(err["error"])
-    if not filename and not image_url:
-        raise ValueError("Filename or imageUrl is required")
 
     def img_to_data_uri(pil_img):
         buf = BytesIO()

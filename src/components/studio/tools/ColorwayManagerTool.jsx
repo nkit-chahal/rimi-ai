@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { I } from '../shared/StudioIcons';
-import { apiFetch, forceDownload, API, jsonAuthHeaders } from '../shared/helpers';
+import { apiFetch, forceDownload, API } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 import ImageDropzone from '../shared/ImageDropzone';
 
@@ -90,27 +90,23 @@ export default function ColorwayManagerTool(props) {
         if (cwmColorways.length === 0) return;
         setIsCwmExporting(true);
         try {
-            const res = await fetch(`${API}/api/colorways/export-linecard`, {
+            const d = await apiFetch('/api/colorways/export-linecard', {
                 method: 'POST',
-                headers: jsonAuthHeaders(currentToken),
                 body: JSON.stringify({
                     filename: uploaded?.filename,
                     colorways: cwmColorways,
                     basePalette: cwmPalette.map(p => p.hex),
                     projectId: activeProject.id,
                 }),
-            });
-            const d = await res.json();
+                timeoutMs: 120000,
+            }, currentToken);
             if (d.success) {
-                const link = document.createElement('a');
-                link.href = `${API}${d.pdfUrl}`;
-                link.download = 'colorway_linecard.pdf';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                await forceDownload(null, d.pdfUrl, 'colorway_linecard.pdf', currentToken);
+            } else {
+                throw new Error(d.error || 'Export failed');
             }
         } catch (e) {
-            setError('Export failed');
+            setError(e.message || 'Export failed');
         } finally {
             setIsCwmExporting(false);
         }
