@@ -12,12 +12,15 @@ from db import db
 def _seed_user_project(conn, *, credits_limit=500, credits_used=0, role='user'):
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     password_hash = bcrypt.hashpw(b"Test@12345", bcrypt.gensalt()).decode()
+    # Qwen Studio is Pro-only, and Pro is a dated window rather than a plan label.
+    from plan_tiers import pro_until_from
+    pro_until = pro_until_from(None)
     conn.execute(
         """
-        INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at, status, created_at)
-        VALUES (1, 'qwen@test.example', ?, 'Qwen Tester', 'QT', ?, 'Pro', ?, ?, ?, 'active', ?)
+        INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at, status, created_at, pro_until)
+        VALUES (1, 'qwen@test.example', ?, 'Qwen Tester', 'QT', ?, 'Pro', ?, ?, ?, 'active', ?, ?)
         """,
-        (password_hash, role, credits_used, credits_limit, now, now),
+        (password_hash, role, credits_used, credits_limit, now, now, pro_until),
     )
     conn.execute(
         """

@@ -16,6 +16,9 @@ from plan_tiers import (
     attach_tier_fields,
 )
 
+# Distinguishes "caller passed pro_until=None" from "caller said nothing".
+_UNSET = object()
+
 
 def test_credits_from_usd_exact_panels():
     assert credits_from_usd(0.012) == 14
@@ -86,18 +89,23 @@ def test_formula_matches_ceil():
         assert credits_from_usd(usd) == int(math.ceil(usd * 1150))
 
 
-def _seed_user(conn, user_id, email, plan, credits_limit=50000):
+def _seed_user(conn, user_id, email, plan, credits_limit=50000, pro_until=_UNSET):
     from datetime import datetime, timezone
     import bcrypt
 
+    from plan_tiers import is_pro_plan, pro_until_from
+
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     pw = bcrypt.hashpw(b"Test@12345", bcrypt.gensalt()).decode()
+    # Pro access is a dated window, so a Pro plan is only ever stored alongside one.
+    if pro_until is _UNSET:
+        pro_until = pro_until_from(None) if is_pro_plan(plan) else None
     conn.execute(
         """
-        INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at, status, created_at)
-        VALUES (?, ?, ?, ?, 'U', 'user', ?, 0, ?, ?, 'active', ?)
+        INSERT INTO users (id, email, password, name, initials, role, plan, credits_used, credits_limit, reset_at, status, created_at, pro_until)
+        VALUES (?, ?, ?, ?, 'U', 'user', ?, 0, ?, ?, 'active', ?, ?)
         """,
-        (user_id, email, pw, f"User {user_id}", plan, credits_limit, now, now),
+        (user_id, email, pw, f"User {user_id}", plan, credits_limit, now, now, pro_until),
     )
     conn.execute(
         """

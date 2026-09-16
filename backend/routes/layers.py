@@ -5,7 +5,7 @@ import base64
 
 from flask import Blueprint, request, jsonify, g
 from middleware import login_required, project_access_from_payload
-from plan_tiers import require_pro_or_error, current_user_plan
+from plan_tiers import require_pro_or_error, current_user_record
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client, GROQ_VISION_MODEL
 from auth import (
@@ -35,7 +35,7 @@ bp = Blueprint('layers', __name__)
 
 
 def _pro_gate(feature="Image Layers (Qwen Studio)"):
-    return require_pro_or_error(current_user_plan(), feature)
+    return require_pro_or_error(current_user_record(), feature)
 
 
 def _enqueue_layer_job(job_type, tool_key, worker_fn, data, user_id, project_id):
@@ -80,7 +80,7 @@ def image_layers():
     return access_error
 
   user_id = g.current_user['id']
-  ok_pro, pro_body, pro_code = require_pro_or_error(current_user_plan(), 'Qwen Image Layers')
+  ok_pro, pro_body, pro_code = require_pro_or_error(current_user_record(), 'Qwen Image Layers')
   if not ok_pro:
     return pro_body, pro_code
 
@@ -239,7 +239,7 @@ def edit_layer():
     return access_error
 
   user_id = g.current_user['id']
-  ok_pro, pro_body, pro_code = require_pro_or_error(current_user_plan(), 'Qwen layer edit')
+  ok_pro, pro_body, pro_code = require_pro_or_error(current_user_record(), 'Qwen layer edit')
   if not ok_pro:
     return pro_body, pro_code
 
@@ -289,7 +289,7 @@ def inpaint_layer():
     return access_error
 
   user_id = g.current_user['id']
-  ok_pro, pro_body, pro_code = require_pro_or_error(current_user_plan(), 'Qwen layer inpaint')
+  ok_pro, pro_body, pro_code = require_pro_or_error(current_user_record(), 'Qwen layer inpaint')
   if not ok_pro:
     return pro_body, pro_code
 

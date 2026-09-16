@@ -286,6 +286,40 @@ def migrate_legacy_email_passwords(conn):
     return migrated
 
 
+def backfill_pro_until(conn):
+    """Give pre-existing Pro-plan accounts an explicit Pro window.
+
+    Before pro_until existed, Pro access was inferred from the plan label and never lapsed.
+    Existing Pro accounts keep access until their current credit window ends (or 30 days from
+    now when that is missing or already past), then lapse normally. Only rows where pro_until
+    IS NULL are touched, so this is idempotent: once a window is written it is never rewritten,
+    and an expired one stays expired because the timestamp is left in place.
+    """
+    from plan_tiers import PRO_PLANS, parse_pro_until, pro_until_from
+
+    try:
+        rows = conn.execute(
+            "SELECT id, plan, reset_at FROM users WHERE pro_until IS NULL"
+        ).fetchall()
+    except Exception as exc:
+        print(f"Skipping pro_until backfill: {exc}")
+        return 0
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    updated = 0
+    for row in rows:
+        if (row["plan"] or "").strip().lower() not in PRO_PLANS:
+            continue
+        reset_at = parse_pro_until(row["reset_at"])
+        pro_until = (
+            reset_at.isoformat() if (reset_at and reset_at > now)
+            else pro_until_from(None, now=now)
+        )
+        conn.execute("UPDATE users SET pro_until = ? WHERE id = ?", (pro_until, row["id"]))
+        updated += 1
+    return updated
+
+
 def seed_credit_pricing(conn):
     updated_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     if _USE_PG:
@@ -402,7 +436,8 @@ def _pg_schema_sql():
             email_verified INTEGER NOT NULL DEFAULT 0,
             last_login_at TEXT,
             created_at TEXT,
-            status TEXT NOT NULL DEFAULT 'active'
+            status TEXT NOT NULL DEFAULT 'active',
+            pro_until TEXT
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL;
 
@@ -745,6 +780,7 @@ def _pg_run_migrations(conn):
     _pg_ensure_column(conn, "users", "last_login_at", "TEXT")
     _pg_ensure_column(conn, "users", "created_at", "TEXT")
     _pg_ensure_column(conn, "users", "status", "TEXT NOT NULL DEFAULT 'active'")
+    _pg_ensure_column(conn, "users", "pro_until", "TEXT")
     _pg_ensure_column(conn, "projects", "user_id", "INTEGER")
     _pg_ensure_column(conn, "exports", "user_id", "INTEGER")
     _pg_ensure_column(conn, "background_jobs", "user_id", "INTEGER")
@@ -1184,6 +1220,7 @@ def init_db():
         ensure_column("users", "last_login_at", "TEXT")
         ensure_column("users", "created_at", "TEXT")
         ensure_column("users", "status", "TEXT NOT NULL DEFAULT 'active'")
+        ensure_column("users", "pro_until", "TEXT")
         ensure_column("projects", "user_id", "INTEGER REFERENCES users(id)")
         ensure_column("exports", "user_id", "INTEGER REFERENCES users(id)")
         ensure_column("project_controls", "print_height", "INTEGER NOT NULL DEFAULT 12")
@@ -1315,6 +1352,9 @@ def init_db():
     migrated_passwords = migrate_legacy_email_passwords(conn)
     if migrated_passwords:
         print(f"Migrated {migrated_passwords} legacy email password(s) to bcrypt.")
+    backfilled_pro = backfill_pro_until(conn)
+    if backfilled_pro:
+        print(f"Backfilled pro_until for {backfilled_pro} existing Pro account(s).")
     seed_credit_pricing(conn)
     conn.commit()
     conn.close()

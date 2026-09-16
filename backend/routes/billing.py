@@ -11,7 +11,7 @@ from flask import Blueprint, g, jsonify, request
 from auth import expire_credits_if_needed, extend_credit_expiry, _parse_reset_at
 from db import db, db_lock
 from middleware import login_required
-from plan_tiers import is_pro_plan, attach_tier_fields
+from plan_tiers import attach_tier_fields, is_pro, parse_pro_until, pro_until_from
 
 bp = Blueprint("billing", __name__)
 
@@ -315,7 +315,8 @@ def billing_overview():
         conn = db()
         try:
             user = conn.execute(
-                "SELECT id, plan, credits_used, credits_limit, reset_at FROM users WHERE id = ?",
+                "SELECT id, plan, credits_used, credits_limit, reset_at, pro_until"
+                " FROM users WHERE id = ?",
                 (user_id,)
             ).fetchone()
             payment_rows = conn.execute(
@@ -343,6 +344,10 @@ def billing_overview():
         delta_days = (reset_at.date() - today).days
         credits_expired = delta_days < 0
         reset_days = max(0, delta_days)
+    pro_until_raw = user["pro_until"] if user else None
+    pro_expires = parse_pro_until(pro_until_raw)
+    pro_days_left = max(0, (pro_expires.date() - today).days) if pro_expires else None
+    pro_active = bool(user) and is_pro(user)
     payments = []
     plan_lookup = _billing_plan_map()
     for row in payment_rows:
@@ -367,8 +372,11 @@ def billing_overview():
         "plans": [_public_plan(plan) for plan in BILLING_PLANS],
         "usage": {
             "plan": user["plan"] if user else "Free Trial",
-            "isPro": is_pro_plan(user["plan"]) if user else False,
-            "tier": "pro" if (user and is_pro_plan(user["plan"])) else "normal",
+            "isPro": pro_active,
+            "tier": "pro" if pro_active else "normal",
+            "proUntil": pro_until_raw,
+            "proDaysLeft": pro_days_left,
+            "proExpired": bool(pro_expires is not None and not pro_active),
             "creditsUsed": credits_used,
             "creditsLimit": credits_limit,
             "creditsRemaining": max(0, credits_limit - credits_used),
@@ -393,18 +401,31 @@ def razorpay_config():
 
 
 def _grant_payment_credits(conn, payment, paid_at, provider_payment_id=None):
-    """Idempotently mark payment paid and grant credits. Returns True if newly paid."""
+    """Idempotently mark a payment paid and grant what it bought.
+
+    Returns True only for the call that actually granted.
+
+    The status flip is the lock. verify-payment (driven by the customer's browser) and the
+    Razorpay webhook race for the same order, and db_lock only serialises one process, so a
+    read-then-write check let both callers add the credits. Flipping the row with
+    `status <> 'paid'` inside the WHERE means exactly one caller sees rowcount 1; every other
+    caller no-ops. On PostgreSQL the loser blocks on the row lock and then re-evaluates
+    against the committed row, so it cannot double-grant either.
+    """
     if payment["status"] == "paid":
         return False
 
-    conn.execute(
+    claimed = conn.execute(
         """
         UPDATE payments
         SET provider_payment_id = COALESCE(?, provider_payment_id), status = 'paid', paid_at = ?
-        WHERE id = ?
+        WHERE id = ? AND status <> 'paid'
         """,
         (provider_payment_id, paid_at, payment["id"]),
     )
+    if claimed.rowcount != 1:
+        return False
+
     if payment["user_id"] and payment["credits"] > 0:
         plan = _billing_plan_map().get(payment["pack_id"] or "")
         plan_label = plan["label"] if plan else (
@@ -416,10 +437,37 @@ def _grant_payment_credits(conn, payment, paid_at, provider_payment_id=None):
                 paid_dt = datetime.fromisoformat(str(paid_at).replace("Z", ""))
         except Exception:
             paid_dt = None
-        conn.execute(
-            "UPDATE users SET credits_limit = credits_limit + ?, plan = ? WHERE id = ?",
-            (payment["credits"], plan_label, payment["user_id"]),
-        )
+
+        user = conn.execute(
+            "SELECT plan, pro_until FROM users WHERE id = ?",
+            (payment["user_id"],),
+        ).fetchone()
+        grants_pro = bool(plan and plan.get("track") == "pro")
+
+        if grants_pro:
+            # A Pro pack opens a dated Pro window, or extends one that is still running.
+            new_pro_until = pro_until_from(
+                user["pro_until"] if user else None,
+                now=paid_dt,
+            )
+            conn.execute(
+                "UPDATE users SET credits_limit = credits_limit + ?, plan = ?, pro_until = ?"
+                " WHERE id = ?",
+                (payment["credits"], plan_label, new_pro_until, payment["user_id"]),
+            )
+        elif is_pro(user):
+            # A basic top-up must not cancel Pro the customer has already paid for, so it
+            # only adds credits and leaves the plan label and the Pro window untouched.
+            conn.execute(
+                "UPDATE users SET credits_limit = credits_limit + ? WHERE id = ?",
+                (payment["credits"], payment["user_id"]),
+            )
+        else:
+            conn.execute(
+                "UPDATE users SET credits_limit = credits_limit + ?, plan = ? WHERE id = ?",
+                (payment["credits"], plan_label, payment["user_id"]),
+            )
+
         extend_credit_expiry(payment["user_id"], conn=conn, from_dt=paid_dt)
         conn.execute(
             """
@@ -532,7 +580,7 @@ def verify_payment():
             updated_user = None
             if payment["user_id"]:
                 updated_user = conn.execute(
-                    "SELECT plan, credits_used, credits_limit FROM users WHERE id = ?",
+                    "SELECT plan, credits_used, credits_limit, pro_until FROM users WHERE id = ?",
                     (payment["user_id"],)
                 ).fetchone()
         finally:
@@ -544,7 +592,7 @@ def verify_payment():
             "creditsUsed": updated_user["credits_used"],
             "creditsLimit": updated_user["credits_limit"],
             "plan": updated_user["plan"],
-        })
+        }, updated_user)
 
     return jsonify({
         "success": True,

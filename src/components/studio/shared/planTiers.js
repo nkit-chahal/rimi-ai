@@ -9,9 +9,13 @@ export const PRO_PLANS = new Set([
 ]);
 
 export function isProUser(user) {
-  if (user?.isPro === true) return true;
-  if (user?.tier === 'pro') return true;
-  const plan = String(user?.plan || '').trim().toLowerCase();
+  if (!user) return false;
+  // Pro is a dated window on the server (users.pro_until) and the plan label outlives
+  // it, so a lapsed account still reads as plan 'Pro'. Trust isPro/tier whenever the
+  // payload carries them; the label is only a fallback for older cached sessions.
+  if (typeof user.isPro === 'boolean') return user.isPro;
+  if (user.tier) return user.tier === 'pro';
+  const plan = String(user.plan || '').trim().toLowerCase();
   return PRO_PLANS.has(plan);
 }
 

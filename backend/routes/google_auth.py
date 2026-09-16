@@ -75,7 +75,7 @@ def user_payload(user):
         "avatarUrl": user["avatar_url"],
         "emailVerified": bool(user["email_verified"]),
         "lastLoginAt": user["last_login_at"],
-    })
+    }, user)
 
 
 def record_login(conn, user_id, provider):
@@ -392,6 +392,7 @@ def google_exchange():
                 u.avatar_url,
                 u.email_verified,
                 u.last_login_at,
+                u.pro_until,
                 u.created_at,
                 u.status,
                 olt.expires_at AS oauth_expires_at,

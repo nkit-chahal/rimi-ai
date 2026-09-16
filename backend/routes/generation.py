@@ -27,7 +27,7 @@ import storage
 from jobs import enqueue_or_run
 from workers import run_generation_job
 from rate_limits import expensive_generation_rate_limit, generation_rate_limit
-from plan_tiers import require_model_or_error, current_user_plan, flux2_pro_credits
+from plan_tiers import require_model_or_error, current_user_record, flux2_pro_credits
 
 bp = Blueprint('generation', __name__)
 
@@ -423,10 +423,10 @@ def extract_design_multi():
     if access_error:
         return access_error
     user_id = g.current_user['id']
-    plan = current_user_plan()
+    user_record = current_user_record()
     allowed_models = [
         m for m in EXTRACT_MODELS
-        if require_model_or_error(plan, m['id'], 'extract')[0]
+        if require_model_or_error(user_record, m['id'], 'extract')[0]
     ]
     if not allowed_models:
         return jsonify({
@@ -531,7 +531,7 @@ def extract_design_single():
     if not model_cfg:
         return jsonify({'error': f'Unknown model: {model_id}'}), 400
 
-    ok_tier, tier_body, tier_code = require_model_or_error(current_user_plan(), model_id, 'extract')
+    ok_tier, tier_body, tier_code = require_model_or_error(current_user_record(), model_id, 'extract')
     if not ok_tier:
         return tier_body, tier_code
 
@@ -663,7 +663,7 @@ def extract_edit():
     model_cfg = next((m for m in EXTRACT_MODELS if m['id'] == model_id), None)
     if not model_cfg:
         return jsonify({'success': False, 'error': f'Unknown model: {model_id}'}), 400
-    ok_tier, tier_body, tier_code = require_model_or_error(current_user_plan(), model_id, 'extract')
+    ok_tier, tier_body, tier_code = require_model_or_error(current_user_record(), model_id, 'extract')
     if not ok_tier:
         return tier_body, tier_code
 
@@ -803,9 +803,9 @@ def generate_inspirations():
         return access_error
     user_id = g.current_user['id']
     requested_models = data.get('models') or ['google/nano-banana']
-    plan = current_user_plan()
+    user_record = current_user_record()
     for mid in requested_models:
-        ok_tier, tier_body, tier_code = require_model_or_error(plan, mid, 'inspire')
+        ok_tier, tier_body, tier_code = require_model_or_error(user_record, mid, 'inspire')
         if not ok_tier:
             return tier_body, tier_code
 

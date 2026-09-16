@@ -12,7 +12,10 @@ AI-powered textile and surface-pattern design studio. Upload artwork, extract pa
 - **Colorways** — Palette extraction, recoloring, and Pantone matching
 - **3D Mockups** — Preview patterns on apparel and home products
 - **Pipeline Studio** — Multi-step workflows with export history
-- **Credits & Billing** — Usage-based credits with Razorpay top-ups (INR)
+- **Credits & Billing** — Usage-based credits with Razorpay top-ups (INR). Pro and Scale
+  packs also open 30 days of Pro access (`users.pro_until`), which stacks if you buy again
+  before it runs out and lapses on its own afterwards. Basic top-ups add credits without
+  touching an active Pro window.
 
 ## Tech stack
 
@@ -132,6 +135,10 @@ Authenticated requests require `Authorization: Bearer <token>`.
 
 - **Studio shell** — `src/pages/Studio.jsx` is the main app shell; individual tools live in `src/components/studio/tools/`.
 - **Credits** — Each AI operation deducts credits defined in `backend/db.py`.
+- **Pro access** — Gated on `users.pro_until`, never on the plan label; use
+  `plan_tiers.is_pro(user_row)` / `current_user_record()` so an expired window locks the
+  Pro tools. Payment grants are claimed with a conditional status update, so verify-payment
+  and the Razorpay webhook cannot both credit the same order.
 - **AI agent rules** — See `AI_INSTRUCTIONS.md` before making large refactors.
 
 ## License

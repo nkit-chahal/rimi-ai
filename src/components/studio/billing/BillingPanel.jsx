@@ -221,6 +221,9 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
         resetAt: null,
         resetDays: user.resetDays ?? null,
         creditsExpired: false,
+        proUntil: user.proUntil ?? null,
+        proDaysLeft: null,
+        proExpired: false,
     };
     const plans = (billingOverview.plans || []).filter((pack) => pack.id !== 'free');
     const currentPlanName = (usage.plan || user.plan || 'Free').toLowerCase();
@@ -245,6 +248,16 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
         if (days <= 0) return 'Credits expired';
         if (days === 1) return 'Credits expire in 1 day';
         return `Credits expire in ${days} days`;
+    })();
+
+    const proCopy = (() => {
+        if (usage.proExpired) return 'Pro access expired - renew with a Pro or Scale pack';
+        if (!usage.isPro) return null;
+        const days = usage.proDaysLeft;
+        if (days == null) return usage.proUntil ? `Pro access until ${formatDate(usage.proUntil)}` : null;
+        if (days <= 0) return 'Pro access ends today';
+        if (days === 1) return 'Pro access ends in 1 day';
+        return `Pro access ends in ${days} days`;
     })();
 
     const statusLabel = razorpayStatusLabel();
@@ -287,8 +300,13 @@ export default function BillingPanel({ user, userRemainingCredits, currentToken,
                 <section className="st-billing-current-card">
                     <div>
                         <span>Current plan</span>
-                        <strong>{usage.plan || 'Free Trial'}</strong>
-                        <em className="st-billing-tier-pill">{usage.isPro || user?.isPro ? 'Pro tier' : 'Basic tier'}</em>
+                        <strong>{usage.plan || 'Free Trial'}{usage.proExpired ? ' (expired)' : ''}</strong>
+                        <em className="st-billing-tier-pill">{usage.isPro ? 'Pro tier' : 'Basic tier'}</em>
+                        {proCopy && (
+                            <div className={`st-billing-expiry ${usage.proExpired ? 'expired' : ''}`}>
+                                {proCopy}
+                            </div>
+                        )}
                     </div>
                     <div className={`st-billing-status ${statusClass}`}>
                         {(statusClass === 'loading' || razorpayBooting) ? (

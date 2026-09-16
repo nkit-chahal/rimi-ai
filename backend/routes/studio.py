@@ -94,7 +94,7 @@ def get_studio_state(project_id=1, user_id=None):
         "id": user["id"], "email": user.get("email", ""), "role": user.get("role", "user"),
         "name": user["name"], "initials": user["initials"], "plan": user["plan"],
         "creditsUsed": user["credits_used"], "creditsLimit": user["credits_limit"], "resetDays": reset_days,
-    })
+    }, user)
     payload = {
         "user": user_payload,
         "activeProject": {

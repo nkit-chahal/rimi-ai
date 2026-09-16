@@ -15,6 +15,7 @@ from auth import CREDIT_EXPIRY_DAYS, _parse_reset_at, credit_expiry_reset_at, ex
 from db import DEFAULT_CREDIT_PRICING, db, rows_to_dicts
 from jwt_tokens import issue_access_token
 from middleware import admin_required, login_required
+from plan_tiers import is_pro, is_pro_plan, pro_until_from
 from rate_limits import login_rate_limit, signup_request_rate_limit, signup_verify_rate_limit
 
 bp = Blueprint('admin', __name__)
@@ -180,7 +181,7 @@ def api_login():
                     "avatarUrl": user.get("avatar_url"),
                     "emailVerified": bool(user.get("email_verified", 0)),
                     "lastLoginAt": last_login_at,
-                })
+                }, user)
                 token = issue_access_token(user['id'], user['role'])
                 return jsonify({'success': True, 'user': user_payload, 'token': token})
         return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
@@ -565,7 +566,9 @@ def admin_users():
                 "emailVerified": bool(u.get("email_verified", 0)),
                 "lastLoginAt": u.get("last_login_at"),
                 "createdAt": u.get("created_at"),
-                "status": u.get("status", "active")
+                "status": u.get("status", "active"),
+                "proUntil": u.get("pro_until"),
+                "isPro": is_pro(u),
             })
         return jsonify({'success': True, 'users': users})
     except Exception as e:
@@ -665,7 +668,7 @@ def admin_extend_expiry():
     conn = db()
     try:
         existing = conn.execute(
-            "SELECT id, reset_at, credits_used, credits_limit FROM users WHERE id = ?",
+            "SELECT id, plan, reset_at, credits_used, credits_limit, pro_until FROM users WHERE id = ?",
             (user_id,),
         ).fetchone()
         if not existing:
@@ -684,6 +687,18 @@ def admin_extend_expiry():
             "UPDATE users SET credits_used = 0 WHERE id = ?",
             (user_id,),
         )
+
+        # A Pro account's access window moves with the credit window, otherwise the restored
+        # credits cannot be spent on the Pro tools they were bought for. Keyed on the plan
+        # alone: a basic account can still carry an expired pro_until from an earlier Pro
+        # period, and merely having that timestamp must not promote it back to Pro.
+        new_pro_until = None
+        if is_pro_plan(existing["plan"]):
+            new_pro_until = pro_until_from(existing["pro_until"])
+            conn.execute(
+                "UPDATE users SET pro_until = ? WHERE id = ?",
+                (new_pro_until, user_id),
+            )
         if previous_used > 0:
             conn.execute(
                 """
@@ -713,6 +728,7 @@ def admin_extend_expiry():
                 "creditsUsed": 0,
                 "creditsLimit": credits_limit,
                 "creditsRestored": True,
+                "proUntil": new_pro_until,
             },
         )
         conn.commit()
@@ -726,6 +742,7 @@ def admin_extend_expiry():
             'resetDays': reset_days,
             'creditsUsed': 0,
             'creditsLimit': credits_limit,
+            'proUntil': new_pro_until,
         })
     except Exception as e:
         print(f"Error extending credit expiry: {e}")
@@ -968,15 +985,19 @@ def admin_create_user():
     conn = db()
     try:
         hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        # Pro is a dated entitlement, so a Pro plan is only granted with an expiry.
+        pro_until = pro_until_from(None) if is_pro_plan(plan) else None
         cur = conn.execute(
-            "INSERT INTO users (email, password, name, initials, role, plan, credits_used, credits_limit, reset_at, status) VALUES (?,?,?,?,?,?,0,?,?,?)",
-            (email, hashed_pw, name, initials, role, plan, credits_limit, reset_at, status)
+            "INSERT INTO users (email, password, name, initials, role, plan, credits_used, credits_limit, reset_at, status, pro_until)"
+            " VALUES (?,?,?,?,?,?,0,?,?,?,?)",
+            (email, hashed_pw, name, initials, role, plan, credits_limit, reset_at, status, pro_until)
         )
         _record_admin_audit(
             conn,
             "user.create",
             target_user_id=cur.lastrowid,
-            details={"email": email, "name": name, "role": role, "plan": plan, "creditsLimit": credits_limit, "status": status},
+            details={"email": email, "name": name, "role": role, "plan": plan,
+                     "creditsLimit": credits_limit, "status": status, "proUntil": pro_until},
         )
         conn.commit()
         return jsonify({'success': True, 'message': f'User {name} created successfully'})
@@ -1055,6 +1076,18 @@ def admin_update_user(user_id):
             "status = ?",
         ]
         values = [email, name, initials, role, plan, credits_limit, credits_used, status]
+        # Pro is dated, so a plan change has to move the window with it. Only a genuine
+        # promotion opens a new window: saving an unrelated field (a rename, a credit
+        # limit) on an account whose Pro has already lapsed must not hand it another 30
+        # days. Renewing a lapsed account is what Extend is for.
+        if not is_pro_plan(plan):
+            new_pro_until = None                        # demotion ends access now
+        elif is_pro_plan(existing["plan"]):
+            new_pro_until = existing.get("pro_until")   # already Pro: leave the window alone
+        else:
+            new_pro_until = pro_until_from(None)        # promoted from a basic plan
+        updates.append("pro_until = ?")
+        values.append(new_pro_until)
         changed = {
             "email": {"from": existing["email"], "to": email},
             "name": {"from": existing["name"], "to": name},
@@ -1062,6 +1095,7 @@ def admin_update_user(user_id):
             "plan": {"from": existing["plan"], "to": plan},
             "creditsLimit": {"from": existing["credits_limit"], "to": credits_limit},
             "status": {"from": existing.get("status", "active"), "to": status},
+            "proUntil": {"from": existing.get("pro_until"), "to": new_pro_until},
         }
         if credits_used != previous_used:
             changed["creditsUsed"] = {"from": previous_used, "to": credits_used}
@@ -1082,6 +1116,7 @@ def admin_update_user(user_id):
             'message': f'User {name} updated successfully',
             'creditsLimit': credits_limit,
             'creditsUsed': credits_used,
+            'proUntil': new_pro_until,
         })
     except Exception as e:
         if _is_unique_violation(e):
