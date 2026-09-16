@@ -57,3 +57,17 @@ appendonly.aof
 
 # Make Seamless harness outputs saved next to the test images (see tests/*__report.txt)
 tests/*__*
+scripts/build_yc_pitch_pdf.py
+scripts/build_rimi_presentation.py
+
+# Test scratch output. The extract test used to write one uuid-named file per run into the
+# repo; it now uses pytest's tmp_path, and this keeps any older copies out.
+backend/tests/_tmp_extract_results/
+
+# Local screenshots taken while building the marketing pages (26 MB and growing).
+screenshots/
+
+# Leftover pytest working directories from an older harness. They are locked by the OS and
+# cannot be removed from here; ignoring them keeps git status readable until they are cleared
+# manually. Nothing writes new ones.
+.test-tmp-*/

@@ -9,6 +9,7 @@ import requests as http_requests
 from flask import Blueprint, jsonify, request, g
 from rate_limits import generation_rate_limit
 from middleware import login_required, project_access_from_payload
+from file_access import readable_path_or_none
 
 from auth import (
     credit_error_payload,
@@ -38,11 +39,10 @@ def _resolve_image_path(filename='', image_url=''):
     """Resolve a local upload path or download a remote image for processing."""
     if filename:
         filename = os.path.basename(filename)
-        filepath = os.path.join(UPLOAD_DIR, filename)
-        if os.path.exists(filepath):
-            return filename, filepath
-        filepath = os.path.join(PUBLIC_DIR, filename)
-        if os.path.exists(filepath):
+        # Covers uploads, results, the shared demo artwork and object storage, and
+        # refuses a file that belongs to a different account.
+        filepath = readable_path_or_none(filename)
+        if filepath:
             return filename, filepath
         raise FileNotFoundError(f'File not found: {filename}')
 

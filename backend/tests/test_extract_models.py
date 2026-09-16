@@ -46,8 +46,13 @@ def test_new_pro_model_credits_in_registry():
     assert MODEL_TO_CREDITS["black-forest-labs/flux-2-pro"] == 35
 
 
-def test_run_single_extract_builds_image_conditioned_input(monkeypatch):
-    """Ensure Replicate is called with the source image, not text-only."""
+def test_run_single_extract_builds_image_conditioned_input(monkeypatch, tmp_path):
+    """Ensure Replicate is called with the source image, not text-only.
+
+    Writes into pytest's tmp_path rather than a folder inside the repo. The result
+    filename carries a fresh uuid, so pointing RESULTS_DIR at backend/tests left one
+    more file in the working tree on every single run.
+    """
     captured = {}
 
     class FakeOutput(list):
@@ -72,11 +77,7 @@ def test_run_single_extract_builds_image_conditioned_input(monkeypatch):
     monkeypatch.setattr("routes.generation.log_replicate_call", lambda *a, **k: None)
     monkeypatch.setattr("routes.generation.log_export", lambda *a, **k: None)
     monkeypatch.setattr("routes.generation.storage.sync_to_s3", lambda *a, **k: None)
-    monkeypatch.setattr(
-        "routes.generation.RESULTS_DIR",
-        os.path.join(os.path.dirname(__file__), "_tmp_extract_results"),
-    )
-    os.makedirs(os.path.join(os.path.dirname(__file__), "_tmp_extract_results"), exist_ok=True)
+    monkeypatch.setattr("routes.generation.RESULTS_DIR", str(tmp_path))
 
     model = next(m for m in EXTRACT_MODELS if m["id"] == "google/nano-banana-2")
     data_uri = "data:image/png;base64,aaa"

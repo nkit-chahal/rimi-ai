@@ -18,6 +18,11 @@ from config import RESULTS_DIR, UPLOAD_DIR
 
 logger = logging.getLogger(__name__)
 
+# Shared demo artwork (demo_floral.png and friends) lives in the repo's public/ folder,
+# one level above backend/. Several routes tried to reach it with a path built from
+# routes/, which resolves to backend/public and therefore never matched anything.
+PUBLIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "public")
+
 
 class FileAccessError(Exception):
     """A file may not be read. `status` is the HTTP status the route should return."""
@@ -80,11 +85,13 @@ def assert_readable(filename, user=None):
     return safe
 
 
-def resolve_readable_path(filename, user=None, directories=("uploads", "results")):
+def resolve_readable_path(filename, user=None, directories=("uploads", "results"),
+                          include_public=True):
     """Local path for a file this user may read, or None when it cannot be found.
 
-    Checks ownership first, then local disk, then object storage. The storage lookup is what
-    keeps previously uploaded artwork working across a redeploy.
+    Checks ownership first, then local disk, then the shared public assets, then object
+    storage. The storage lookup is what keeps previously uploaded artwork working across
+    a redeploy onto a fresh container.
     """
     import storage
 
@@ -94,6 +101,12 @@ def resolve_readable_path(filename, user=None, directories=("uploads", "results"
         local = os.path.join(UPLOAD_DIR if directory == "uploads" else RESULTS_DIR, safe)
         if os.path.exists(local):
             return local
+
+    if include_public:
+        # Demo artwork belongs to nobody and is offered to everyone.
+        shared = os.path.join(PUBLIC_DIR, safe)
+        if os.path.exists(shared):
+            return shared
 
     for directory in directories:
         try:
@@ -105,3 +118,15 @@ def resolve_readable_path(filename, user=None, directories=("uploads", "results"
             return path
 
     return None
+
+
+def readable_path_or_none(filename, user=None, **kwargs):
+    """resolve_readable_path, but a refusal reads as "not found" instead of raising.
+
+    Lets a route keep its single not-found branch. A file the caller may not read and a
+    file that does not exist are deliberately indistinguishable from outside.
+    """
+    try:
+        return resolve_readable_path(filename, user=user, **kwargs)
+    except FileAccessError:
+        return None

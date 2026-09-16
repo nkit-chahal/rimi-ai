@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from PIL import Image, ImageDraw, ImageChops, ImageFilter
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client, GROQ_VISION_MODEL
+from file_access import readable_path_or_none
 from db import db
 from auth import (
     credit_error_payload, credit_requirement,
@@ -67,10 +68,8 @@ def generate_seamless():
         )
         data_uri = None
         if filename:
-            filepath = os.path.join(UPLOAD_DIR, filename)
-            if not os.path.exists(filepath):
-                filepath = os.path.join(RESULTS_DIR, filename)
-            if os.path.exists(filepath):
+            filepath = readable_path_or_none(filename)
+            if filepath:
                 with open(filepath, "rb") as img_file:
                     encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
                     mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"

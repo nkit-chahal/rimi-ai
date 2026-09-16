@@ -11,6 +11,7 @@ from io import BytesIO
 from scipy import ndimage
 from flask import Blueprint, request, jsonify, g
 from middleware import login_required, project_access_from_payload
+from file_access import readable_path_or_none
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client, GROQ_VISION_MODEL
 from auth import (
@@ -84,8 +85,8 @@ def _image_to_data_uri(pil_img: Image.Image, compress: bool = True) -> str:
 def _load_pattern_image(filename: str = "", url: str = "") -> Image.Image:
     if filename:
         filename = os.path.basename(filename)
-        path = os.path.join(UPLOAD_DIR, filename)
-        if not os.path.exists(path):
+        path = readable_path_or_none(filename)
+        if not path:
             raise FileNotFoundError(f"Pattern file not found: {filename}")
         return Image.open(path).convert("RGB")
     if url and url.startswith("http"):

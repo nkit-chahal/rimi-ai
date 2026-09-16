@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from config import UPLOAD_DIR, RESULTS_DIR
 from db import db
+from file_access import readable_path_or_none
 from auth import (
     credit_requirement,
     get_updated_credits, log_export,
@@ -46,11 +47,9 @@ def extract_palette_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
-        filepath = os.path.join(RESULTS_DIR, filename)
-        if not os.path.exists(filepath):
-            return jsonify({'error': 'File not found'}), 404
+    filepath = readable_path_or_none(filename)
+    if not filepath:
+        return jsonify({'error': 'File not found'}), 404
     try:
         palette = extract_palette(filepath, num_colors)
         return jsonify({'success': True, 'palette': palette})
@@ -71,11 +70,9 @@ def recolor_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
-        filepath = os.path.join(RESULTS_DIR, filename)
-        if not os.path.exists(filepath):
-            return jsonify({'error': 'File not found'}), 404
+    filepath = readable_path_or_none(filename)
+    if not filepath:
+        return jsonify({'error': 'File not found'}), 404
     user_id, required_credits, error_response, status_code = require_credits(project_id, None, 'recolor', 3)
     if error_response:
         return error_response, status_code
@@ -119,11 +116,9 @@ def generate_tech_pack_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    filepath = os.path.join(RESULTS_DIR, filename)
-    if not os.path.exists(filepath):
-        filepath = os.path.join(UPLOAD_DIR, filename)
-        if not os.path.exists(filepath):
-            return jsonify({'error': 'File not found'}), 404
+    filepath = readable_path_or_none(filename)
+    if not filepath:
+        return jsonify({'error': 'File not found'}), 404
     conn = db()
     project_row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
     controls_row = conn.execute("SELECT * FROM project_controls WHERE project_id = ?", (project_id,)).fetchone()
@@ -210,11 +205,9 @@ def color_reduce_api():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
     filename = os.path.basename(filename)
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
-        filepath = os.path.join(RESULTS_DIR, filename)
-        if not os.path.exists(filepath):
-            return jsonify({'error': 'File not found'}), 404
+    filepath = readable_path_or_none(filename)
+    if not filepath:
+        return jsonify({'error': 'File not found'}), 404
     # Resolve the brand palette before reserving. These two returns used to sit inside the
     # charged section, so asking for a palette that does not exist, or one belonging to
     # someone else, cost the caller credits.
@@ -282,11 +275,9 @@ def layer_export_api():
     filename = os.path.basename(filename)
     if export_format not in ('zip', 'tiff'):
         return jsonify({'error': 'Format must be zip or tiff'}), 400
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
-        filepath = os.path.join(RESULTS_DIR, filename)
-        if not os.path.exists(filepath):
-            return jsonify({'error': 'File not found'}), 404
+    filepath = readable_path_or_none(filename)
+    if not filepath:
+        return jsonify({'error': 'File not found'}), 404
     user_id, required_credits, error_response, status_code = require_credits(project_id, None, 'layerExport', 2, 'export')
     if error_response:
         return error_response, status_code

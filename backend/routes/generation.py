@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client, safe_filename, GROQ_VISION_MODEL
 from middleware import login_required, project_access_from_payload
+from file_access import readable_path_or_none
 from auth import (
     adjust_reserved_credits,
     credit_error_payload,
@@ -40,12 +41,8 @@ def _resolve_extract_filepath(filename='', image_url=''):
     if not filename:
         raise ValueError('Filename is required')
 
-    filepath = storage.get_file_path('uploads', filename)
-    if filepath and os.path.exists(filepath):
-        return filename, filepath
-
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if os.path.exists(filepath):
+    filepath = readable_path_or_none(filename)
+    if filepath:
         return filename, filepath
 
     if image_url and image_url.startswith('http'):
@@ -71,8 +68,8 @@ def describe_image():
     creativity = int(data.get('creativity', 3))
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
+    filepath = readable_path_or_none(filename)
+    if not filepath:
         return jsonify({'error': 'File not found'}), 404
     try:
         with open(filepath, 'rb') as f:
@@ -132,8 +129,8 @@ def extract_design():
         filename = os.path.basename(filename) if filename else ''
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
+    filepath = readable_path_or_none(filename)
+    if not filepath:
         return jsonify({'error': 'File not found'}), 404
     project_id, access_error = project_access_from_payload(data)
     if access_error:
@@ -415,8 +412,8 @@ def extract_design_multi():
     filename = os.path.basename(filename) if filename else ''
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
+    filepath = readable_path_or_none(filename)
+    if not filepath:
         return jsonify({'error': 'File not found'}), 404
 
     project_id, access_error = project_access_from_payload(data)
@@ -752,8 +749,8 @@ def generate_inspirations():
             encoded_string = base64.b64encode(content).decode('utf-8')
             data_uri = f"data:{mime_type};base64,{encoded_string}"
         elif filename:
-            filepath = os.path.join(UPLOAD_DIR, filename)
-            if os.path.exists(filepath):
+            filepath = readable_path_or_none(filename)
+            if filepath:
                 with open(filepath, "rb") as img_file:
                     encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
                     mime_type = "image/png" if filename.lower().endswith('.png') else "image/jpeg"

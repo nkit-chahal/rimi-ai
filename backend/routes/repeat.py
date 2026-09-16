@@ -8,6 +8,7 @@ from middleware import login_required, project_access_from_payload
 from PIL import Image, ImageOps
 
 from config import UPLOAD_DIR, RESULTS_DIR
+from file_access import readable_path_or_none
 from auth import credit_requirement, get_updated_credits, log_export, refund_credits, reserve_credits_or_error
 from security_utils import safe_fetch_url, media_access_token
 import storage
@@ -20,10 +21,8 @@ def _load_source_image(filename, image_url):
         content = safe_fetch_url(image_url, timeout=30)
         return Image.open(BytesIO(content))
     if filename:
-        filepath = os.path.join(UPLOAD_DIR, filename)
-        if not os.path.exists(filepath):
-            filepath = os.path.join(RESULTS_DIR, filename)
-        if not os.path.exists(filepath):
+        filepath = readable_path_or_none(filename)
+        if not filepath:
             return None
         return Image.open(filepath)
     return None

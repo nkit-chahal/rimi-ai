@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from config import UPLOAD_DIR, RESULTS_DIR
 from db import db
+from file_access import readable_path_or_none
 from auth import (
     log_export,
     adjust_reserved_credits, credit_requirement,
@@ -111,11 +112,9 @@ def generate_colorways():
         return jsonify({'error': 'Filename and palette are required'}), 400
     filename = os.path.basename(filename)
 
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
-        filepath = os.path.join(RESULTS_DIR, filename)
-        if not os.path.exists(filepath):
-            return jsonify({'error': 'File not found'}), 404
+    filepath = readable_path_or_none(filename)
+    if not filepath:
+        return jsonify({'error': 'File not found'}), 404
 
     credits_per_colorway = credit_requirement('colorways', 3)
     required_credits = credits_per_colorway * count

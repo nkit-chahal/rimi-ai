@@ -12,6 +12,7 @@ from auth import check_credits, credit_requirement
 from color_utils import extract_palette
 from config import UPLOAD_DIR, RESULTS_DIR
 from db import db
+from file_access import readable_path_or_none
 from middleware import login_required, project_access_from_payload, assert_project_access
 from schemas import ApiKeyCreateRequest, ShareLinkRequest, TeamInviteRequest
 
@@ -438,11 +439,9 @@ def print_advisor():
     fabric_type = (data.get("fabricType") or "cotton").lower()
     volume = int(data.get("productionVolume") or 500)
 
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
-        filepath = os.path.join(RESULTS_DIR, filename)
-        if not os.path.exists(filepath):
-            return jsonify({"error": "File not found"}), 404
+    filepath = readable_path_or_none(filename)
+    if not filepath:
+        return jsonify({"error": "File not found"}), 404
 
     required = credit_requirement("techPack", 2)
     ok, remaining, limit, used = check_credits(g.current_user["id"], required)

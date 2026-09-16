@@ -8,6 +8,7 @@ from rate_limits import generation_rate_limit
 from middleware import login_required, project_access_from_payload
 
 from config import UPLOAD_DIR, RESULTS_DIR, REPLICATE_UPSCALE_MODEL
+from file_access import readable_path_or_none
 from auth import (
     log_export, log_replicate_call,
     get_credit_price, get_updated_credits,
@@ -48,14 +49,11 @@ def vectorize_image():
 
     # Resolve filepath from filename or imageUrl
     filepath = None
-    PUBLIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'public')
     if filename:
-        filepath = os.path.join(UPLOAD_DIR, filename)
-        if not os.path.exists(filepath):
-            # Fallback: check public/ folder (for demo images like demo_floral.png)
-            filepath = os.path.join(PUBLIC_DIR, filename)
-            if not os.path.exists(filepath):
-                return jsonify({'error': f'File not found: {filename}'}), 404
+        # Covers uploads, results, the shared demo artwork in public/, and object storage.
+        filepath = readable_path_or_none(filename)
+        if not filepath:
+            return jsonify({'error': f'File not found: {filename}'}), 404
     elif image_url and image_url.startswith('http'):
         # Download remote image to a temp file
         print(f"  [Vectorize] Downloading image from URL...")
@@ -208,8 +206,8 @@ def upscale():
     if not filename:
         return jsonify({'error': 'Filename is required'}), 400
 
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(filepath):
+    filepath = readable_path_or_none(filename)
+    if not filepath:
         return jsonify({'error': 'File not found'}), 404
 
     ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', 1)
