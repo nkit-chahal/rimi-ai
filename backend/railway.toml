@@ -2,7 +2,14 @@
 builder = "nixpacks"
 
 [deploy]
-# Starts gunicorn AND the RQ worker; see start-web.sh for why both live in one service.
+# Starts gunicorn AND the RQ workers; see start-web.sh for why both live in one service.
 startCommand = "sh start-web.sh"
-healthcheckPath = "/api/health"
+
+# /api/health only proves Flask is answering, which it does whether or not anything is draining
+# the queue. A deploy whose RQ workers failed to start would go green while every generation piled
+# up unprocessed and the UI span on a progress bar. /api/health/ready checks the database, Redis
+# and that at least one worker is listening on the queue, so that deploy fails and rolls back
+# instead. healthcheckTimeout leaves five minutes for the workers to register, against the ~25s
+# cold start observed in production.
+healthcheckPath = "/api/health/ready"
 healthcheckTimeout = 300

@@ -5,9 +5,19 @@ to RQ and returns immediately; with no worker process alongside the web service 
 'queued' forever and the UI spins with no error anywhere. The readiness probe is the place that
 turns that into a visible failure.
 """
+import re
 import types
+from pathlib import Path
 
 import pytest
+
+
+def _configured_healthcheck_path():
+    """The path Railway probes, read from railway.toml rather than restated here."""
+    toml = (Path(__file__).resolve().parent.parent / "railway.toml").read_text(encoding="utf-8")
+    match = re.search(r'^healthcheckPath\s*=\s*"([^"]+)"', toml, re.MULTILINE)
+    assert match, "railway.toml declares no healthcheckPath"
+    return match.group(1)
 
 
 class _FakeQueue:
@@ -61,3 +71,31 @@ def test_a_worker_on_a_different_queue_does_not_count(client, redis_env, monkeyp
     res = client.get("/api/health/ready")
     assert res.status_code == 503
     assert res.get_json()["checks"]["workers"] == 0
+
+
+def test_railway_healthchecks_the_readiness_probe(client, redis_env, monkeypatch):
+    """The configured path must exist and answer without a token.
+
+    Railway calls healthcheckPath unauthenticated. If the route is renamed or ever gains an auth
+    decorator, every deploy fails on a 404 or 401 that reads like the app itself is broken, so the
+    config and the route are pinned together here rather than discovered during a deploy.
+    """
+    path = _configured_healthcheck_path()
+
+    from jobs import QUEUE_NAME
+    _patch_rq(monkeypatch, workers=[_FakeWorker([QUEUE_NAME])])
+
+    res = client.get(path)  # no Authorization header, exactly as Railway calls it
+    assert res.status_code == 200, f"{path} answered {res.status_code} to an unauthenticated probe"
+
+
+def test_the_configured_path_actually_checks_the_worker(client, redis_env, monkeypatch):
+    """A path that cannot fail is not a healthcheck.
+
+    /api/health returns 200 whether or not anything drains the queue, which is why it let a
+    worker-less deploy go green.
+    """
+    path = _configured_healthcheck_path()
+
+    _patch_rq(monkeypatch, workers=[])
+    assert client.get(path).status_code == 503, f"{path} stays green with no RQ worker listening"
