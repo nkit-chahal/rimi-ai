@@ -10,13 +10,13 @@ import requests as http_requests
 from PIL import Image, ImageFilter
 
 from auth import (
+    credit_guard,
     credit_requirement,
     decode_data_url_image,
     get_updated_credits,
     green_matte_to_rgba,
     log_export,
     log_replicate_call,
-    record_activity,
     remove_background_with_rmbg,
     rgba_layer_to_green_matte,
     save_rgba_content_layer,
@@ -118,79 +118,82 @@ def execute_image_layers(payload, on_progress=None):
         mime_type = 'image/png' if filename.lower().endswith('.png') else 'image/jpeg'
         data_uri = f'data:{mime_type};base64,{encoded_string}'
 
-    progress(20, f'Calling Qwen Image Layered ({num_layers} layers)')
-    start_time = time.time()
-    output = run_model(
-        'qwen/qwen-image-layered',
-        input={
-            'image': data_uri,
-            'num_layers': num_layers,
-            'description': description,
-            'go_fast': True,
-            'output_format': output_format,
-            'output_quality': 95,
-        },
-    )
-    duration = time.time() - start_time
+    # Reserve before the vendor call, not after it. Checking affordability and then
+    # deducting once the model returned let two concurrent requests both pass the check
+    # and both run. credit_guard refunds automatically if anything below raises.
     required_credits = credit_requirement('imageLayers', 69)
-    cost_usd = 0.03 + (0.01 * num_layers)
-    output_bytes = 0
-
-    progress(70, 'Downloading layers')
-    layers = []
-    batch_id = uuid.uuid4().hex[:8]
-    output_list = list(output) if not isinstance(output, list) else output
-    for i, layer_output in enumerate(output_list):
-        layer_name = f'layer_{batch_id}_{i}.png'
-        layer_path = os.path.join(RESULTS_DIR, layer_name)
-        layer_bytes = _download_replicate_output(layer_output)
-        output_bytes += len(layer_bytes)
-        placement = save_rgba_content_layer(layer_bytes, layer_path)
-        storage.sync_to_s3(layer_path)
-        layers.append({
-            'url': f'/results/{layer_name}',
-            'index': i,
-            'filename': layer_name,
-            'fileAccessToken': media_access_token(layer_name, user_id),
-            **placement,
-        })
-
-    log_replicate_call(
-        project_id,
-        'qwen/qwen-image-layered',
-        duration,
-        required_credits,
-        cost_usd,
-        session_id=session_id,
-        output_bytes=output_bytes,
-    )
-    record_activity(project_id, 'generation', 1, required_credits, user_id=user_id)
-
-    for layer in layers:
-        log_export(
-            project_id=project_id,
-            filename=layer['filename'],
-            input_filename=filename,
-            tool_type='Image Layers',
-            settings_dict={
-                'numLayers': num_layers,
+    with credit_guard(user_id, project_id, required_credits, 'generation', 1):
+        progress(20, f'Calling Qwen Image Layered ({num_layers} layers)')
+        start_time = time.time()
+        output = run_model(
+            'qwen/qwen-image-layered',
+            input={
+                'image': data_uri,
+                'num_layers': num_layers,
                 'description': description,
-                'layerIndex': layer['index'],
-                'session_id': session_id,
+                'go_fast': True,
+                'output_format': output_format,
+                'output_quality': 95,
             },
-            user_id=user_id,
+        )
+        duration = time.time() - start_time
+        cost_usd = 0.03 + (0.01 * num_layers)
+        output_bytes = 0
+
+        progress(70, 'Downloading layers')
+        layers = []
+        batch_id = uuid.uuid4().hex[:8]
+        output_list = list(output) if not isinstance(output, list) else output
+        for i, layer_output in enumerate(output_list):
+            layer_name = f'layer_{batch_id}_{i}.png'
+            layer_path = os.path.join(RESULTS_DIR, layer_name)
+            layer_bytes = _download_replicate_output(layer_output)
+            output_bytes += len(layer_bytes)
+            placement = save_rgba_content_layer(layer_bytes, layer_path)
+            storage.sync_to_s3(layer_path)
+            layers.append({
+                'url': f'/results/{layer_name}',
+                'index': i,
+                'filename': layer_name,
+                'fileAccessToken': media_access_token(layer_name, user_id),
+                **placement,
+            })
+
+        log_replicate_call(
+            project_id,
+            'qwen/qwen-image-layered',
+            duration,
+            required_credits,
+            cost_usd,
+            session_id=session_id,
+            output_bytes=output_bytes,
         )
 
-    progress(100, 'Complete')
-    updated_credits = get_updated_credits(user_id)
-    return {
-        'success': True,
-        'layers': layers,
-        'duration': duration,
-        'costUsd': cost_usd,
-        'creditsUsed': required_credits,
-        **updated_credits,
-    }
+        for layer in layers:
+            log_export(
+                project_id=project_id,
+                filename=layer['filename'],
+                input_filename=filename,
+                tool_type='Image Layers',
+                settings_dict={
+                    'numLayers': num_layers,
+                    'description': description,
+                    'layerIndex': layer['index'],
+                    'session_id': session_id,
+                },
+                user_id=user_id,
+            )
+
+        progress(100, 'Complete')
+        updated_credits = get_updated_credits(user_id)
+        return {
+            'success': True,
+            'layers': layers,
+            'duration': duration,
+            'costUsd': cost_usd,
+            'creditsUsed': required_credits,
+            **updated_credits,
+        }
 
 
 def execute_edit_layer(payload, on_progress=None):
@@ -227,92 +230,98 @@ def execute_edit_layer(payload, on_progress=None):
     data_uri = f'data:image/png;base64,{encoded}'
 
     progress(30, 'Calling Qwen Image Edit')
-    start_time = time.time()
-    model_id = 'qwen/qwen-image-edit'
-    if edit_type == 'style_transfer':
-        model_id = 'fofr/style-transfer'
-        style_uri = data_uri
-        if reference_filename:
-            ref_path = _resolve_filepath(reference_filename)
-            if ref_path:
-                with open(ref_path, 'rb') as ref_file:
-                    ref_b64 = base64.b64encode(ref_file.read()).decode('utf-8')
-                    style_uri = f'data:image/png;base64,{ref_b64}'
-        output = run_model(model_id, input={
-            'structure_image': data_uri,
-            'style_image': style_uri,
-            'prompt': user_prompt or 'Apply artistic style',
-        })
-        required_credits = credit_requirement('styleTransfer', 23)
-    else:
-        replicate_input = {'image': data_uri, 'prompt': ai_prompt}
-        if edit_type == 'reference' and reference_filename:
-            ref_path = _resolve_filepath(reference_filename)
-            if ref_path:
-                with open(ref_path, 'rb') as ref_file:
-                    ref_b64 = base64.b64encode(ref_file.read()).decode('utf-8')
-                    replicate_input['image_2'] = f'data:image/png;base64,{ref_b64}'
-        output = run_model(model_id, input=replicate_input)
-        required_credits = credit_requirement('imageLayerEdit', 35)
-    duration = time.time() - start_time
-    cost_usd = 0.03 if model_id == 'qwen/qwen-image-edit' else 0.02 + duration * 0.001525
-
-    progress(75, 'Processing result')
-    result_id = uuid.uuid4().hex[:8]
-    result_name = f'layedit_{result_id}.png'
-    result_path = os.path.join(RESULTS_DIR, result_name)
-    result_bytes = _download_replicate_output(output)
-    result_img = Image.open(io.BytesIO(result_bytes)).convert('RGBA')
-    result_img = result_img.resize(original_img.size, Image.LANCZOS)
-
-    if edit_type == 'recolor' or (edit_type == 'replace' and preserve_silhouette):
-        final_img = green_matte_to_rgba(result_img, matte_color, preserve_alpha=original_alpha)
-    else:
-        final_img = remove_background_with_rmbg(result_img) or green_matte_to_rgba(result_img, matte_color)
-
-    final_img.save(result_path, 'PNG')
-    storage.sync_to_s3(result_path)
-
-    log_replicate_call(
-        project_id,
-        model_id,
-        duration,
-        required_credits,
-        cost_usd,
-        session_id=session_id,
-        output_bytes=len(result_bytes),
+    # The amount depends only on the edit type, which is already known here, so it can be
+    # reserved before the model runs rather than deducted after it. Batch edits call this
+    # once per file, so each file now pays before it runs instead of the whole batch
+    # running first and being charged afterwards.
+    required_credits = (
+        credit_requirement('styleTransfer', 23) if edit_type == 'style_transfer'
+        else credit_requirement('imageLayerEdit', 35)
     )
-    record_activity(project_id, 'generation', 1, required_credits, user_id=user_id)
-    log_export(
-        project_id=project_id,
-        filename=result_name,
-        input_filename=filename,
-        tool_type='Layer Edit',
-        settings_dict={
-            'prompt': user_prompt,
+    with credit_guard(user_id, project_id, required_credits, 'generation', 1):
+        start_time = time.time()
+        model_id = 'qwen/qwen-image-edit'
+        if edit_type == 'style_transfer':
+            model_id = 'fofr/style-transfer'
+            style_uri = data_uri
+            if reference_filename:
+                ref_path = _resolve_filepath(reference_filename)
+                if ref_path:
+                    with open(ref_path, 'rb') as ref_file:
+                        ref_b64 = base64.b64encode(ref_file.read()).decode('utf-8')
+                        style_uri = f'data:image/png;base64,{ref_b64}'
+            output = run_model(model_id, input={
+                'structure_image': data_uri,
+                'style_image': style_uri,
+                'prompt': user_prompt or 'Apply artistic style',
+            })
+        else:
+            replicate_input = {'image': data_uri, 'prompt': ai_prompt}
+            if edit_type == 'reference' and reference_filename:
+                ref_path = _resolve_filepath(reference_filename)
+                if ref_path:
+                    with open(ref_path, 'rb') as ref_file:
+                        ref_b64 = base64.b64encode(ref_file.read()).decode('utf-8')
+                        replicate_input['image_2'] = f'data:image/png;base64,{ref_b64}'
+            output = run_model(model_id, input=replicate_input)
+        duration = time.time() - start_time
+        cost_usd = 0.03 if model_id == 'qwen/qwen-image-edit' else 0.02 + duration * 0.001525
+
+        progress(75, 'Processing result')
+        result_id = uuid.uuid4().hex[:8]
+        result_name = f'layedit_{result_id}.png'
+        result_path = os.path.join(RESULTS_DIR, result_name)
+        result_bytes = _download_replicate_output(output)
+        result_img = Image.open(io.BytesIO(result_bytes)).convert('RGBA')
+        result_img = result_img.resize(original_img.size, Image.LANCZOS)
+
+        if edit_type == 'recolor' or (edit_type == 'replace' and preserve_silhouette):
+            final_img = green_matte_to_rgba(result_img, matte_color, preserve_alpha=original_alpha)
+        else:
+            final_img = remove_background_with_rmbg(result_img) or green_matte_to_rgba(result_img, matte_color)
+
+        final_img.save(result_path, 'PNG')
+        storage.sync_to_s3(result_path)
+
+        log_replicate_call(
+            project_id,
+            model_id,
+            duration,
+            required_credits,
+            cost_usd,
+            session_id=session_id,
+            output_bytes=len(result_bytes),
+        )
+        log_export(
+            project_id=project_id,
+            filename=result_name,
+            input_filename=filename,
+            tool_type='Layer Edit',
+            settings_dict={
+                'prompt': user_prompt,
+                'editType': edit_type,
+                'session_id': session_id,
+                'layer_local_id': layer_local_id,
+            },
+            user_id=user_id,
+        )
+
+        progress(100, 'Complete')
+        updated_credits = get_updated_credits(user_id)
+        return {
+            'success': True,
+            'resultUrl': f'/results/{result_name}',
+            'filename': result_name,
+            'fileAccessToken': media_access_token(result_name, user_id),
+            'duration': duration,
+            'costUsd': cost_usd,
+            'creditsUsed': required_credits,
             'editType': edit_type,
-            'session_id': session_id,
-            'layer_local_id': layer_local_id,
-        },
-        user_id=user_id,
-    )
-
-    progress(100, 'Complete')
-    updated_credits = get_updated_credits(user_id)
-    return {
-        'success': True,
-        'resultUrl': f'/results/{result_name}',
-        'filename': result_name,
-        'fileAccessToken': media_access_token(result_name, user_id),
-        'duration': duration,
-        'costUsd': cost_usd,
-        'creditsUsed': required_credits,
-        'editType': edit_type,
-        'prompt': user_prompt,
-        'parentFilename': filename,
-        'layerLocalId': layer_local_id,
-        **updated_credits,
-    }
+            'prompt': user_prompt,
+            'parentFilename': filename,
+            'layerLocalId': layer_local_id,
+            **updated_credits,
+        }
 
 
 def execute_inpaint_layer(payload, on_progress=None):
@@ -380,70 +389,71 @@ def execute_inpaint_layer(payload, on_progress=None):
         "Keep the chroma green background unchanged. Do not change unmasked content."
     )
 
-    progress(35, 'Calling Qwen Image Edit')
-    start_time = time.time()
-    output = run_model('qwen/qwen-image-edit', input={'image': data_uri, 'prompt': ai_prompt})
-    duration = time.time() - start_time
+    # Reserved before the model call; credit_guard refunds if anything below raises.
     required_credits = credit_requirement('imageLayerEdit', 35)
-    cost_usd = 0.03
+    with credit_guard(user_id, project_id, required_credits, 'generation', 1):
+        progress(35, 'Calling Qwen Image Edit')
+        start_time = time.time()
+        output = run_model('qwen/qwen-image-edit', input={'image': data_uri, 'prompt': ai_prompt})
+        duration = time.time() - start_time
+        cost_usd = 0.03
 
-    progress(75, 'Compositing inpaint result')
-    result_bytes = _download_replicate_output(output)
-    result_img = Image.open(io.BytesIO(result_bytes)).convert('RGBA').resize(
-        (canvas_width, canvas_height), Image.LANCZOS
-    )
-    edited_rgba = remove_background_with_rmbg(result_img) or green_matte_to_rgba(result_img, matte_color)
-    final_canvas = Image.composite(edited_rgba, layer_canvas, mask_img)
+        progress(75, 'Compositing inpaint result')
+        result_bytes = _download_replicate_output(output)
+        result_img = Image.open(io.BytesIO(result_bytes)).convert('RGBA').resize(
+            (canvas_width, canvas_height), Image.LANCZOS
+        )
+        edited_rgba = remove_background_with_rmbg(result_img) or green_matte_to_rgba(result_img, matte_color)
+        final_canvas = Image.composite(edited_rgba, layer_canvas, mask_img)
 
-    result_id = uuid.uuid4().hex[:8]
-    result_name = f'layinpaint_{result_id}.png'
-    result_path = os.path.join(RESULTS_DIR, result_name)
-    final_canvas.save(result_path, 'PNG')
-    storage.sync_to_s3(result_path)
+        result_id = uuid.uuid4().hex[:8]
+        result_name = f'layinpaint_{result_id}.png'
+        result_path = os.path.join(RESULTS_DIR, result_name)
+        final_canvas.save(result_path, 'PNG')
+        storage.sync_to_s3(result_path)
 
-    log_replicate_call(
-        project_id,
-        'qwen/qwen-image-edit',
-        duration,
-        required_credits,
-        cost_usd,
-        session_id=session_id,
-        output_bytes=len(result_bytes),
-    )
-    record_activity(project_id, 'generation', 1, required_credits, user_id=user_id)
-    log_export(
-        project_id=project_id,
-        filename=result_name,
-        input_filename=filename,
-        tool_type='Layer Inpaint',
-        settings_dict={
-            'prompt': user_prompt,
+        log_replicate_call(
+            project_id,
+            'qwen/qwen-image-edit',
+            duration,
+            required_credits,
+            cost_usd,
+            session_id=session_id,
+            output_bytes=len(result_bytes),
+        )
+        log_export(
+            project_id=project_id,
+            filename=result_name,
+            input_filename=filename,
+            tool_type='Layer Inpaint',
+            settings_dict={
+                'prompt': user_prompt,
+                'width': canvas_width,
+                'height': canvas_height,
+                'session_id': session_id,
+                'layer_local_id': layer_local_id,
+            },
+            user_id=user_id,
+        )
+
+        progress(100, 'Complete')
+        updated_credits = get_updated_credits(user_id)
+        return {
+            'success': True,
+            'resultUrl': f'/results/{result_name}',
+            'filename': result_name,
+            'fileAccessToken': media_access_token(result_name, user_id),
             'width': canvas_width,
             'height': canvas_height,
-            'session_id': session_id,
-            'layer_local_id': layer_local_id,
-        },
-        user_id=user_id,
-    )
-
-    progress(100, 'Complete')
-    updated_credits = get_updated_credits(user_id)
-    return {
-        'success': True,
-        'resultUrl': f'/results/{result_name}',
-        'filename': result_name,
-        'fileAccessToken': media_access_token(result_name, user_id),
-        'width': canvas_width,
-        'height': canvas_height,
-        'duration': duration,
-        'costUsd': cost_usd,
-        'creditsUsed': required_credits,
-        'editType': 'inpaint',
-        'prompt': user_prompt,
-        'parentFilename': filename,
-        'layerLocalId': layer_local_id,
-        **updated_credits,
-    }
+            'duration': duration,
+            'costUsd': cost_usd,
+            'creditsUsed': required_credits,
+            'editType': 'inpaint',
+            'prompt': user_prompt,
+            'parentFilename': filename,
+            'layerLocalId': layer_local_id,
+            **updated_credits,
+        }
 
 
 def execute_batch_edit_layer(payload, on_progress=None):

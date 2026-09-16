@@ -44,6 +44,7 @@ def _replicate_token():
         return False
 
 
+@pytest.mark.live
 @pytest.mark.skipif(not _replicate_token(), reason='needs a live REPLICATE_API_TOKEN')
 def test_configured_upscaler_is_live():
     """Smoke test: the configured model must actually run, not just exist as a page.
