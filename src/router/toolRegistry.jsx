@@ -1,6 +1,7 @@
 import { lazy } from 'react';
 
 export const TOOL_COMPONENTS = {
+  home: lazy(() => import('../components/studio/tools/HomeTool')),
   dashboard: lazy(() => import('../components/studio/tools/DashboardTool')),
   exports: lazy(() => import('../components/studio/tools/ExportsTool')),
   pattern: lazy(() => import('../components/studio/tools/PatternTool')),

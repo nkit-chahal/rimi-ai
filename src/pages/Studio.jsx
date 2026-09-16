@@ -3,7 +3,7 @@ import { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense as Re
 import ToolComingSoon from '../components/studio/shared/ToolComingSoon';
 import { COMING_SOON_TOOLS } from '../components/studio/shared/comingSoonTools';
 import { resolveToolComponent } from '../router/toolRegistry';
-import OnboardingBanner from '../components/OnboardingBanner';
+import NewProjectModal from '../components/studio/shared/NewProjectModal';
 import { CreditsProvider } from '../contexts/CreditsContext';
 import { ProjectProvider } from '../contexts/ProjectContext';
 import { useBgTasks } from '../contexts/BgTaskContext';
@@ -35,7 +35,10 @@ const COMPACT_UPLOAD_EXCLUDED_TOOLS = new Set([
 ]);
 
 const NAV = [
-    { section: '', items: [{ id: 'dashboard', label: 'Pipeline Studio', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' }] },
+    { section: '', items: [
+        { id: 'home', label: 'Home', icon: 'M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-7H9v7H5a2 2 0 01-2-2z' },
+        { id: 'dashboard', label: 'Pipeline Studio', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
+    ] },
     {
         section: 'AI DESIGN TOOLS',
         items: [
@@ -93,7 +96,7 @@ const BOOT_SPLASH_MIN_MS = 400;
 
 export default function Studio({ onBack, currentUser, currentToken, onLogout, isBootEntry = false, onBootComplete }) {
     const adminTools = ['admin-dashboard', 'admin-users', 'admin-projects', 'admin-logs', 'admin-credits'];
-    const userTools = ['dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'removebg', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace'];
+    const userTools = ['home', 'dashboard', 'pattern', 'seamless', 'repeat', 'mappings', 'inspire', 'vectorize', 'upscale', 'removebg', 'imagelayers', 'colorways', 'colorway-manager', 'vectorpro', 'mockup3d', 'library', 'measurement', 'exports', 'billing', 'workspace'];
     const isAdmin = currentUser?.role === 'admin';
 
     useEffect(() => {
@@ -121,7 +124,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
         const fromPath = readToolFromPath();
         const allowed = isAdmin ? adminTools : userTools;
         if (allowed.includes(fromPath)) return fromPath;
-        return isAdmin ? 'admin-dashboard' : 'pattern';
+        return isAdmin ? 'admin-dashboard' : 'home';
     });
 
     useEffect(() => {
@@ -134,7 +137,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
 
     const setTool = useCallback((t) => {
         const allowed = isAdmin ? adminTools : userTools;
-        if (!allowed.includes(t)) t = isAdmin ? 'admin-dashboard' : 'pattern';
+        if (!allowed.includes(t)) t = isAdmin ? 'admin-dashboard' : 'home';
         _setTool(t);
         window.history.replaceState(null, '', `/studio/${t}`);
     }, [isAdmin]);
@@ -152,7 +155,7 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
     const [state, setState] = useState(emptyState);
     const [activeProjectId, setActiveProjectId] = useState(1);
     const [showProjectDropdown, setShowProjectDropdown] = useState(false);
-    const [newProjectName, setNewProjectName] = useState('');
+    const [showNewProjectModal, setShowNewProjectModal] = useState(false);
     const [workspaceProjectName, setWorkspaceProjectName] = useState('');
     const [editingProjectId, setEditingProjectId] = useState(null);
     const [editingProjectName, setEditingProjectName] = useState('');
@@ -364,11 +367,14 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             }
         });
         setState(studioState);
-        setActiveProjectId(studioState.activeProject.id);
+        setActiveProjectId(studioState.activeProject?.id ?? null);
         window.setTimeout(() => { hasLoadedControls.current = true; }, 0);
     }, []);
 
-    const workspaceHydrated = state.activeProject?.name && state.activeProject.name !== 'Loading...';
+    // The backend returns activeProject: null only when the account has no project at all. That
+    // state is fully loaded — it just needs a name before any tool can write anywhere.
+    const needsProject = state.activeProject === null;
+    const workspaceHydrated = needsProject || (state.activeProject?.name && state.activeProject.name !== 'Loading...');
 
     const loadStudioState = useCallback(async (projectId = activeProjectId, { silent = false } = {}) => {
         if (!currentToken) return;
@@ -555,6 +561,12 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             setWorkspaceBusyId(null);
         }
     };
+
+    // Home → open a project card: load it, then land in the print studio.
+    const openProjectFromHome = useCallback(async (projectId) => {
+        await loadStudioState(projectId);
+        setTool('pattern');
+    }, [loadStudioState, setTool]);
 
     const renameWorkspaceProject = async (projectId, name) => {
         const trimmed = (name || '').trim();
@@ -933,11 +945,27 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
             repeat: { repeatUrl, setRepeatUrl, isRepeat, setIsRepeat },
             imagelayers: { setUploads },
         };
-        const LazyUserTool = resolveToolComponent(tool);
+        // With no project there is nothing a tool could act on; Home is the only sensible view.
+        const renderTool = needsProject ? 'home' : tool;
+        const LazyUserTool = resolveToolComponent(renderTool);
         if (LazyUserTool) {
             return (
                 <ReactSuspense fallback={<div className="tool-loading">Loading…</div>}>
-                    <LazyUserTool {...commonProps} {...(toolExtras[tool] || {})} />
+                    {renderTool === 'home' ? (
+                        <LazyUserTool
+                            {...commonProps}
+                            user={state.user}
+                            projects={state.projects}
+                            quickTools={NAV[1].items}
+                            onNewProject={() => setShowNewProjectModal(true)}
+                            openProject={openProjectFromHome}
+                            renameProject={renameWorkspaceProject}
+                            deleteProject={deleteWorkspaceProject}
+                            workspaceBusyId={workspaceBusyId}
+                        />
+                    ) : (
+                        <LazyUserTool {...commonProps} {...(toolExtras[renderTool] || {})} />
+                    )}
                 </ReactSuspense>
             );
         }
@@ -976,16 +1004,6 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                 }}
             />
             </ReactSuspense>
-            {!isAdmin && (
-                <OnboardingBanner
-                    token={currentToken}
-                    ready={workspaceHydrated && !isLoadingState}
-                    onProjectCreated={(projectId) => {
-                        setActiveProjectId(projectId);
-                        loadStudioState(projectId);
-                    }}
-                />
-            )}
             {/* Sidebar nav */}
             {!isSidebarHidden && (
                 <aside className="st-sidebar">
@@ -1103,6 +1121,14 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                 </aside>
             )}
 
+            <NewProjectModal
+                open={needsProject || showNewProjectModal}
+                locked={needsProject}
+                busy={workspaceBusyId === 'create'}
+                onClose={() => setShowNewProjectModal(false)}
+                onCreate={async (name) => { await createWorkspaceProject(name); setShowNewProjectModal(false); }}
+            />
+
             {/* Main Content Area */}
             <div className="st-main">
                 <header className={`st-topbar ${isSidebarHidden ? 'sidebar-toggle-visible' : ''}`}>
@@ -1167,51 +1193,19 @@ export default function Studio({ onBack, currentUser, currentToken, onLogout, is
                                     ))}
                                 </div>
                                 <div style={{ borderTop: '1px solid #e2e8f0', padding: '6px' }}>
-                                    <form
-                                        style={{ display: 'flex', gap: '6px' }}
-                                        onSubmit={async (e) => {
-                                            e.preventDefault();
-                                            if (!newProjectName.trim()) return;
-                                            try {
-                                                const d = await apiFetch('/api/projects', {
-                                                    method: 'POST',
-                                                    body: JSON.stringify({ name: newProjectName.trim() }),
-                                                }, currentToken);
-                                                if (d.success && d.projectId) {
-                                                    loadStudioState(d.projectId);
-                                                    setNewProjectName('');
-                                                    setShowProjectDropdown(false);
-                                                    showNotice('Project created.');
-                                                }
-                                            } catch (err) {
-                                                if (err.status !== 401) setError(err.message || 'Project creation failed.');
-                                            }
+                                    <button
+                                        type="button"
+                                        className="st-project-new-btn"
+                                        onClick={() => { setShowProjectDropdown(false); setShowNewProjectModal(true); }}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+                                            padding: '9px 12px', border: 'none', borderRadius: '7px',
+                                            background: 'transparent', color: '#7c3aed', fontSize: '0.84rem',
+                                            fontWeight: 700, cursor: 'pointer', textAlign: 'left'
                                         }}
                                     >
-                                        <input
-                                            type="text"
-                                            value={newProjectName}
-                                            onChange={e => setNewProjectName(e.target.value)}
-                                            placeholder="Project name..."
-                                            autoFocus
-                                            style={{
-                                                flex: 1, padding: '8px 10px', border: '1px solid #e2e8f0',
-                                                borderRadius: '7px', fontSize: '0.82rem', outline: 'none'
-                                            }}
-                                            onFocus={e => e.target.style.borderColor = '#7c3aed'}
-                                            onBlur={e => e.target.style.borderColor = '#e2e8f0'}
-                                        />
-                                        <button
-                                            type="submit"
-                                            style={{
-                                                padding: '8px 14px', background: '#7c3aed', color: '#fff',
-                                                border: 'none', borderRadius: '7px', fontSize: '0.82rem',
-                                                fontWeight: 700, cursor: 'pointer'
-                                            }}
-                                        >
-                                            Create
-                                        </button>
-                                    </form>
+                                        <I d="M12 5v14M5 12h14" s={14} /> New project…
+                                    </button>
                                 </div>
                             </div>
                         )}

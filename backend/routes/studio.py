@@ -39,43 +39,48 @@ def get_studio_state(project_id=1, user_id=None):
         "SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC",
         (user["id"],)
     ).fetchall())
-    if not projects:
-        # Auto-create a default project for this user
-        now_iso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        conn.execute(
-            "INSERT INTO projects (name, status, thumbnail_url, hero_image_url, updated_at, user_id) VALUES ('My First Project', 'Draft', '', '', ?, ?)",
-            (now_iso, user["id"])
-        )
-        conn.commit()
-        projects = rows_to_dicts(conn.execute(
-            "SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC",
-            (user["id"],)
-        ).fetchall())
     project_row = conn.execute("SELECT * FROM projects WHERE id = ? AND user_id = ?", (project_id, user["id"])).fetchone()
-    project = dict(project_row) if project_row else projects[0]
-    variations = rows_to_dicts(conn.execute(
-        "SELECT * FROM pattern_variations WHERE project_id = ? AND deleted_at IS NULL ORDER BY id",
-        (project["id"],),
-    ).fetchall())
-    metrics_row = conn.execute("SELECT * FROM project_metrics WHERE project_id = ?", (project["id"],)).fetchone()
-    if not metrics_row:
-        conn.execute("INSERT INTO project_metrics (project_id) VALUES (?)", (project["id"],))
+    project = dict(project_row) if project_row else (projects[0] if projects else None)
+    # No project at all: the client shows a locked "name your first project" dialog. Nothing is
+    # created here — auto-creating is how nameless "My First Project" rows piled up. The rest of
+    # the payload gets neutral defaults so the client never sees a half-built shape.
+    has_project = project is not None
+    if has_project:
+        variations = rows_to_dicts(conn.execute(
+            "SELECT * FROM pattern_variations WHERE project_id = ? AND deleted_at IS NULL ORDER BY id",
+            (project["id"],),
+        ).fetchall())
         metrics_row = conn.execute("SELECT * FROM project_metrics WHERE project_id = ?", (project["id"],)).fetchone()
-    metrics = dict(metrics_row)
+        if not metrics_row:
+            conn.execute("INSERT INTO project_metrics (project_id) VALUES (?)", (project["id"],))
+            metrics_row = conn.execute("SELECT * FROM project_metrics WHERE project_id = ?", (project["id"],)).fetchone()
+        metrics = dict(metrics_row)
 
-    health_row = conn.execute("SELECT * FROM pattern_health WHERE project_id = ?", (project["id"],)).fetchone()
-    if not health_row:
-        conn.execute("INSERT INTO pattern_health (project_id, score, label, tile_seamless, color_balance, print_readiness, resolution, note) VALUES (?, 0, 'No Data', 0, 0, 0, 0, '')", (project["id"],))
         health_row = conn.execute("SELECT * FROM pattern_health WHERE project_id = ?", (project["id"],)).fetchone()
-    health = dict(health_row)
+        if not health_row:
+            conn.execute("INSERT INTO pattern_health (project_id, score, label, tile_seamless, color_balance, print_readiness, resolution, note) VALUES (?, 0, 'No Data', 0, 0, 0, 0, '')", (project["id"],))
+            health_row = conn.execute("SELECT * FROM pattern_health WHERE project_id = ?", (project["id"],)).fetchone()
+        health = dict(health_row)
 
-    controls_row = conn.execute("SELECT * FROM project_controls WHERE project_id = ?", (project["id"],)).fetchone()
-    if not controls_row:
-        now_iso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        conn.execute("INSERT INTO project_controls (project_id, grid_size, scale, rotation, repeat_type, color_cleanup, edge_match, background_clean, export_format, export_dpi, h_brush, v_brush, print_width, updated_at) VALUES (?, 2, 100, 0, 'block', 1, 1, 0, 'PNG', 300, 8, 8, 12, ?)", (project["id"], now_iso))
         controls_row = conn.execute("SELECT * FROM project_controls WHERE project_id = ?", (project["id"],)).fetchone()
-    controls = dict(controls_row)
-    suggestion = conn.execute("SELECT body FROM suggestions WHERE project_id = ? ORDER BY id DESC LIMIT 1", (project["id"],)).fetchone()
+        if not controls_row:
+            now_iso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+            conn.execute("INSERT INTO project_controls (project_id, grid_size, scale, rotation, repeat_type, color_cleanup, edge_match, background_clean, export_format, export_dpi, h_brush, v_brush, print_width, updated_at) VALUES (?, 2, 100, 0, 'block', 1, 1, 0, 'PNG', 300, 8, 8, 12, ?)", (project["id"], now_iso))
+            controls_row = conn.execute("SELECT * FROM project_controls WHERE project_id = ?", (project["id"],)).fetchone()
+        controls = dict(controls_row)
+        suggestion = conn.execute("SELECT body FROM suggestions WHERE project_id = ? ORDER BY id DESC LIMIT 1", (project["id"],)).fetchone()
+    else:
+        variations = []
+        metrics = {"versions": 0, "versions_delta": 0, "exports": 0, "exports_delta": 0,
+                   "ai_generations": 0, "ai_generations_delta": 0, "credits_used": 0, "credits_delta": 0}
+        health = {"score": 0, "label": "No Data", "tile_seamless": 0, "color_balance": 0,
+                  "print_readiness": 0, "resolution": 0, "note": ""}
+        controls = {"grid_size": 2, "scale": 100, "rotation": 0, "repeat_type": "block", "color_cleanup": 1,
+                    "edge_match": 1, "background_clean": 0, "export_format": "PNG", "export_dpi": 300,
+                    "h_brush": 8, "v_brush": 8, "print_width": 12, "print_height": 12, "fabric_width": 54}
+        suggestion = None
+        project = {"id": None, "name": "", "status": "Draft", "thumbnail_url": "", "hero_image_url": "",
+                   "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()}
     conn.close()
 
     try:
@@ -90,7 +95,7 @@ def get_studio_state(project_id=1, user_id=None):
         "name": user["name"], "initials": user["initials"], "plan": user["plan"],
         "creditsUsed": user["credits_used"], "creditsLimit": user["credits_limit"], "resetDays": reset_days,
     })
-    return {
+    payload = {
         "user": user_payload,
         "activeProject": {
             "id": project["id"], "name": project["name"], "status": project["status"],
@@ -128,6 +133,10 @@ def get_studio_state(project_id=1, user_id=None):
                      "fabricWidth": controls.get("fabric_width", 54)},
         "suggestion": suggestion["body"] if suggestion else None,
     }
+    if not has_project:
+        payload["activeProject"] = None
+    payload["needsProject"] = not has_project
+    return payload
 
 
 @bp.route('/api/studio-state')

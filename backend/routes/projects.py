@@ -17,7 +17,13 @@ bp = Blueprint('projects', __name__)
 @login_required
 def create_project():
     data = request.get_json() or {}
-    name = data.get('name', 'New Project')
+    # A project must be named by the user. Defaulting to 'New Project' is how nameless rows
+    # accumulated; the client's dialog enforces this too, but the API is the boundary.
+    name = str(data.get('name') or '').strip()
+    if not name:
+        return jsonify({'success': False, 'error': 'Project name is required'}), 400
+    if len(name) > 80:
+        return jsonify({'success': False, 'error': 'Project name must be 80 characters or fewer'}), 400
     user_id = g.current_user['id']
     conn = db()
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()

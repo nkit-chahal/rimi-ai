@@ -1,6 +1,7 @@
 const enIN = {
   appName: 'RIMI AI',
   nav: {
+    home: 'Home',
     dashboard: 'Pipeline Studio',
     pattern: 'Pattern Extraction',
     seamless: 'Make Seamless',
