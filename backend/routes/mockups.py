@@ -10,7 +10,11 @@ from replicate_client import run_model
 from io import BytesIO
 from scipy import ndimage
 from flask import Blueprint, request, jsonify, g
+import json
+
 from middleware import login_required, project_access_from_payload
+from jobs import enqueue_or_run
+from workers import run_generation_job
 from file_access import readable_path_or_none
 
 from config import UPLOAD_DIR, RESULTS_DIR, groq_client, GROQ_VISION_MODEL
@@ -329,16 +333,77 @@ def generate_mockups_batch():
     if not pattern_filename: return jsonify({"error": "patternFilename is required"}), 400
     if not products: return jsonify({"error": "products must be a non-empty list"}), 400
 
+    worker_payload = {
+        **data,
+        "patternFilename": pattern_filename,
+        "userId": user_id,
+        "projectId": project_id,
+        "toolKey": "generate-mockups-batch",
+    }
+
+    # A batch is one Replicate call per product, so it runs for minutes. Held in a request it
+    # occupies one of only eight web slots for that whole time; on the queue the browser polls
+    # for progress instead and the worker stays free.
+    if data.get("async"):
+        job = enqueue_or_run(
+            "generate-mockups-batch",
+            user_id,
+            project_id,
+            worker_payload,
+            run_generation_job,
+            json.dumps(worker_payload),
+        )
+        return jsonify({"success": True, **job})
+
+    try:
+        result = execute_mockups_batch(worker_payload)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 403
+    except Exception as exc:
+        print(f"  [Batch Mockup] Error: {exc}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"Failed to generate batch mockups: {str(exc)}"}), 500
+
+    return jsonify(result), (200 if result.get("success") else 500)
+
+
+def execute_mockups_batch(payload, on_progress=None):
+    """Generate one mockup per product.
+
+    Takes a plain payload so it runs identically inside a request or on an RQ worker.
+    Raises ValueError when the caller cannot afford the batch; every other failure refunds
+    the reservation and propagates.
+    """
+    def progress(pct, stage):
+        if on_progress:
+            on_progress(pct, stage)
+
+    pattern_filename = os.path.basename(payload.get("patternFilename", "") or "")
+    products = payload.get("products", [])
+    category = payload.get("category", "")
+    custom_prompt = payload.get("customPrompt", "")
+    background = payload.get("background", "studio")
+    shot_style = payload.get("shotStyle", "editorial")
+    fabric_texture = payload.get("fabricTexture", "cotton")
+    product_reference_data_uri = payload.get("productReferenceDataUri")
+    mask_data_uri = payload.get("maskDataUri")
+    project_id = int(payload.get("projectId") or 0)
+    user_id = int(payload.get("userId") or 0)
+
+    progress(5, "Reserving credits")
     required_credits = credit_requirement('mappings', 67, len(products))
     ok, err = reserve_credits_or_error(user_id, project_id, required_credits, 'generation', len(products))
     if not ok:
-        return jsonify(err), 403
+        raise ValueError(err["error"])
 
     credits_settled = False
     try:
+        progress(10, "Loading pattern")
         pattern_img = _load_pattern_image(pattern_filename)
         mockups, errors = [], []
         total_credits = 0
+        done = 0
 
         def _worker(product_type: str) -> dict:
             print(f"  [Batch Mockup] Generating: {product_type}")
@@ -360,6 +425,8 @@ def generate_mockups_batch():
                 except Exception as exc:
                     print(f"  [Batch Mockup] Failed for '{product_type}': {exc}")
                     errors.append({"productType": product_type, "error": str(exc)})
+                done += 1
+                progress(10 + int(85 * done / max(1, len(products))), f"{done} of {len(products)} products")
 
         if mockups:
             adjust_reserved_credits(user_id, project_id, required_credits, total_credits, note='Batch mockups partial refund')
@@ -367,29 +434,27 @@ def generate_mockups_batch():
             for m in mockups:
                 log_export(
                     project_id=project_id, filename=m["mockupUrl"].split("/")[-1], input_filename=pattern_filename, tool_type="Mappings",
-                    settings_dict={"productType": m["productType"], "category": category, "batch": True, "texture": fabric_texture}
+                    settings_dict={"productType": m["productType"], "category": category, "batch": True, "texture": fabric_texture},
+                    user_id=user_id,
                 )
 
         if not mockups:
             refund_credits(user_id, project_id, required_credits, note='Batch mockups produced no results')
             credits_settled = True
-            message = errors[0]["error"] if errors else "No mockups were generated"
-            return jsonify({
+            return {
                 "success": False,
-                "error": message,
+                "error": errors[0]["error"] if errors else "No mockups were generated",
                 "mockups": [],
                 "errors": errors,
                 **get_updated_credits(user_id),
-            }), 500
+            }
 
-        return jsonify({
+        progress(100, "Complete")
+        return {
             "success": True, "mockups": mockups, "errors": errors, **get_updated_credits(user_id)
-        })
+        }
 
-    except Exception as exc:
+    except Exception:
         if not credits_settled:
             refund_credits(user_id, project_id, required_credits, note='Batch mockups failed')
-        print(f"  [Batch Mockup] Error: {exc}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"success": False, "error": f"Failed to generate batch mockups: {str(exc)}"}), 500
+        raise

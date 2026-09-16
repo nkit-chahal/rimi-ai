@@ -1,6 +1,7 @@
 """RQ worker entrypoints for long-running AI jobs."""
 from job_runners import (
     run_edit_layer_job,
+    run_mockups_batch_job,
     run_extract_design_single_job,
     run_image_layers_job,
     run_inpaint_layer_job,
@@ -15,6 +16,8 @@ def run_generation_job(job_id, payload_json: str):
         return run_extract_design_single_job(job_id, payload_json)
     if tool == "make-seamless":
         return run_make_seamless_job(job_id, payload_json)
+    if tool == "generate-mockups-batch":
+        return run_mockups_batch_job(job_id, payload_json)
     if tool == "image-layers":
         return run_image_layers_job(job_id, payload_json)
     if tool == "edit-layer":

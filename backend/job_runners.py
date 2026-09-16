@@ -87,6 +87,18 @@ def run_extract_design_single_job(job_id, payload_json):
         raise
 
 
+def run_mockups_batch_job(job_id, payload_json):
+    """Background worker for /api/generate-mockups-batch."""
+    from routes.mockups import execute_mockups_batch
+
+    payload = json.loads(payload_json)
+
+    def on_progress(pct, stage):
+        _progress(job_id, pct, stage)
+
+    return execute_mockups_batch(payload, on_progress=on_progress)
+
+
 def run_make_seamless_job(job_id, payload_json):
     """Background worker for /api/make-seamless."""
     from services.make_seamless import execute_make_seamless

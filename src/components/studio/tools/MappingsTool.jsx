@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { I } from '../shared/StudioIcons';
-import { API, apiFetch, forceDownload } from '../shared/helpers';
+import { API, apiFetch, forceDownload, runAsyncJob } from '../shared/helpers';
 import MediaImg from '../shared/MediaImg';
 
 import { isImageFile } from '../shared/imageUpload';
@@ -288,14 +288,11 @@ export default function MappingsTool(props) {
         setMappingResults([]);
         setError('');
 
-        // The backend fans products out over a 3-worker pool at roughly 11s each, so a
-        // fixed 30s client timeout aborted 4+ product batches while the server kept
-        // generating (and charging). Budget per wave, with headroom for slow models.
-        const productCount = mappingSelectedProducts.size;
-        const mockupWaves = Math.ceil(productCount / 3);
-        const mockupTimeoutMs = Math.min(900000, Math.max(120000, mockupWaves * 30000 + 60000));
-
-        const trigger = async () => {
+        // A batch is one model call per product and runs for minutes. It goes on the job
+        // queue rather than being held open as a request: the server answers immediately
+        // with a job id and this polls for progress, so a long batch no longer occupies one
+        // of the few web workers for its whole duration.
+        const trigger = async (reportProgress) => {
             const payload = {
                 patternFilename: mappingPrint.filename,
                 products: Array.from(mappingSelectedProducts),
@@ -311,11 +308,10 @@ export default function MappingsTool(props) {
             if (mappingCustomMask) payload.maskDataUri = mappingCustomMask;
 
             try {
-                const d = await apiFetch('/api/generate-mockups-batch', {
-                    method: 'POST',
-                    body: JSON.stringify(payload),
-                    timeoutMs: mockupTimeoutMs,
-                }, currentToken);
+                const d = await runAsyncJob('/api/generate-mockups-batch', payload, currentToken, {
+                    onJobCreated: (jobId) => reportProgress?.(1, 'Queued', { jobId }),
+                    onProgress: (job) => reportProgress?.(job.progressPct, job.stage, { jobId: job.id }),
+                });
 
                 if (d.success && d.mockups?.length) {
                     setMappingResults(d.mockups);
