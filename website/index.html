@@ -3,327 +3,420 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RIMI AI — AI studio for textile and surface design</title>
-<meta name="description" content="RIMI AI turns a reference image into print-ready textile artwork: seamless repeats, colorways, vector files, product mockups and tech packs.">
+<title>RIMI AI — The AI studio for textile design</title>
+<meta name="description" content="From a reference image to print-ready textile artwork: seamless repeats, Pantone-matched colourways, vector files, product mockups and tech packs.">
+<meta name="theme-color" content="#0B0910">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  /* Palette lifted from the product's own tokens.css so the page and the studio feel related. */
-  :root{
-    --bg:#F3F0EC; --bg2:#EBE7E2; --card:#FAF8F5;
-    --text:#1C1917; --text2:#44403C; --muted:#78716C;
-    --primary:#8B5CF6; --primary-dark:#6D3EE8;
-    --border:rgba(68,64,60,.14); --border-soft:rgba(68,64,60,.08);
-    --maxw:1120px;
-    --font:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  }
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);
-       font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
-  img{max-width:100%;display:block}
-  .wrap{max-width:var(--maxw);margin:0 auto;padding-inline:24px}
-  .eyebrow{font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-           color:var(--muted);margin:0 0 14px}
-  h1,h2,h3{letter-spacing:-.02em;margin:0}
-  h2{font-size:clamp(1.6rem,3.2vw,2.3rem);font-weight:800;line-height:1.2}
-  h3{font-size:1.02rem;font-weight:700}
-  p{margin:0}
-  section{padding-block:clamp(56px,8vw,96px)}
-  .lede{color:var(--text2);font-size:1.05rem;max-width:62ch;margin-top:14px}
-  .note{margin-top:18px;font-size:.84rem;color:var(--muted)}
+/* ============================================================================
+   Three-colour system, taken from the product's own src/styles/tokens.css:
+     violet  #8B5CF6  primary  — brand, actions, links
+     coral   #F43F5E  warm     — emphasis, highlights
+     emerald #10B981  cool     — production / positive signals
+   anchored on ink #0B0910 and paper #F3F0EC. Every accent below is one of the
+   three; no fourth hue is introduced anywhere on the page.
+   ========================================================================= */
+:root{
+  --violet:#8B5CF6; --violet-lt:#A78BFA; --violet-dk:#6D3EE8;
+  --coral:#F43F5E;  --coral-lt:#FB7185;
+  --emerald:#10B981;--emerald-lt:#34D399; --emerald-dk:#0F9D76;
 
-  header{position:sticky;top:0;z-index:20;background:rgba(243,240,236,.88);
-         backdrop-filter:blur(10px);border-bottom:1px solid var(--border-soft)}
-  .nav{display:flex;align-items:center;gap:28px;height:64px}
-  .logo{font-weight:800;font-size:1.06rem;letter-spacing:-.03em;text-decoration:none;color:inherit}
-  .logo span{color:var(--primary)}
-  .nav nav{margin-left:auto;display:flex;gap:26px}
-  .nav nav a{color:var(--text2);text-decoration:none;font-size:.9rem;font-weight:600}
-  .nav nav a:hover{color:var(--text)}
-  .btn{display:inline-flex;align-items:center;justify-content:center;padding:.72rem 1.3rem;
-       border-radius:10px;font-weight:700;font-size:.9rem;text-decoration:none;
-       border:1px solid transparent;transition:transform .12s ease,background .12s ease}
-  .btn-primary{background:var(--primary);color:#fff;box-shadow:0 6px 18px rgba(139,92,246,.24)}
-  .btn-primary:hover{background:var(--primary-dark);transform:translateY(-1px)}
-  .btn-ghost{border-color:var(--border);color:var(--text);background:var(--card)}
-  .btn-ghost:hover{border-color:var(--primary);color:var(--primary)}
+  --ink:#0B0910; --ink-2:#14101C; --ink-3:#1E1830;
+  --paper:#F3F0EC; --card:#FAF8F5;
 
-  .hero{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center;
-        padding-block:clamp(48px,7vw,84px)}
-  .hero h1{font-size:clamp(2.1rem,4.6vw,3.35rem);font-weight:800;line-height:1.08}
-  .hero .lede{font-size:1.12rem;margin-top:20px}
-  .hero-cta{display:flex;gap:12px;margin-top:30px;flex-wrap:wrap}
-  .stage{position:relative;border-radius:18px;overflow:hidden;border:1px solid var(--border);
-         box-shadow:0 22px 50px rgba(28,25,23,.09);background:var(--card);aspect-ratio:1/1;margin:0}
-  .stage img{width:100%;height:100%;object-fit:cover}
-  .stage figcaption{position:absolute;left:14px;bottom:14px;background:rgba(250,248,245,.94);
-             border:1px solid var(--border);border-radius:999px;padding:.34rem .78rem;
-             font-size:.74rem;font-weight:700;color:var(--text2)}
+  --t1:#1C1917; --t2:#44403C; --t3:#78716C;
+  --on-dark:#F7F4F2; --on-dark-2:rgba(247,244,242,.66); --on-dark-3:rgba(247,244,242,.42);
+  --line:rgba(68,64,60,.13); --line-dark:rgba(247,244,242,.12);
 
-  .strip{border-block:1px solid var(--border-soft);background:var(--bg2)}
-  .strip .wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:28px;padding-block:30px}
-  .stat b{display:block;font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
-  .stat span{font-size:.82rem;color:var(--muted);font-weight:600}
+  --maxw:1180px;
+  --font:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:16px; --r-lg:24px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--t1);font-family:var(--font);
+     font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{max-width:100%;display:block}
+a{color:inherit}
+.wrap{max-width:var(--maxw);margin:0 auto;padding-inline:24px}
+h1,h2,h3{margin:0;letter-spacing:-.035em;line-height:1.05;font-weight:800}
+h2{font-size:clamp(2rem,4.4vw,3.2rem)}
+h3{font-size:1.06rem;letter-spacing:-.02em;line-height:1.3}
+p{margin:0}
+section{padding-block:clamp(72px,9vw,124px);position:relative}
 
-  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:38px}
-  .step{background:var(--card);border:1px solid var(--border-soft);border-radius:14px;padding:22px}
-  .step b{display:block;font-size:.72rem;letter-spacing:.1em;color:var(--primary);
-          font-weight:800;margin-bottom:9px}
-  .step p{font-size:.9rem;color:var(--text2);margin-top:6px}
+.eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:.72rem;font-weight:800;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--t3);margin-bottom:20px}
+.eyebrow::before{content:"";width:22px;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,var(--violet),var(--coral))}
+.on-ink .eyebrow{color:var(--on-dark-3)}
+.lede{color:var(--t2);font-size:1.08rem;max-width:60ch;margin-top:20px;line-height:1.65}
+.on-ink .lede{color:var(--on-dark-2)}
 
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
-  .card{background:var(--card);border:1px solid var(--border-soft);border-radius:14px;padding:24px;
-        transition:border-color .15s ease,box-shadow .15s ease}
-  .card:hover{border-color:rgba(139,92,246,.35);box-shadow:0 10px 26px rgba(28,25,23,.06)}
-  .card h3{margin-bottom:8px}
-  .card p{font-size:.9rem;color:var(--text2)}
-  .card .kicker{font-size:.7rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
-                color:var(--muted);display:block;margin-bottom:12px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  padding:.85rem 1.5rem;border-radius:12px;font-weight:700;font-size:.92rem;
+  text-decoration:none;border:1px solid transparent;cursor:pointer;
+  transition:transform .14s cubic-bezier(.2,0,0,1),background .14s,border-color .14s}
+.btn-primary{background:var(--violet);color:#fff;box-shadow:0 8px 24px -6px rgba(139,92,246,.6)}
+.btn-primary:hover{background:var(--violet-dk);transform:translateY(-2px)}
+.btn-line{border-color:var(--line);background:var(--card);color:var(--t1)}
+.btn-line:hover{border-color:var(--violet);color:var(--violet-dk)}
+.on-ink .btn-line{border-color:var(--line-dark);background:rgba(247,244,242,.06);color:var(--on-dark)}
+.on-ink .btn-line:hover{border-color:var(--violet-lt);background:rgba(139,92,246,.14)}
 
-  .shots{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:38px}
-  .shot{border-radius:14px;overflow:hidden;border:1px solid var(--border);background:var(--card);margin:0}
-  .shot img{aspect-ratio:1/1;object-fit:cover}
-  .shot figcaption{padding:13px 16px;font-size:.82rem;color:var(--text2);font-weight:600;
-                   border-top:1px solid var(--border-soft)}
+header{position:sticky;top:0;z-index:50;background:rgba(11,9,16,.72);
+  backdrop-filter:blur(16px) saturate(140%);border-bottom:1px solid var(--line-dark)}
+.nav{display:flex;align-items:center;gap:30px;height:68px}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--on-dark);
+  font-weight:800;font-size:1.08rem;letter-spacing:-.04em}
+.logo i{width:26px;height:26px;border-radius:8px;display:block;
+  background:linear-gradient(135deg,var(--violet) 0%,var(--coral) 100%)}
+.nav menu{margin:0;padding:0;margin-left:auto;display:flex;gap:28px;list-style:none}
+.nav menu a{color:var(--on-dark-2);text-decoration:none;font-size:.9rem;font-weight:600}
+.nav menu a:hover{color:var(--on-dark)}
 
-  .tech{background:var(--bg2);border-block:1px solid var(--border-soft)}
-  .tech-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:52px;align-items:start}
-  .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:26px}
-  .chip{background:var(--card);border:1px solid var(--border);border-radius:999px;
-        padding:.44rem .9rem;font-size:.82rem;font-weight:600;color:var(--text2)}
+.on-ink{background:var(--ink);color:var(--on-dark)}
+.on-ink h2,.on-ink h3{color:#fff}
+/* One violet and one coral bloom. Static — the page runs no idle animation. */
+.glow{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.glow::before,.glow::after{content:"";position:absolute;border-radius:50%;filter:blur(110px)}
+.glow::before{width:620px;height:620px;top:-220px;left:-140px;background:rgba(139,92,246,.42)}
+.glow::after{width:520px;height:520px;bottom:-260px;right:-120px;background:rgba(244,63,94,.26)}
+/* The product's own output used as page texture — it tiles because it is a real repeat. */
+.tex{position:absolute;inset:0;background-image:url("assets/deco.webp");background-size:340px;
+  opacity:.07;pointer-events:none;mix-blend-mode:luminosity}
 
-  .plans{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:38px}
-  .plan{background:var(--card);border:1px solid var(--border-soft);border-radius:14px;padding:24px}
-  .plan.featured{border-color:var(--primary);box-shadow:0 12px 30px rgba(139,92,246,.12)}
-  /* Every card reserves the badge's slot at a fixed height, so plan names and prices sit on one
-     line across the row even though only one card carries a badge. */
-  .plan .badge,
-  .plan:not(.featured)::before{display:block;height:24px;margin-bottom:12px}
-  .plan:not(.featured)::before{content:""}
-  .plan .badge{width:fit-content;background:var(--primary);color:#fff;font-size:.66rem;
-               font-weight:800;letter-spacing:.08em;text-transform:uppercase;line-height:24px;
-               padding-inline:.6rem;border-radius:999px}
-  .plan h3{color:var(--muted);text-transform:uppercase;letter-spacing:.08em;
-           font-size:.72rem;font-weight:800}
-  .price{font-size:1.85rem;font-weight:800;letter-spacing:-.03em;margin:10px 0 0}
-  .credits{font-size:.82rem;font-weight:600;color:var(--muted);margin-top:2px}
-  .plan ul{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:9px}
-  .plan li{font-size:.85rem;color:var(--text2);padding-left:20px;position:relative}
-  .plan li::before{content:"";position:absolute;left:0;top:.52em;width:9px;height:9px;
-                   border-radius:50%;background:rgba(139,92,246,.22);
-                   box-shadow:inset 0 0 0 2px var(--primary)}
+.hero{padding-block:clamp(72px,10vw,132px) 0}
+.hero .wrap{position:relative;z-index:2}
+.hero h1{font-size:clamp(2.6rem,6.6vw,5.1rem);max-width:15ch}
+.hero h1 em{font-style:normal;
+  background:linear-gradient(100deg,var(--violet-lt) 0%,var(--coral-lt) 62%,var(--emerald-lt) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.hero .lede{font-size:1.16rem;max-width:56ch}
+.hero-cta{display:flex;gap:13px;margin-top:34px;flex-wrap:wrap}
+.hero-meta{display:flex;gap:26px;flex-wrap:wrap;margin-top:30px;
+  font-size:.83rem;color:var(--on-dark-3);font-weight:600}
+.hero-meta b{color:var(--on-dark-2);font-weight:700}
 
-  .road{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:34px}
-  .road .card{border-style:dashed;border-color:var(--border)}
-  .tag-soon{display:inline-block;font-size:.66rem;font-weight:800;letter-spacing:.08em;
-            text-transform:uppercase;color:var(--muted);border:1px solid var(--border);
-            border-radius:999px;padding:.2rem .58rem;margin-left:8px;vertical-align:middle}
+.fan{position:relative;z-index:2;margin-top:clamp(56px,7vw,88px);display:flex;
+  justify-content:center;padding-bottom:clamp(60px,8vw,100px)}
+.fan figure{margin:0;width:min(26vw,270px);aspect-ratio:1;border-radius:var(--r-lg);
+  overflow:hidden;border:1px solid rgba(247,244,242,.16);
+  box-shadow:0 34px 70px -22px rgba(0,0,0,.8);background:var(--ink-3)}
+.fan figure:nth-child(1){transform:rotate(-7deg) translateY(16px)}
+.fan figure:nth-child(2){transform:rotate(-2.5deg) translateY(-6px);z-index:2;margin-inline:-26px}
+.fan figure:nth-child(3){transform:rotate(3deg) translateY(10px);z-index:3;margin-right:-26px}
+.fan figure:nth-child(4){transform:rotate(8deg) translateY(28px)}
+.fan img{width:100%;height:100%;object-fit:cover}
 
-  .cta{background:var(--text);color:#F6F4F1;border-radius:20px;
-       padding:clamp(36px,5vw,58px);text-align:center}
-  .cta h2{color:#fff}
-  .cta p{color:rgba(246,244,241,.76);margin:14px auto 0;max-width:52ch}
-  .cta .btn-primary{margin-top:28px}
+/* Marquee shows more output than fits on screen. Pauses on hover and under reduced motion. */
+.marq{background:var(--ink-2);border-block:1px solid var(--line-dark);
+  padding-block:22px;overflow:hidden}
+.marq-label{text-align:center;font-size:.72rem;font-weight:800;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--on-dark-3);margin-bottom:20px}
+.marq-track{display:flex;gap:16px;width:max-content;animation:slide 46s linear infinite}
+.marq:hover .marq-track{animation-play-state:paused}
+.marq img{width:150px;height:150px;border-radius:12px;object-fit:cover;
+  border:1px solid var(--line-dark)}
+@keyframes slide{to{transform:translateX(-50%)}}
 
-  footer{border-top:1px solid var(--border-soft);padding-block:30px;color:var(--muted);font-size:.83rem}
-  .foot{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:20px}
+.stat{padding:26px 24px;border-radius:var(--r);background:var(--card);
+  border:1px solid var(--line);border-top:3px solid var(--violet)}
+.stat:nth-child(2){border-top-color:var(--coral)}
+.stat:nth-child(3){border-top-color:var(--emerald)}
+.stat b{display:block;font-size:2.15rem;font-weight:800;letter-spacing:-.045em;line-height:1}
+.stat span{display:block;margin-top:9px;font-size:.84rem;color:var(--t3);font-weight:600}
 
-  @media(max-width:900px){
-    .hero,.tech-grid{grid-template-columns:1fr;gap:36px}
-    .grid,.shots,.plans,.steps,.strip .wrap,.road{grid-template-columns:repeat(2,1fr)}
-    .nav nav{display:none}
-  }
-  @media(max-width:560px){
-    .grid,.shots,.plans,.steps,.strip .wrap,.road{grid-template-columns:1fr}
-  }
-  @media(prefers-reduced-motion:reduce){
-    *{transition:none !important;animation:none !important}
-    html{scroll-behavior:auto}
-  }
+.flow{display:grid;grid-template-columns:repeat(4,1fr);margin-top:52px;
+  border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:var(--card)}
+.flow > div{padding:30px 26px;border-right:1px solid var(--line)}
+.flow > div:last-child{border-right:0}
+.flow b{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
+  border-radius:10px;font-size:.82rem;font-weight:800;margin-bottom:16px;
+  background:rgba(139,92,246,.12);color:var(--violet-dk)}
+.flow > div:nth-child(2) b{background:rgba(244,63,94,.12);color:var(--coral)}
+.flow > div:nth-child(3) b{background:rgba(16,185,129,.13);color:var(--emerald-dk)}
+.flow p{font-size:.9rem;color:var(--t2);margin-top:9px}
+
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-top:52px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:26px;
+  transition:border-color .16s,transform .16s cubic-bezier(.2,0,0,1);position:relative;
+  overflow:hidden}
+.tile:hover{border-color:rgba(139,92,246,.42);transform:translateY(-3px)}
+.tile p{font-size:.9rem;color:var(--t2);margin-top:9px}
+.tile .kick{display:block;font-size:.68rem;font-weight:800;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--violet-dk);margin-bottom:13px}
+.tile.warm .kick{color:var(--coral)}
+.tile.cool .kick{color:var(--emerald-dk)}
+.c2{grid-column:span 2} .c3{grid-column:span 3}
+.tile.art{color:var(--on-dark);border-color:transparent;min-height:278px;display:flex;
+  flex-direction:column;justify-content:flex-end}
+.tile.art .bg{position:absolute;inset:0;background-size:cover;background-position:center}
+.tile.art .scrim{position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(11,9,16,.10) 0%,rgba(11,9,16,.88) 72%)}
+.tile.art > *{position:relative;z-index:2}
+.tile.art h3{color:#fff}
+.tile.art p{color:var(--on-dark-2)}
+.tile.art .kick{color:var(--violet-lt)}
+
+.split{display:grid;grid-template-columns:1.05fr .95fr;gap:60px;align-items:start;
+  position:relative;z-index:2}
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+.chip{border:1px solid var(--line-dark);background:rgba(247,244,242,.05);border-radius:999px;
+  padding:.48rem 1rem;font-size:.82rem;font-weight:600;color:var(--on-dark-2)}
+.pillars{display:grid;gap:14px}
+.pillar{border:1px solid var(--line-dark);border-radius:var(--r);padding:24px;
+  background:rgba(247,244,242,.04);border-left:3px solid var(--violet)}
+.pillar:nth-child(2){border-left-color:var(--coral)}
+.pillar:nth-child(3){border-left-color:var(--emerald)}
+.pillar p{color:var(--on-dark-2);font-size:.9rem;margin-top:8px}
+
+.plans{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:52px}
+.plan{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:28px;
+  display:flex;flex-direction:column}
+.plan.hot{border-color:var(--violet);box-shadow:0 20px 48px -18px rgba(139,92,246,.45)}
+/* Every card reserves the badge slot, so names and prices sit on one line across the row. */
+.plan .badge,.plan:not(.hot)::before{display:block;height:26px;margin-bottom:14px}
+.plan:not(.hot)::before{content:""}
+.plan .badge{width:fit-content;line-height:26px;padding-inline:.7rem;border-radius:999px;
+  background:linear-gradient(100deg,var(--violet),var(--coral));color:#fff;font-size:.66rem;
+  font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.plan h3{font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--t3)}
+.price{font-size:2.15rem;font-weight:800;letter-spacing:-.045em;margin-top:12px;line-height:1}
+.credits{font-size:.84rem;font-weight:600;color:var(--t3);margin-top:6px}
+.plan ul{list-style:none;margin:20px 0 0;padding:0;display:grid;gap:11px}
+.plan li{font-size:.86rem;color:var(--t2);padding-left:24px;position:relative}
+.plan li::before{content:"";position:absolute;left:0;top:.46em;width:12px;height:12px;
+  border-radius:4px;background:rgba(139,92,246,.16);box-shadow:inset 0 0 0 1.5px var(--violet)}
+.plan.hot li::before{background:rgba(244,63,94,.14);box-shadow:inset 0 0 0 1.5px var(--coral)}
+
+.road{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:44px}
+.road .tile{border-style:dashed}
+.soon{display:inline-block;font-size:.64rem;font-weight:800;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--emerald-dk);background:rgba(16,185,129,.12);
+  border-radius:999px;padding:.24rem .66rem;margin-left:10px;vertical-align:middle}
+
+.cta{position:relative;overflow:hidden;border-radius:28px;padding:clamp(48px,6.5vw,80px);
+  text-align:center;background:var(--ink);color:var(--on-dark)}
+.cta h2{color:#fff;max-width:17ch;margin-inline:auto}
+.cta p{color:var(--on-dark-2);margin:20px auto 0;max-width:50ch}
+.cta .btn{margin-top:34px}
+.cta .glow::before{width:520px;height:520px;top:-240px;left:12%}
+.cta .glow::after{width:440px;height:440px;bottom:-220px;right:10%}
+.cta > *{position:relative;z-index:2}
+
+footer{background:var(--ink);color:var(--on-dark-3);padding-block:38px;font-size:.84rem;
+  border-top:1px solid var(--line-dark)}
+.foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+.foot a{color:var(--on-dark-2);text-decoration:none}
+
+/* Reveal each block once as it arrives, then stop. Nothing loops. */
+.rv{opacity:0;transform:translateY(18px);
+  transition:opacity .6s cubic-bezier(.2,0,0,1),transform .6s cubic-bezier(.2,0,0,1)}
+.rv.in{opacity:1;transform:none}
+
+@media(max-width:1000px){
+  .split{grid-template-columns:1fr;gap:44px}
+  .bento{grid-template-columns:repeat(2,1fr)}
+  .c2,.c3{grid-column:span 2}
+  .stats,.plans{grid-template-columns:repeat(2,1fr)}
+  .flow{grid-template-columns:repeat(2,1fr)}
+  .flow > div:nth-child(2){border-right:0}
+  .flow > div:nth-child(1),.flow > div:nth-child(2){border-bottom:1px solid var(--line)}
+  .nav menu{display:none}
+  .fan figure{width:min(40vw,210px)}
+  .fan figure:nth-child(4){display:none}
+}
+@media(max-width:620px){
+  .bento,.stats,.plans,.flow,.road{grid-template-columns:1fr}
+  .c2,.c3{grid-column:span 1}
+  .flow > div{border-right:0;border-bottom:1px solid var(--line)}
+  .flow > div:last-child{border-bottom:0}
+  .fan figure:nth-child(1){display:none}
+  .fan figure{width:min(52vw,210px)}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .marq-track{animation:none}
+  .rv{opacity:1;transform:none;transition:none}
+  *{transition-duration:.01ms !important}
+}
 </style>
 </head>
 <body>
 
 <header>
   <div class="wrap nav">
-    <a class="logo" href="#top">RIMI<span> AI</span></a>
-    <nav>
-      <a href="#what">Product</a>
-      <a href="#tools">Tools</a>
-      <a href="#tech">Technology</a>
-      <a href="#pricing">Pricing</a>
-    </nav>
+    <a class="logo" href="#top"><i></i>RIMI AI</a>
+    <menu>
+      <li><a href="#work">Work</a></li>
+      <li><a href="#studio">Studio</a></li>
+      <li><a href="#tech">Technology</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+    </menu>
     <a class="btn btn-primary" href="#contact">Book a demo</a>
   </div>
 </header>
 
 <main id="top">
 
-  <div class="wrap hero">
-    <div>
-      <p class="eyebrow">AI studio for textile &amp; surface design</p>
-      <h1>From a reference image to print-ready artwork.</h1>
+  <section class="hero on-ink">
+    <div class="glow"></div><div class="tex"></div>
+    <div class="wrap">
+      <span class="eyebrow">AI studio for textile &amp; surface design</span>
+      <h1>From a reference image to <em>print-ready artwork.</em></h1>
       <p class="lede">
-        RIMI AI is a working studio for textile designers. Bring a photograph, a swatch or a
-        sketch — get a true seamless repeat, alternate colourways, vector files, product mockups
-        and a tech pack the mill can actually use.
+        Bring a photograph, a swatch or a sketch. Leave with a true seamless repeat,
+        Pantone-matched colourways, vector files, product mockups and a tech pack the mill
+        can actually work from.
       </p>
       <div class="hero-cta">
         <a class="btn btn-primary" href="#contact">Book a demo</a>
-        <a class="btn btn-ghost" href="#tools">See the tools</a>
+        <a class="btn btn-line" href="#studio">Explore the studio</a>
       </div>
-      <p class="note">Browser-based. Nothing to install. Credits, not seats.</p>
+      <div class="hero-meta">
+        <span><b>15+</b> tools</span>
+        <span><b>7</b> generation models</span>
+        <span><b>31</b> mockup products</span>
+        <span><b>No</b> install</span>
+      </div>
     </div>
-    <figure class="stage">
-      <img src="../public/demo_floral.webp" alt="Watercolour floral print produced in RIMI AI"
-           width="1024" height="1024" decoding="async">
-      <figcaption>Seamless repeat produced in RIMI AI</figcaption>
-    </figure>
+    <div class="fan">
+      <figure><img src="assets/botanical.webp" alt="Watercolour botanical repeat" decoding="async"></figure>
+      <figure><img src="assets/deco.webp" alt="Art-deco geometric repeat" decoding="async"></figure>
+      <figure><img src="assets/bloom.webp" alt="Painterly floral repeat" decoding="async"></figure>
+      <figure><img src="assets/palm.webp" alt="Tropical foliage repeat" decoding="async"></figure>
+    </div>
+  </section>
+
+  <div class="marq" id="work">
+    <p class="marq-label">Every print on this page was generated in RIMI AI</p>
+    <div class="marq-track">
+      <img src="assets/botanical.webp" alt="Botanical repeat" loading="lazy">
+      <img src="assets/deco.webp" alt="Art-deco repeat" loading="lazy">
+      <img src="assets/bloom.webp" alt="Floral repeat" loading="lazy">
+      <img src="assets/blockprint.webp" alt="Block print repeat" loading="lazy">
+      <img src="assets/palm.webp" alt="Tropical repeat" loading="lazy">
+      <img src="assets/line.webp" alt="Line floral repeat" loading="lazy">
+      <img src="assets/botanical.webp" alt="" aria-hidden="true" loading="lazy">
+      <img src="assets/deco.webp" alt="" aria-hidden="true" loading="lazy">
+      <img src="assets/bloom.webp" alt="" aria-hidden="true" loading="lazy">
+      <img src="assets/blockprint.webp" alt="" aria-hidden="true" loading="lazy">
+      <img src="assets/palm.webp" alt="" aria-hidden="true" loading="lazy">
+      <img src="assets/line.webp" alt="" aria-hidden="true" loading="lazy">
+    </div>
   </div>
 
-  <div class="strip">
-    <div class="wrap">
+  <section class="wrap">
+    <div class="rv">
+      <span class="eyebrow">The workflow</span>
+      <h2>Four steps, one browser tab</h2>
+      <p class="lede">
+        Textile design normally spans four or five applications and a great deal of waiting.
+        RIMI AI covers the whole path, from first idea to the file a mill receives.
+      </p>
+    </div>
+    <div class="flow rv">
+      <div><b>01</b><h3>Capture</h3>
+        <p>Upload a photo, scan or swatch — or describe the print and generate directions.</p></div>
+      <div><b>02</b><h3>Build the repeat</h3>
+        <p>Extract a flat tile, heal the seams, and check the repeat at true fabric scale.</p></div>
+      <div><b>03</b><h3>Develop</h3>
+        <p>Alternate colourways against Pantone, vectorise for screen print, isolate motifs.</p></div>
+      <div><b>04</b><h3>Hand off</h3>
+        <p>Product mockups, 3D garment preview, and a tech pack carrying the specification.</p></div>
+    </div>
+    <div class="stats rv">
       <div class="stat"><b>15+</b><span>Studio tools</span></div>
       <div class="stat"><b>31</b><span>Mockup products</span></div>
       <div class="stat"><b>7</b><span>Generation models</span></div>
       <div class="stat"><b>Seconds</b><span>Per iteration, not days</span></div>
     </div>
-  </div>
-
-  <section id="what" class="wrap">
-    <p class="eyebrow">The workflow</p>
-    <h2>The whole pipeline, in one place</h2>
-    <p class="lede">
-      Textile design normally spans four or five tools and a lot of waiting. RIMI AI covers the
-      path from idea to production file without leaving the browser.
-    </p>
-    <div class="steps">
-      <div class="step">
-        <b>01</b><h3>Capture</h3>
-        <p>Upload a photo, scan or swatch — or describe the print you want and generate options.</p>
-      </div>
-      <div class="step">
-        <b>02</b><h3>Build the repeat</h3>
-        <p>Extract a flat tile, heal the seams, and check the repeat at real fabric scale.</p>
-      </div>
-      <div class="step">
-        <b>03</b><h3>Develop</h3>
-        <p>Alternate colourways against Pantone, vectorise for screen print, isolate motifs.</p>
-      </div>
-      <div class="step">
-        <b>04</b><h3>Present &amp; hand off</h3>
-        <p>Product mockups, 3D garment preview, and a tech pack with the print specification.</p>
-      </div>
-    </div>
   </section>
 
-  <section id="tools" class="wrap" style="padding-top:0">
-    <p class="eyebrow">Capabilities</p>
-    <h2>What is in the studio</h2>
-    <div class="grid">
-      <article class="card">
-        <span class="kicker">Create</span>
-        <h3>Inspirations</h3>
-        <p>Generate print directions from a brief or a reference, across several models at once,
-           and compare them side by side.</p>
+  <section class="wrap" id="studio" style="padding-top:0">
+    <div class="rv">
+      <span class="eyebrow">The studio</span>
+      <h2>Everything a print needs<br>before it reaches the mill</h2>
+    </div>
+    <div class="bento rv">
+
+      <article class="tile art c3">
+        <div class="bg" style="background-image:url('assets/palm.webp')"></div>
+        <div class="scrim"></div>
+        <span class="kick">Create</span>
+        <h3>Inspirations &amp; Extract</h3>
+        <p>Generate print directions across several models at once, or pull a clean flat repeat
+           straight out of a photograph — no perspective, no shadows, no background.</p>
       </article>
-      <article class="card">
-        <span class="kicker">Create</span>
-        <h3>Extract Design</h3>
-        <p>Pull a clean, flat repeat tile out of a photograph — no perspective, no shadows, no
-           background.</p>
-      </article>
-      <article class="card">
-        <span class="kicker">Production</span>
+
+      <article class="tile art c3">
+        <div class="bg" style="background-image:url('assets/deco.webp')"></div>
+        <div class="scrim"></div>
+        <span class="kick">Production</span>
         <h3>Make Seamless</h3>
         <p>Heal the seams on an existing tile, or generate one that tiles natively. Every result
-           is measured on how closely its edges actually meet.</p>
+           is measured on how closely its edges actually meet — not assumed.</p>
       </article>
-      <article class="card">
-        <span class="kicker">Production</span>
-        <h3>Repeat &amp; Measurement</h3>
-        <p>Preview the repeat and check the design at true physical scale, with yardage
-           estimates for a given fabric width.</p>
-      </article>
-      <article class="card">
-        <span class="kicker">Colour</span>
+
+      <article class="tile c2">
+        <span class="kick">Colour</span>
         <h3>Colourways</h3>
-        <p>Recolour a design into a full colour story, matched against Pantone TCX rather than
-           eyeballed.</p>
+        <p>Recolour into a full colour story, matched against Pantone TCX rather than eyeballed.</p>
       </article>
-      <article class="card">
-        <span class="kicker">Output</span>
-        <h3>Vectorize</h3>
-        <p>Convert raster artwork to clean vectors for screen printing and engraving, with
-           control over colour count and detail.</p>
-      </article>
-      <article class="card">
-        <span class="kicker">Output</span>
+
+      <article class="tile warm c2">
+        <span class="kick">Output</span>
         <h3>Product Mockups</h3>
         <p>Apply a print to 31 real products across bedding, apparel and accessories — or paint
            your own mask on any product photo.</p>
       </article>
-      <article class="card">
-        <span class="kicker">Output</span>
-        <h3>3D Garment Preview</h3>
-        <p>See the repeat on a garment in three dimensions before anything is sampled.</p>
+
+      <article class="tile cool c2">
+        <span class="kick">Production</span>
+        <h3>Repeat &amp; Measurement</h3>
+        <p>Check the design at true physical scale, with yardage estimates for a given fabric
+           width.</p>
       </article>
-      <article class="card">
-        <span class="kicker">Advanced</span>
+
+      <article class="tile c2">
+        <span class="kick">Output</span>
+        <h3>Vectorize</h3>
+        <p>Clean vectors for screen printing and engraving, with control over colour count and
+           detail.</p>
+      </article>
+
+      <article class="tile warm c2">
+        <span class="kick">Advanced</span>
         <h3>Layer Studio</h3>
-        <p>Decompose artwork into editable layers, then move, recolour or replace individual
-           motifs and flatten back at full source resolution.</p>
+        <p>Decompose artwork into editable layers, move or recolour individual motifs, and
+           flatten back at full source resolution.</p>
       </article>
-      <article class="card">
-        <span class="kicker">Advanced</span>
-        <h3>Print Advisor</h3>
-        <p>Guidance on print method and cost for a given fabric and production volume, based on
-           the design's actual colour palette.</p>
+
+      <article class="tile cool c2">
+        <span class="kick">Hand-off</span>
+        <h3>Tech Packs &amp; 3D</h3>
+        <p>See the repeat on a garment in three dimensions, then export the specification sheet
+           as a single PDF.</p>
       </article>
-      <article class="card">
-        <span class="kicker">Hand-off</span>
-        <h3>Tech Packs &amp; Exports</h3>
-        <p>Export production files and a specification sheet — palette, repeat size, print
-           readiness — as a single PDF.</p>
-      </article>
-      <article class="card">
-        <span class="kicker">Utility</span>
-        <h3>Remove Background &amp; Library</h3>
-        <p>Isolate motifs from any artwork and keep a reusable library across projects.</p>
-      </article>
+
     </div>
   </section>
 
-  <section class="wrap" style="padding-top:0">
-    <p class="eyebrow">Output</p>
-    <h2>Work made in the studio</h2>
-    <div class="shots">
-      <figure class="shot">
-        <img src="../public/demo_floral.webp" alt="Watercolour floral repeat" decoding="async" loading="lazy">
-        <figcaption>Watercolour floral — seamless repeat</figcaption>
-      </figure>
-      <figure class="shot">
-        <img src="../public/demo_geometric.webp" alt="Geometric repeat" decoding="async" loading="lazy">
-        <figcaption>Geometric — extracted from a photograph</figcaption>
-      </figure>
-      <figure class="shot">
-        <img src="../public/demo_botanical.webp" alt="Botanical repeat" decoding="async" loading="lazy">
-        <figcaption>Botanical — alternate colourway</figcaption>
-      </figure>
-    </div>
-  </section>
-
-  <section id="tech" class="tech">
-    <div class="wrap tech-grid">
-      <div>
-        <p class="eyebrow">Technology</p>
-        <h2>Models chosen per job</h2>
+  <section class="on-ink" id="tech">
+    <div class="glow"></div>
+    <div class="wrap split">
+      <div class="rv">
+        <span class="eyebrow">Technology</span>
+        <h2>The right model<br>for each job</h2>
         <p class="lede">
-          No single model is best at everything. RIMI AI routes each task to the model that suits
-          it — fast drafts on one, photoreal mockups on another, layer decomposition on a third —
-          and every generation is metered, so you always know what a run costs before you start it.
+          No single model is best at everything. RIMI AI routes each task to the one that suits
+          it — fast drafts on one, photoreal mockups on another, layer decomposition on a third.
+          Every generation is metered, so the cost of a run is on screen before you start it.
         </p>
         <div class="chips">
           <span class="chip">FLUX Schnell</span>
@@ -334,50 +427,50 @@
           <span class="chip">GPT Image 2</span>
           <span class="chip">Qwen Image Layered</span>
           <span class="chip">Real-ESRGAN</span>
-          <span class="chip">Pantone TCX matching</span>
+          <span class="chip">Pantone TCX</span>
         </div>
       </div>
-      <div class="grid" style="grid-template-columns:1fr;margin-top:44px;gap:14px">
-        <article class="card">
+      <div class="pillars rv">
+        <div class="pillar">
           <h3>Credits, not seats</h3>
-          <p>Pay for what you generate. Every tool shows its cost before you run it, and a failed
+          <p>Pay for what you generate. Every tool shows its cost before it runs, and a failed
              generation is refunded automatically.</p>
-        </article>
-        <article class="card">
+        </div>
+        <div class="pillar">
           <h3>Your work stays yours</h3>
           <p>Projects, exports and motif libraries are private to your account, with commercial
              use on every paid plan.</p>
-        </article>
-        <article class="card">
+        </div>
+        <div class="pillar">
           <h3>Built for production</h3>
           <p>Repeats are measured rather than assumed, colour is matched to Pantone, and exports
              carry the specification a mill needs.</p>
-        </article>
+        </div>
       </div>
     </div>
   </section>
 
-  <section id="pricing" class="wrap">
-    <p class="eyebrow">Pricing</p>
-    <h2>Plans</h2>
-    <p class="lede">Buy credits as you need them. Every plan includes commercial use.</p>
-    <div class="plans">
+  <section class="wrap" id="pricing">
+    <div class="rv">
+      <span class="eyebrow">Pricing</span>
+      <h2>Buy credits, not licences</h2>
+      <p class="lede">Every plan includes commercial use. Top up at any time.</p>
+    </div>
+    <div class="plans rv">
       <div class="plan">
         <h3>Starter</h3>
-        <p class="price">₹528</p>
-        <p class="credits">3,960 credits</p>
+        <p class="price">₹528</p><p class="credits">3,960 credits</p>
         <ul>
           <li>Small runs and evaluation</li>
           <li>Flux Schnell, Grok, Nano Banana</li>
-          <li>Seamless, Repeat, Colourways, Vectorize</li>
-          <li>Product mockups</li>
+          <li>Seamless, Repeat, Colourways</li>
+          <li>Vectorize and product mockups</li>
         </ul>
       </div>
-      <div class="plan featured">
-        <span class="badge">Popular</span>
+      <div class="plan hot">
+        <span class="badge">Most popular</span>
         <h3>Creator</h3>
-        <p class="price">₹1,936</p>
-        <p class="credits">14,520 credits</p>
+        <p class="price">₹1,936</p><p class="credits">14,520 credits</p>
         <ul>
           <li>Best value for active studios</li>
           <li>Everything in Starter</li>
@@ -386,18 +479,16 @@
       </div>
       <div class="plan">
         <h3>Pro</h3>
-        <p class="price">₹8,712</p>
-        <p class="credits">65,340 credits</p>
+        <p class="price">₹8,712</p><p class="credits">65,340 credits</p>
         <ul>
-          <li>GPT Image 2, Flux 2 Pro</li>
-          <li>Nano Banana 2 and Seedream 4.5</li>
+          <li>GPT Image 2 and Flux 2 Pro</li>
+          <li>Nano Banana 2, Seedream 4.5</li>
           <li>Layer Studio and 3D Mockup</li>
         </ul>
       </div>
       <div class="plan">
         <h3>Scale</h3>
-        <p class="price">₹26,312</p>
-        <p class="credits">197,340 credits</p>
+        <p class="price">₹26,312</p><p class="credits">197,340 credits</p>
         <ul>
           <li>For agencies and high volume</li>
           <li>All Pro models and tools</li>
@@ -405,36 +496,41 @@
         </ul>
       </div>
     </div>
-    <p class="note">A trial account includes 50 credits. Prices in INR, exclusive of taxes.</p>
+    <p class="lede" style="font-size:.86rem;margin-top:24px">
+      A trial account includes 50 credits. Prices in INR, exclusive of taxes.
+    </p>
   </section>
 
   <section class="wrap" style="padding-top:0">
-    <p class="eyebrow">Roadmap</p>
-    <h2>Beyond print</h2>
-    <p class="lede">
-      The studio today covers printed textiles end to end. Two further product lines are in
-      development, sharing the same project, colour and library system.
-    </p>
-    <div class="road">
-      <article class="card">
-        <h3>Embroidery <span class="tag-soon">In development</span></h3>
+    <div class="rv">
+      <span class="eyebrow">Roadmap</span>
+      <h2>Beyond print</h2>
+      <p class="lede">
+        The studio covers printed textiles end to end today. Two further product lines are in
+        development, sharing the same project, colour and library system.
+      </p>
+    </div>
+    <div class="road rv">
+      <article class="tile">
+        <h3>Embroidery <span class="soon">In development</span></h3>
         <p>Placement studio, motif library, thread shade matching against supplier cards, stitch
            style rendering, appliqué, and embroidery tech packs.</p>
       </article>
-      <article class="card">
-        <h3>Woven <span class="tag-soon">In development</span></h3>
+      <article class="tile">
+        <h3>Woven <span class="soon">In development</span></h3>
         <p>Checks and stripes, weave and jacquard design, yarn libraries, and woven structure
            visualisation.</p>
       </article>
     </div>
   </section>
 
-  <section id="contact" class="wrap" style="padding-top:0">
-    <div class="cta">
-      <h2>See it on your own artwork</h2>
+  <section class="wrap" id="contact" style="padding-top:0">
+    <div class="cta rv">
+      <div class="glow"></div>
+      <h2>See it run on your own artwork</h2>
       <p>
-        Bring a print you are working on. We will run it through the studio with you — repeat,
-        colourways, mockups and tech pack — and you keep the output.
+        Bring a print you are working on. We will take it through the studio with you — repeat,
+        colourways, mockups and tech pack — and you keep everything it produces.
       </p>
       <a class="btn btn-primary" href="mailto:hello@rimiai.pro">Book a demo</a>
     </div>
@@ -444,10 +540,25 @@
 
 <footer>
   <div class="wrap foot">
-    <span>© 2026 RIMI AI</span>
-    <span>rimiai.pro · hello@rimiai.pro</span>
+    <span>© 2026 RIMI AI — AI studio for textile &amp; surface design</span>
+    <span><a href="mailto:hello@rimiai.pro">hello@rimiai.pro</a> · <a href="https://rimiai.pro">rimiai.pro</a></span>
   </div>
 </footer>
+
+<script>
+  // Reveal each block once as it arrives, then disconnect. Nothing loops.
+  var els = document.querySelectorAll('.rv');
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px -12% 0px' });
+    els.forEach(function (el) { io.observe(el); });
+  } else {
+    els.forEach(function (el) { el.classList.add('in'); });
+  }
+</script>
 
 </body>
 </html>
