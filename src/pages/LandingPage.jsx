@@ -25,42 +25,47 @@ const PLATFORM_BENEFITS = [
   {
     icon: 'clock',
     title: 'Design in minutes',
+    thumb: '/assets/marketing/how/design-in-minutes.webp',
     copy: 'Start from any image, sketch or reference.',
     image: '/assets/marketing/rimi-textile-hero.webp',
   },
   {
     icon: 'layers',
     title: 'One project, every tool',
+    thumb: '/assets/marketing/how/one-project-every-tool.webp',
     copy: 'Nothing to rebuild between steps.',
     image: '/assets/marketing/rimi-print-workflow.webp',
   },
   {
     icon: 'compare',
     title: 'More directions, faster',
+    thumb: '/assets/marketing/how/more-directions.webp',
     copy: 'Compare repeats and colourways side by side.',
     image: '/assets/marketing/rimi-floral-drape.jpg',
   },
   {
     icon: 'eye',
     title: 'See it on product first',
+    thumb: '/assets/marketing/how/see-it-on-product.webp',
     copy: 'Check scale and placement before sampling.',
     image: '/assets/marketing/rimi-cushion-display.jpg',
   },
   {
     icon: 'export',
     title: 'Print-ready output',
+    thumb: '/assets/marketing/how/print-ready-output.webp',
     copy: 'Upscale, vectorise and export from one place.',
     image: '/assets/marketing/rimi-print-studio-ui.jpg',
   },
 ];
 
 const PLATFORM_TOOLS = [
-  { icon: 'spark', title: 'Inspirations', copy: 'Develop directions from a reference.', image: '/assets/marketing/rimi-print-workflow.webp' },
-  { icon: 'extract', title: 'Pattern Extraction', copy: 'Lift the motif out of any artwork.', image: '/assets/marketing/rimi-floral-drape.jpg' },
-  { icon: 'seamless', title: 'Make Seamless', copy: 'A clean, repeatable tile in one step.', image: '/assets/marketing/rimi-seamless-after.webp' },
-  { icon: 'drops', title: 'Colorways', copy: 'Recolour and compare palettes instantly.', image: '/assets/marketing/rimi-home-textiles.webp' },
-  { icon: 'shirt', title: 'Mappings & 3D', copy: 'Preview prints on real products.', image: '/assets/marketing/rimi-cushion-display.jpg', badge: '3D' },
-  { icon: 'scale', title: 'Upscale & Vectorize', copy: 'Production-ready, at any size.', image: '/assets/marketing/rimi-print-studio-ui.jpg' },
+  { icon: 'spark', title: 'Inspirations', thumb: '/assets/marketing/how/inspirations.webp', copy: 'Develop directions from a reference.', image: '/assets/marketing/rimi-print-workflow.webp' },
+  { icon: 'extract', title: 'Pattern Extraction', thumb: '/assets/marketing/how/pattern-extraction.webp', copy: 'Lift the motif out of any artwork.', image: '/assets/marketing/rimi-floral-drape.jpg' },
+  { icon: 'seamless', title: 'Make Seamless', thumb: '/assets/marketing/how/make-seamless.webp', copy: 'A clean, repeatable tile in one step.', image: '/assets/marketing/rimi-seamless-after.webp' },
+  { icon: 'drops', title: 'Colorways', thumb: '/assets/marketing/how/colorways.webp', copy: 'Recolour and compare palettes instantly.', image: '/assets/marketing/rimi-home-textiles.webp' },
+  { icon: 'shirt', title: 'Mappings & 3D', thumb: '/assets/marketing/how/mappings-3d.webp', copy: 'Preview prints on real products.', image: '/assets/marketing/rimi-cushion-display.jpg', badge: '3D' },
+  { icon: 'scale', title: 'Upscale & Vectorize', thumb: '/assets/marketing/how/upscale-vectorize.webp', copy: 'Production-ready, at any size.', image: '/assets/marketing/rimi-print-studio-ui.jpg' },
 ];
 
 const PRODUCT_FEATURES = [
@@ -212,6 +217,27 @@ function MenuIcon({ open }) {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       {open ? <path d="m6 6 12 12M18 6 6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
     </svg>
+  );
+}
+
+function CardThumb({ thumb, fallback, badge }) {
+  // The purpose-made thumbnails under /assets/marketing/how/ arrive one at a time. Until a
+  // card's file exists it shows the stock image rather than a broken-image icon.
+  const [src, setSrc] = useState(thumb || fallback);
+  return (
+    <span className="mk-how-card-thumb">
+      <img
+        src={src}
+        alt=""
+        width="92"
+        height="70"
+        loading="lazy"
+        onError={() => {
+          if (src !== fallback) setSrc(fallback);
+        }}
+      />
+      {badge && <em>{badge}</em>}
+    </span>
   );
 }
 
@@ -441,10 +467,7 @@ export default function LandingPage({ currentUser }) {
                         <strong>{item.title}</strong>
                         <p>{item.copy}</p>
                       </div>
-                      <span className="mk-how-card-thumb">
-                        <img src={item.image} alt="" loading="lazy" />
-                        {item.badge && <em>{item.badge}</em>}
-                      </span>
+                      <CardThumb thumb={item.thumb} fallback={item.image} badge={item.badge} />
                     </article>
                   ))}
                 </div>
@@ -488,10 +511,7 @@ export default function LandingPage({ currentUser }) {
                         <strong>{item.title}</strong>
                         <p>{item.copy}</p>
                       </div>
-                      <span className="mk-how-card-thumb">
-                        <img src={item.image} alt="" loading="lazy" />
-                        {item.badge && <em>{item.badge}</em>}
-                      </span>
+                      <CardThumb thumb={item.thumb} fallback={item.image} badge={item.badge} />
                     </article>
                   ))}
                 </div>

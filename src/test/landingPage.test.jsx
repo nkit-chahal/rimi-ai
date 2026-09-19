@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import LandingPage from '../pages/LandingPage';
@@ -35,5 +35,22 @@ describe('Public landing page product examples', () => {
     expect(screen.getByRole('heading', { name: 'Tools' })).toBeInTheDocument();
     expect(screen.getByText('One project, every tool')).toBeInTheDocument();
     expect(screen.getByLabelText('RIMI AI connects the textile workflow')).toBeInTheDocument();
+  });
+
+  it('shows the stock image when a purpose-made thumbnail is missing', () => {
+    // The /assets/marketing/how/ thumbnails are added one at a time; a card whose file does not
+    // exist yet must not show a broken-image icon.
+    render(
+      <MemoryRouter>
+        <LandingPage currentUser={null} />
+      </MemoryRouter>,
+    );
+
+    const card = screen.getByText('Make Seamless').closest('.mk-how-card');
+    const img = card.querySelector('img');
+    expect(img.getAttribute('src')).toBe('/assets/marketing/how/make-seamless.webp');
+
+    fireEvent.error(img);
+    expect(img.getAttribute('src')).toBe('/assets/marketing/rimi-seamless-after.webp');
   });
 });
