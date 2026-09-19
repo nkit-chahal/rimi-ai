@@ -21,6 +21,48 @@ const WORKFLOW = [
   },
 ];
 
+const PLATFORM_BENEFITS = [
+  {
+    icon: 'clock',
+    title: 'Design in minutes',
+    copy: 'Start from any image, sketch or reference.',
+    image: '/assets/marketing/rimi-textile-hero.webp',
+  },
+  {
+    icon: 'layers',
+    title: 'One project, every tool',
+    copy: 'Nothing to rebuild between steps.',
+    image: '/assets/marketing/rimi-print-workflow.webp',
+  },
+  {
+    icon: 'compare',
+    title: 'More directions, faster',
+    copy: 'Compare repeats and colourways side by side.',
+    image: '/assets/marketing/rimi-floral-drape.jpg',
+  },
+  {
+    icon: 'eye',
+    title: 'See it on product first',
+    copy: 'Check scale and placement before sampling.',
+    image: '/assets/marketing/rimi-cushion-display.jpg',
+  },
+  {
+    icon: 'export',
+    title: 'Print-ready output',
+    copy: 'Upscale, vectorise and export from one place.',
+    image: '/assets/marketing/rimi-print-studio-ui.jpg',
+  },
+];
+
+const PLATFORM_TOOLS = [
+  { icon: 'spark', title: 'Inspirations', copy: 'Develop directions from a reference.', image: '/assets/marketing/rimi-print-workflow.webp' },
+  { icon: 'extract', title: 'Pattern Extraction', copy: 'Lift the motif out of any artwork.', image: '/assets/marketing/rimi-floral-drape.jpg' },
+  { icon: 'seamless', title: 'Make Seamless', copy: 'A clean, repeatable tile in one step.', image: '/assets/marketing/rimi-seamless-after.webp' },
+  { icon: 'drops', title: 'Colorways', copy: 'Recolour and compare palettes instantly.', image: '/assets/marketing/rimi-home-textiles.webp' },
+  { icon: 'shirt', title: 'Mappings & 3D', copy: 'Preview prints on real products.', image: '/assets/marketing/rimi-cushion-display.jpg', badge: '3D' },
+  { icon: 'scale', title: 'Upscale & Vectorize', copy: 'Production-ready, at any size.', image: '/assets/marketing/rimi-print-studio-ui.jpg' },
+];
+
 const PRODUCT_FEATURES = [
   {
     icon: 'inspiration',
@@ -106,6 +148,16 @@ function FeatureIcon({ type }) {
     vector: <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />,
     mapping: <path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />,
     export: <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
+    clock: <path d="M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2" />,
+    layers: <path d="M12 3 3 8l9 5 9-5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5" />,
+    compare: <path d="M4 5h16v14H4zM12 5v14M8.5 10 6.5 12l2 2M15.5 10l2 2-2 2" />,
+    eye: <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 15a3 3 0 100-6 3 3 0 000 6z" />,
+    spark: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3zM19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z" />,
+    extract: <path d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3M9 12a3 3 0 106 0 3 3 0 00-6 0z" />,
+    drops: <path d="M8 3.5S4 8.1 4 11a4 4 0 008 0c0-2.9-4-7.5-4-7.5zM17 10s-3 3.4-3 5.5a3 3 0 006 0c0-2.1-3-5.5-3-5.5z" />,
+    shirt: <path d="M8 4 5 6.5 3 10l3 1.5V20h12v-8.5l3-1.5-2-3.5L16 4a4 4 0 01-8 0z" />,
+    scale: <path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7" />,
+    cube: <path d="M12 2.5 20 7v10l-8 4.5L4 17V7l8-4.5zM4 7l8 4.5L20 7M12 11.5v10" />,
   };
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -338,11 +390,113 @@ export default function LandingPage({ currentUser }) {
           </div>
         </section>
 
-        <section id="platform" className="mk-capability-bar" aria-label="Print Studio capabilities">
-          <div className="mk-shell mk-capability-list">
-            {['Pattern extraction', 'Seamless repeats', 'Colourways', 'Product mapping', 'Production export'].map((item, index) => (
-              <span key={item}><b>{String(index + 1).padStart(2, '0')}</b>{item}</span>
-            ))}
+        <section id="platform" className="mk-section mk-platform-map">
+          <div className="mk-shell mk-how-shell">
+            <div className="mk-how-heading">
+              <p>Simple ideas <span /> Bigger possibilities</p>
+              <h2>How RIMI <em>AI</em> works</h2>
+              <span>Everything you need to move from inspiration to production, in one connected textile workspace.</span>
+            </div>
+
+            <div className="mk-how-layout">
+              <svg className="mk-how-connectors" viewBox="0 0 1440 860" preserveAspectRatio="none" aria-hidden="true">
+                <g className="mk-how-connector-lines">
+                  <path d="M348 136 C455 136 455 277 559 277" />
+                  <path d="M348 244 C445 244 445 322 540 322" />
+                  <path d="M348 352 C441 352 441 370 534 370" />
+                  <path d="M348 460 C445 460 445 418 540 418" />
+                  <path d="M348 568 C455 568 455 463 559 463" />
+                  <path d="M1092 136 C985 136 985 271 878 271" />
+                  <path d="M1092 244 C994 244 994 309 896 309" />
+                  <path d="M1092 352 C998 352 998 349 905 349" />
+                  <path d="M1092 460 C998 460 998 391 905 391" />
+                  <path d="M1092 568 C994 568 994 431 896 431" />
+                  <path d="M1092 676 C985 676 985 469 878 469" />
+                </g>
+                <g className="mk-how-connector-dots">
+                  <circle cx="559" cy="277" r="4.5" />
+                  <circle cx="540" cy="322" r="4.5" />
+                  <circle cx="534" cy="370" r="4.5" />
+                  <circle cx="540" cy="418" r="4.5" />
+                  <circle cx="559" cy="463" r="4.5" />
+                  <circle cx="878" cy="271" r="4.5" />
+                  <circle cx="896" cy="309" r="4.5" />
+                  <circle cx="905" cy="349" r="4.5" />
+                  <circle cx="905" cy="391" r="4.5" />
+                  <circle cx="896" cy="431" r="4.5" />
+                  <circle cx="878" cy="469" r="4.5" />
+                </g>
+              </svg>
+
+              <div className="mk-how-column mk-how-benefits" aria-labelledby="platform-benefits-title">
+                <header className="mk-how-column-heading">
+                  <h3 id="platform-benefits-title">Benefits</h3>
+                  <p>Do more. In less time.</p>
+                </header>
+                <div className="mk-how-card-list">
+                  {PLATFORM_BENEFITS.map((item) => (
+                    <article className="mk-how-card" key={item.title}>
+                      <span className="mk-how-card-icon"><FeatureIcon type={item.icon} /></span>
+                      <div className="mk-how-card-copy">
+                        <strong>{item.title}</strong>
+                        <p>{item.copy}</p>
+                      </div>
+                      <span className="mk-how-card-thumb">
+                        <img src={item.image} alt="" loading="lazy" />
+                        {item.badge && <em>{item.badge}</em>}
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mk-how-center">
+                <div className="mk-how-hub" aria-label="RIMI AI connects the textile workflow">
+                  <div className="mk-how-hub-core">
+                    <span className="mk-how-hub-mark">RI</span>
+                    <strong>RIMI <em>AI</em></strong>
+                    <small>One connected workflow</small>
+                  </div>
+                </div>
+                <button className="mk-how-pipeline" type="button" onClick={openStudio}>
+                  <span className="mk-how-pipeline-icon"><FeatureIcon type="cube" /></span>
+                  Inspiration to production
+                  <ArrowIcon />
+                </button>
+                <figure className="mk-how-hero">
+                  <img
+                    src="/assets/marketing/rimi-platform-fabrics-v2.webp"
+                    alt="A coordinated stack of original botanical and geometric printed fabrics on a marble plinth"
+                    width="1448"
+                    height="1086"
+                    loading="lazy"
+                  />
+                  <figcaption>Original prints, one workflow</figcaption>
+                </figure>
+              </div>
+
+              <div className="mk-how-column mk-how-tools" aria-labelledby="platform-tools-title">
+                <header className="mk-how-column-heading">
+                  <h3 id="platform-tools-title">Tools</h3>
+                  <p>Everything you need in one place.</p>
+                </header>
+                <div className="mk-how-card-list">
+                  {PLATFORM_TOOLS.map((item) => (
+                    <article className="mk-how-card" key={item.title}>
+                      <span className="mk-how-card-icon"><FeatureIcon type={item.icon} /></span>
+                      <div className="mk-how-card-copy">
+                        <strong>{item.title}</strong>
+                        <p>{item.copy}</p>
+                      </div>
+                      <span className="mk-how-card-thumb">
+                        <img src={item.image} alt="" loading="lazy" />
+                        {item.badge && <em>{item.badge}</em>}
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 

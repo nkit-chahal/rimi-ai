@@ -5,7 +5,7 @@ import LandingPage from '../pages/LandingPage';
 
 describe('Public landing page product examples', () => {
   it('shows the hero claims and the three worked finishing examples', () => {
-    render(
+    const { container } = render(
       <MemoryRouter>
         <LandingPage currentUser={null} />
       </MemoryRouter>,
@@ -27,5 +27,13 @@ describe('Public landing page product examples', () => {
     expect(screen.getByText('Vector Pro')).toBeInTheDocument();
     expect(screen.getByText('Qwen Studio')).toBeInTheDocument();
     expect(screen.getByLabelText('Compare original artwork with a super-resolution preview')).toBeInTheDocument();
+
+    const sectionIds = [...container.querySelector('main').children].map((section) => section.id);
+    expect(sectionIds.slice(0, 3)).toEqual(['top', 'studios', 'platform']);
+    expect(screen.getByRole('heading', { name: 'How RIMI AI works' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Benefits' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tools' })).toBeInTheDocument();
+    expect(screen.getByText('One project, every tool')).toBeInTheDocument();
+    expect(screen.getByLabelText('RIMI AI connects the textile workflow')).toBeInTheDocument();
   });
 });
