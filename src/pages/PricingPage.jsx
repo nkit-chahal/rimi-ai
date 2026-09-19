@@ -198,17 +198,30 @@ export default function PricingPage({ currentUser }) {
         <section className="pr-hero">
           <div className="pr-grid" aria-hidden="true" />
           <div className="mk-shell pr-hero-content">
-            <p className="mk-eyebrow"><span /> Simple, usage-based pricing</p>
-            <h1>Buy the creative capacity you need.</h1>
-            <p>
-              No recurring subscription. Choose a one-time credit pack, work across Print Studio,
-              and recharge when the next collection begins.
-            </p>
-            <div className="pr-hero-points">
-              <span><CheckIcon /> One-time payment</span>
-              <span><CheckIcon /> 30-day credit window</span>
-              <span><CheckIcon /> Custom top-ups available</span>
+            <div className="pr-hero-copy">
+              <p className="mk-eyebrow"><span /> Simple, usage-based pricing</p>
+              <h1>Creative capacity, without another subscription.</h1>
+              <p>
+                Choose a one-time credit pack, use it across Print Studio and recharge when the
+                next collection begins.
+              </p>
+              <div className="pr-hero-points">
+                <span><CheckIcon /> One-time payment</span>
+                <span><CheckIcon /> 30-day credit window</span>
+                <span><CheckIcon /> Custom top-ups available</span>
+              </div>
             </div>
+
+            <aside className="pr-hero-summary" aria-label="How RIMI AI pricing works">
+              <p>How it works</p>
+              <strong>Pay for the work you are ready to create.</strong>
+              <ol>
+                <li><span>01</span><div><b>Choose a pack</b><small>Start at ₹528 with no recurring charge.</small></div></li>
+                <li><span>02</span><div><b>Use one balance</b><small>Credits work across the connected Print Studio.</small></div></li>
+                <li><span>03</span><div><b>Top up when needed</b><small>Renew early and the next 30 days stack.</small></div></li>
+              </ol>
+              <div className="pr-hero-rate"><b>7.5</b><span>AI credits<br />per ₹1</span></div>
+            </aside>
           </div>
         </section>
 
@@ -229,7 +242,7 @@ export default function PricingPage({ currentUser }) {
                 return (
                   <article key={plan.id} className={'pr-plan-card' + (popular ? ' is-popular' : '') + (pro ? ' is-pro' : '')}>
                     <div className="pr-plan-topline">
-                      <span>{pro ? 'Pro access' : 'Core access'}</span>
+                      <span>{pro ? 'Pro access · 30 days' : 'Core access'}</span>
                       {plan.badge && <b>{plan.badge}</b>}
                     </div>
                     <h3>{plan.label}</h3>

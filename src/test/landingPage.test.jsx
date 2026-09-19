@@ -35,6 +35,13 @@ describe('Public landing page product examples', () => {
     expect(screen.getByRole('heading', { name: 'Tools' })).toBeInTheDocument();
     expect(screen.getByText('One project, every tool')).toBeInTheDocument();
     expect(screen.getByLabelText('RIMI AI connects the textile workflow')).toBeInTheDocument();
+
+    const testimonialPortraits = [...container.querySelectorAll('.mk-testimonial-avatar img')];
+    expect(testimonialPortraits.map((image) => image.getAttribute('src'))).toEqual([
+      '/assets/marketing/testimonials/tanushri-roy.webp',
+      '/assets/marketing/testimonials/stefania-scrivani.webp',
+      '/assets/marketing/testimonials/emanuel-morelli.webp',
+    ]);
   });
 
   it('shows the stock image when a purpose-made thumbnail is missing', () => {

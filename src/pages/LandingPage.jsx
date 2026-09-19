@@ -114,16 +114,19 @@ const TESTIMONIALS = [
   {
     name: 'Tanushri Roy',
     role: 'Independent Textile Designer',
+    image: '/assets/marketing/testimonials/tanushri-roy.webp',
     quote: 'RIMI AI has completely transformed my design workflow. From one inspiration I can create multiple prints, colourways and seamless patterns in minutes. It\'s like having a creative partner 24/7!',
   },
   {
     name: 'Stefania Scrivani',
     role: 'Design Director, Fashion Brand',
+    image: '/assets/marketing/testimonials/stefania-scrivani.webp',
     quote: 'The AI colourway and vector export features save us weeks of manual work. We can explore more ideas, present better options to our clients and take designs to production faster than ever.',
   },
   {
     name: 'Emanuel Morelli',
     role: 'Founder, Home Textiles Brand',
+    image: '/assets/marketing/testimonials/emanuel-morelli.webp',
     quote: 'RIMI AI bridges creativity and production. The 3D mapping and product visualisation help us showcase designs on real products before sampling, reducing cost and time significantly.',
   },
 ];
@@ -727,7 +730,9 @@ export default function LandingPage({ currentUser }) {
                   <QuoteIcon />
                   <blockquote>{t.quote}</blockquote>
                   <div className="mk-testimonial-author">
-                    <div className="mk-testimonial-avatar">{t.name.charAt(0)}</div>
+                    <div className="mk-testimonial-avatar" aria-hidden="true">
+                      <img src={t.image} alt="" width="160" height="160" loading="lazy" decoding="async" />
+                    </div>
                     <div>
                       <strong>{t.name}</strong>
                       <span>{t.role}</span>

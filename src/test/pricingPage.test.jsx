@@ -17,7 +17,9 @@ describe('Public pricing page', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: /Buy the creative capacity/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Creative capacity, without another subscription/i })).toBeInTheDocument();
+    expect(screen.getByText('7.5')).toBeInTheDocument();
+    expect(screen.getByText(/AI credits\s*per ₹1/i)).toBeInTheDocument();
     expect(screen.getByText('₹528')).toBeInTheDocument();
     expect(screen.getByText('₹1,936')).toBeInTheDocument();
     expect(screen.getByText('₹8,712')).toBeInTheDocument();
