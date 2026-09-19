@@ -1358,6 +1358,10 @@
 }
 
 .mk-example-colourways {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(280px, 0.58fr) minmax(0, 1.42fr);
+  align-items: center;
   background: #f4f7fb;
 }
 
@@ -1370,64 +1374,179 @@
   padding-bottom: 32px;
 }
 
-.mk-colourway-board {
+.mk-colourway-workspace {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: auto 18px 18px;
+  grid-template-columns: 106px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 540px;
+  overflow: hidden;
+  margin: 24px 24px 24px 0;
+  border: 1px solid rgba(10, 24, 48, 0.11);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(10, 24, 48, 0.1);
 }
 
-.mk-colourway-sample {
+.mk-colourway-toolbar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 20px 13px;
+  border-right: 1px solid rgba(93, 75, 215, 0.12);
+  background: #eef0ff;
+}
+
+.mk-colourway-toolbar-label {
+  color: #5d4bd7;
+  font: 800 9px/1.2 'Manrope', sans-serif;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.mk-colourway-rail {
+  display: flex;
+  justify-content: center;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.mk-colourway-option {
+  position: relative;
+  width: 76px;
+  min-height: 76px;
+  overflow: hidden;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.mk-colourway-option:hover {
+  background: #fff;
+}
+
+.mk-colourway-option:focus-visible {
+  outline: 3px solid rgba(93, 75, 215, 0.28);
+  outline-offset: 2px;
+}
+
+.mk-colourway-option.is-selected {
+  border-color: #5d4bd7;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(55, 43, 132, 0.16);
+}
+
+.mk-colourway-option img {
+  display: block;
+  width: 100%;
+  height: 64px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.mk-colourway-option > span {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(8, 23, 47, 0.82);
+  color: #fff;
+  font: 800 9px/1 'Manrope', sans-serif;
+}
+
+.mk-colourway-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 540px;
   overflow: hidden;
   margin: 0;
-  border: 1px solid rgba(10, 24, 48, 0.1);
-  border-radius: 13px;
-  background: white;
+  background: #e8e4dc;
 }
 
-.mk-colourway-sample img {
+.mk-colourway-canvas > img {
   width: 100%;
-  aspect-ratio: 1.55 / 1;
+  height: 100%;
+  min-height: 540px;
   object-fit: cover;
-  transition: transform 240ms ease;
+  animation: mk-colourway-reveal 220ms ease-out;
 }
 
-.mk-colourway-sample:hover img {
-  transform: scale(1.035);
-}
-
-.mk-colourway-sample.is-tone-2 img {
+.mk-colourway-option.is-tone-2 img,
+.mk-colourway-canvas.is-tone-2 > img {
   filter: hue-rotate(45deg) saturate(0.72);
 }
 
-.mk-colourway-sample.is-tone-3 img {
+.mk-colourway-option.is-tone-3 img,
+.mk-colourway-canvas.is-tone-3 > img {
   filter: hue-rotate(185deg) saturate(0.76);
 }
 
-.mk-colourway-sample.is-tone-4 img {
+.mk-colourway-option.is-tone-4 img,
+.mk-colourway-canvas.is-tone-4 > img {
   filter: hue-rotate(285deg) saturate(0.72) contrast(0.95);
 }
 
-.mk-colourway-sample figcaption {
+.mk-colourway-canvas figcaption {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  left: 18px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 11px;
-  color: #405067;
-  font-size: 11px;
-  font-weight: 700;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 38px rgba(10, 24, 48, 0.14);
+  backdrop-filter: blur(12px);
 }
 
-.mk-colourway-sample figcaption i {
-  width: 9px;
-  height: 9px;
+.mk-colourway-canvas figcaption span {
+  display: block;
+  margin-bottom: 2px;
+  color: #66738a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mk-colourway-canvas figcaption strong {
+  color: var(--mk-ink);
+  font: 800 16px/1.3 'Manrope', sans-serif;
+}
+
+.mk-colourway-swatches {
+  display: flex;
+  gap: 6px;
+}
+
+.mk-colourway-swatches i {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #fff;
   border-radius: 50%;
-  background: #263d5e;
+  background: var(--swatch);
+  box-shadow: 0 0 0 1px rgba(10, 24, 48, 0.12);
 }
 
-.mk-colourway-sample.is-tone-2 figcaption i { background: #8d9b70; }
-.mk-colourway-sample.is-tone-3 figcaption i { background: #6b86a8; }
-.mk-colourway-sample.is-tone-4 figcaption i { background: #755c78; }
+@keyframes mk-colourway-reveal {
+  from { opacity: 0.72; transform: scale(1.012); }
+  to { opacity: 1; transform: scale(1); }
+}
 
 .mk-cutout-flow {
   display: grid;
@@ -2508,6 +2627,18 @@
     justify-self: start;
   }
 
+  .mk-example-colourways {
+    grid-template-columns: 1fr;
+  }
+
+  .mk-example-colourways .mk-example-copy {
+    padding-bottom: 24px;
+  }
+
+  .mk-colourway-workspace {
+    margin: 0 24px 24px;
+  }
+
   .mk-section-heading-split {
     gap: 24px;
   }
@@ -2716,6 +2847,62 @@
   .mk-example-colourways,
   .mk-example-cutout {
     min-height: auto;
+  }
+
+  .mk-colourway-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+    margin: 0 14px 14px;
+  }
+
+  .mk-colourway-toolbar {
+    align-items: center;
+    flex-direction: row;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 11px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(93, 75, 215, 0.12);
+  }
+
+  .mk-colourway-toolbar-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .mk-colourway-rail {
+    justify-content: flex-start;
+    flex-direction: row;
+    flex: none;
+    gap: 9px;
+    margin: 0;
+  }
+
+  .mk-colourway-option {
+    width: 68px;
+    min-width: 68px;
+    min-height: 68px;
+  }
+
+  .mk-colourway-option img {
+    height: 56px;
+  }
+
+  .mk-colourway-canvas,
+  .mk-colourway-canvas > img {
+    min-height: 360px;
+  }
+
+  .mk-colourway-canvas figcaption {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    padding: 12px;
   }
 
   .mk-cutout-flow {

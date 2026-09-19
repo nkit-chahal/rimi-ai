@@ -13,12 +13,21 @@ describe('Public landing page product examples', () => {
 
     expect(screen.getByRole('heading', { name: /India’s First AI Platform for Textile \/ Fashion Industry/i })).toBeInTheDocument();
     expect(screen.getByText(/Built in India\. Made for creative teams\./i)).toBeInTheDocument();
-    expect(screen.getByText('13+')).toBeInTheDocument();
+    expect(screen.getByText('689K')).toBeInTheDocument();
+    expect(screen.getByText('3,530+')).toBeInTheDocument();
+    expect(screen.getByText('20+')).toBeInTheDocument();
     // The three worked examples, each shown once.
     expect(screen.getByRole('heading', { name: 'Super Resolution' })).toBeInTheDocument();
     expect(screen.getByText('2x upscale')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Colorway Manager' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Remove Background' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /Indigo rose floral colourway/i })).toBeInTheDocument();
+
+    const sageOption = screen.getByRole('button', { name: 'Preview Sage clay colourway' });
+    expect(sageOption).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(sageOption);
+    expect(sageOption).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('img', { name: /Sage clay floral colourway/i })).toBeInTheDocument();
 
     // The remaining tools are listed as chips under "continue in the same project", not as
     // headings. The hero claims 13+ Print Studio tools and the page still names only these;

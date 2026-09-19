@@ -68,6 +68,13 @@ const PLATFORM_TOOLS = [
   { icon: 'scale', title: 'Upscale & Vectorize', thumb: '/assets/marketing/how/upscale-vectorize.webp', copy: 'Production-ready, at any size.', image: '/assets/marketing/rimi-print-studio-ui.jpg' },
 ];
 
+const COLOURWAY_VARIANTS = [
+  { name: 'Indigo rose', tone: 'tone-1', swatches: ['#263d5e', '#d58f7d', '#e9e1d5'] },
+  { name: 'Sage clay', tone: 'tone-2', swatches: ['#7f916d', '#b8a26f', '#eee8db'] },
+  { name: 'Mineral blue', tone: 'tone-3', swatches: ['#5e7f9f', '#9eb7c5', '#e8eaeb'] },
+  { name: 'Plum dusk', tone: 'tone-4', swatches: ['#76566f', '#b57a9d', '#eadde4'] },
+];
+
 const PRODUCT_FEATURES = [
   {
     icon: 'inspiration',
@@ -273,6 +280,54 @@ function BotanicalMotif() {
   );
 }
 
+function ColourwayWorkspace() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeVariant = COLOURWAY_VARIANTS[activeIndex];
+
+  return (
+    <div className="mk-colourway-workspace">
+      <div className="mk-colourway-toolbar" aria-label="Choose a colourway">
+        <span className="mk-colourway-toolbar-label">Palettes</span>
+        <div className="mk-colourway-rail">
+          {COLOURWAY_VARIANTS.map((variant, index) => (
+            <button
+              key={variant.name}
+              type="button"
+              className={`mk-colourway-option is-${variant.tone}${activeIndex === index ? ' is-selected' : ''}`}
+              aria-label={`Preview ${variant.name} colourway`}
+              aria-pressed={activeIndex === index}
+              onClick={() => setActiveIndex(index)}
+            >
+              <img src="/assets/marketing/rimi-seamless-after.webp" alt="" loading="lazy" />
+              <span>{String(index + 1).padStart(2, '0')}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <figure className={`mk-colourway-canvas is-${activeVariant.tone}`} aria-live="polite">
+        <img
+          key={activeVariant.name}
+          src="/assets/marketing/rimi-seamless-after.webp"
+          alt={`${activeVariant.name} floral colourway shown on a cushion and folded fabric`}
+          loading="lazy"
+        />
+        <figcaption>
+          <div>
+            <span>Selected direction</span>
+            <strong>{activeVariant.name}</strong>
+          </div>
+          <div className="mk-colourway-swatches" aria-label={`${activeVariant.name} palette colours`}>
+            {activeVariant.swatches.map((colour) => (
+              <i key={colour} style={{ '--swatch': colour }} aria-hidden="true" />
+            ))}
+          </div>
+        </figcaption>
+      </figure>
+    </div>
+  );
+}
+
 export default function LandingPage({ currentUser }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -357,16 +412,16 @@ export default function LandingPage({ currentUser }) {
 
               <div className="mk-hero-stats" aria-label="RIMI AI product facts">
                 <div>
-                  <strong>13+</strong>
-                  <span>Purpose-built Print Studio tools</span>
+                  <strong>689K</strong>
+                  <span>Designs created</span>
                 </div>
                 <div>
-                  <strong>3</strong>
-                  <span>Studios: one live, two coming next</span>
+                  <strong>3,530+</strong>
+                  <span>Designers onboard</span>
                 </div>
                 <div>
-                  <strong>1</strong>
-                  <span>Connected idea-to-output workflow</span>
+                  <strong>20+</strong>
+                  <span>Purpose-built AI tools</span>
                 </div>
               </div>
             </div>
@@ -599,16 +654,12 @@ export default function LandingPage({ currentUser }) {
                 <div className="mk-example-copy">
                   <span className="mk-example-number">02 / Colour</span>
                   <h3>Colorway Manager</h3>
-                  <p>See distinct palette directions side by side before choosing what moves forward.</p>
+                  <p>Choose a palette direction from the rail, then inspect the result at full scale before moving it forward.</p>
+                  <div className="mk-example-pills" aria-label="Colorway Manager capabilities">
+                    <span>4 directions</span><span>Live preview</span><span>One artwork</span>
+                  </div>
                 </div>
-                <div className="mk-colourway-board" aria-label="Four colourway preview examples">
-                  {['Indigo rose', 'Sage clay', 'Mineral blue', 'Plum dusk'].map((name, index) => (
-                    <figure key={name} className={`mk-colourway-sample is-tone-${index + 1}`}>
-                      <img src="/assets/marketing/rimi-seamless-after.webp" alt="" loading="lazy" />
-                      <figcaption><i aria-hidden="true" />{name}</figcaption>
-                    </figure>
-                  ))}
-                </div>
+                <ColourwayWorkspace />
               </article>
 
               <article className="mk-example-card mk-example-cutout">
